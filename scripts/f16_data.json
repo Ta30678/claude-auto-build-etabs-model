@@ -1,0 +1,8443 @@
+{
+  "frames": [
+    {
+      "uname": "2879",
+      "label": "B952",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -1861.25,
+      "y2": 1160.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2707",
+      "pt2_name": "2706"
+    },
+    {
+      "uname": "2880",
+      "label": "B953",
+      "type": "Beam",
+      "x1": -1861.25,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -1221.25,
+      "y2": 1160.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2706",
+      "pt2_name": "2700"
+    },
+    {
+      "uname": "2881",
+      "label": "B954",
+      "type": "Beam",
+      "x1": -1221.25,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 1160.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2700",
+      "pt2_name": "2695"
+    },
+    {
+      "uname": "2882",
+      "label": "B1003",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -2833.75,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2707",
+      "pt2_name": "2708"
+    },
+    {
+      "uname": "2883",
+      "label": "B1004",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 2180.0,
+      "z1": 5480.0,
+      "x2": -2833.75,
+      "y2": 3420.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2708",
+      "pt2_name": "2709"
+    },
+    {
+      "uname": "2884",
+      "label": "B1005",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 3420.0,
+      "z1": 5480.0,
+      "x2": -2833.75,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2709",
+      "pt2_name": "2710"
+    },
+    {
+      "uname": "2885",
+      "label": "B1006",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 4285.0,
+      "z1": 5480.0,
+      "x2": -2833.75,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2710",
+      "pt2_name": "2711"
+    },
+    {
+      "uname": "2886",
+      "label": "B1007",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 2180.0,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 105.00000000000001,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2708",
+      "pt2_name": "2702"
+    },
+    {
+      "uname": "2887",
+      "label": "B1008",
+      "type": "Beam",
+      "x1": -1676.25,
+      "y1": 2180.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 105.0,
+      "length2": 49.99999999999999,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2702",
+      "pt2_name": "2696"
+    },
+    {
+      "uname": "2907",
+      "label": "B1020",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 3420.0,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 3280.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.00000000000002,
+      "length2": 33.54530930323441,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2709",
+      "pt2_name": "2703"
+    },
+    {
+      "uname": "2888",
+      "label": "B1021",
+      "type": "Beam",
+      "x1": -1676.25,
+      "y1": 3280.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 3280.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 32.5,
+      "length2": 49.99999999999999,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2703",
+      "pt2_name": "2697"
+    },
+    {
+      "uname": "2889",
+      "label": "B1034",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 4285.0,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 105.00000000000001,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2710",
+      "pt2_name": "2704"
+    },
+    {
+      "uname": "2909",
+      "label": "B1035",
+      "type": "Beam",
+      "x1": -1676.25,
+      "y1": 4285.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 105.0,
+      "length2": 49.99999999999999,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2704",
+      "pt2_name": "2698"
+    },
+    {
+      "uname": "2890",
+      "label": "B1044",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 5235.0,
+      "z1": 5480.0,
+      "x2": -1861.25,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2711",
+      "pt2_name": "2705"
+    },
+    {
+      "uname": "2891",
+      "label": "B1045",
+      "type": "Beam",
+      "x1": -1861.25,
+      "y1": 5235.0,
+      "z1": 5480.0,
+      "x2": -1221.25,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2705",
+      "pt2_name": "2701"
+    },
+    {
+      "uname": "2892",
+      "label": "B1046",
+      "type": "Beam",
+      "x1": -1221.25,
+      "y1": 5235.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2701",
+      "pt2_name": "2699"
+    },
+    {
+      "uname": "2899",
+      "label": "B1053",
+      "type": "Beam",
+      "x1": -1861.25,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 49.99999999999999,
+      "length2": 51.75165755496102,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2706",
+      "pt2_name": "2702"
+    },
+    {
+      "uname": "2911",
+      "label": "B1054",
+      "type": "Beam",
+      "x1": -1676.25,
+      "y1": 2180.0,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 3280.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 105.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2702",
+      "pt2_name": "2703"
+    },
+    {
+      "uname": "2908",
+      "label": "B1055",
+      "type": "Beam",
+      "x1": -1676.25,
+      "y1": 3280.0,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 105.0,
+      "length2": 35.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2703",
+      "pt2_name": "2704"
+    },
+    {
+      "uname": "2896",
+      "label": "B1056",
+      "type": "Beam",
+      "x1": -1861.25,
+      "y1": 5235.0,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.00000000000001,
+      "length2": 37.55758093357176,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2705",
+      "pt2_name": "2704"
+    },
+    {
+      "uname": "2906",
+      "label": "B1058",
+      "type": "Beam",
+      "x1": -1221.25,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -1221.25,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2700",
+      "pt2_name": "2726"
+    },
+    {
+      "uname": "2895",
+      "label": "B1059",
+      "type": "Beam",
+      "x1": -338.75,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2695",
+      "pt2_name": "2696"
+    },
+    {
+      "uname": "2893",
+      "label": "B1060",
+      "type": "Beam",
+      "x1": -338.75,
+      "y1": 2180.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 3280.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2696",
+      "pt2_name": "2697"
+    },
+    {
+      "uname": "2894",
+      "label": "B1061",
+      "type": "Beam",
+      "x1": -338.75,
+      "y1": 3280.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2697",
+      "pt2_name": "2698"
+    },
+    {
+      "uname": "2897",
+      "label": "B1062",
+      "type": "Beam",
+      "x1": -338.75,
+      "y1": 4285.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "MSC-BH850x350x19x40",
+      "autoselect": "AB85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 50.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2698",
+      "pt2_name": "2699"
+    },
+    {
+      "uname": "2898",
+      "label": "B1290",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 4519.21728515625,
+      "z1": 5480.0,
+      "x2": -1721.861,
+      "y2": 4519.21728515625,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2712",
+      "pt2_name": "2713"
+    },
+    {
+      "uname": "2910",
+      "label": "B1408",
+      "type": "Beam",
+      "x1": -1221.25,
+      "y1": 4285.0,
+      "z1": 5480.0,
+      "x2": -1221.25,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "BH8506",
+      "autoselect": "ABH85",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 50.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2727",
+      "pt2_name": "2701"
+    },
+    {
+      "uname": "2900",
+      "label": "B1551",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 1800.11633300781,
+      "z1": 5480.0,
+      "x2": -1745.15,
+      "y2": 1800.11633300781,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2714",
+      "pt2_name": "2715"
+    },
+    {
+      "uname": "2901",
+      "label": "B71",
+      "type": "Beam",
+      "x1": -1376.443,
+      "y1": 2180.0,
+      "z1": 5480.0,
+      "x2": -1376.443,
+      "y2": 3280.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2716",
+      "pt2_name": "2717"
+    },
+    {
+      "uname": "2902",
+      "label": "B72",
+      "type": "Beam",
+      "x1": -1376.443,
+      "y1": 2730.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 2730.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2718",
+      "pt2_name": "2719"
+    },
+    {
+      "uname": "2903",
+      "label": "B75",
+      "type": "Beam",
+      "x1": -1129.384,
+      "y1": 2446.42626953125,
+      "z1": 5480.0,
+      "x2": -1129.384,
+      "y2": 2730.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2720",
+      "pt2_name": "2721"
+    },
+    {
+      "uname": "2904",
+      "label": "B76",
+      "type": "Beam",
+      "x1": -1376.443,
+      "y1": 2579.33740234375,
+      "z1": 5480.0,
+      "x2": -1129.384,
+      "y2": 2579.33740234375,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2722",
+      "pt2_name": "2723"
+    },
+    {
+      "uname": "2905",
+      "label": "B77",
+      "type": "Beam",
+      "x1": -1376.443,
+      "y1": 2985.89013671875,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 2985.89013671875,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2724",
+      "pt2_name": "2725"
+    },
+    {
+      "uname": "2912",
+      "label": "B83",
+      "type": "Beam",
+      "x1": -2233.863,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -2233.863,
+      "y2": 1800.11633300781,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2728",
+      "pt2_name": "2729"
+    },
+    {
+      "uname": "2913",
+      "label": "B84",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 1355.48229980469,
+      "z1": 5480.0,
+      "x2": -2233.863,
+      "y2": 1355.48229980469,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2730",
+      "pt2_name": "2731"
+    },
+    {
+      "uname": "2914",
+      "label": "B85",
+      "type": "Beam",
+      "x1": -2533.806,
+      "y1": 1355.48229980469,
+      "z1": 5480.0,
+      "x2": -2533.806,
+      "y2": 1800.11633300781,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2732",
+      "pt2_name": "2733"
+    },
+    {
+      "uname": "2915",
+      "label": "B86",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 3021.95581054688,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 3021.95581054688,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2734",
+      "pt2_name": "2735"
+    },
+    {
+      "uname": "2916",
+      "label": "B87",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 2604.06518554688,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 2604.06518554688,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2736",
+      "pt2_name": "2737"
+    },
+    {
+      "uname": "2917",
+      "label": "B88",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 3852.50024414063,
+      "z1": 5480.0,
+      "x2": -1676.25,
+      "y2": 3852.50024414063,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2738",
+      "pt2_name": "2739"
+    },
+    {
+      "uname": "2918",
+      "label": "B89",
+      "type": "Beam",
+      "x1": -2252.928,
+      "y1": 4519.21728515625,
+      "z1": 5480.0,
+      "x2": -2252.928,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2740",
+      "pt2_name": "2741"
+    },
+    {
+      "uname": "2919",
+      "label": "B90",
+      "type": "Beam",
+      "x1": -2833.75,
+      "y1": 5009.02099609375,
+      "z1": 5480.0,
+      "x2": -2252.928,
+      "y2": 5009.02099609375,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2742",
+      "pt2_name": "2743"
+    },
+    {
+      "uname": "2920",
+      "label": "B91",
+      "type": "Beam",
+      "x1": -2543.339,
+      "y1": 5009.02099609375,
+      "z1": 5480.0,
+      "x2": -2541.304,
+      "y2": 4519.21728515625,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2744",
+      "pt2_name": "2745"
+    },
+    {
+      "uname": "2921",
+      "label": "B92",
+      "type": "Beam",
+      "x1": -1541.25,
+      "y1": 5235.0,
+      "z1": 5480.0,
+      "x2": -1538.855,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2746",
+      "pt2_name": "2747"
+    },
+    {
+      "uname": "2922",
+      "label": "B93",
+      "type": "Beam",
+      "x1": -1221.25,
+      "y1": 4509.51318359375,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 4509.51318359375,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2748",
+      "pt2_name": "2749"
+    },
+    {
+      "uname": "2923",
+      "label": "B94",
+      "type": "Beam",
+      "x1": -780.0,
+      "y1": 4509.51318359375,
+      "z1": 5480.0,
+      "x2": -780.0,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2750",
+      "pt2_name": "2751"
+    },
+    {
+      "uname": "2924",
+      "label": "B95",
+      "type": "Beam",
+      "x1": -780.0,
+      "y1": 4991.85546875,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 4991.85546875,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2752",
+      "pt2_name": "2753"
+    },
+    {
+      "uname": "2925",
+      "label": "B96",
+      "type": "Beam",
+      "x1": -1541.25,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -1541.25,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2754",
+      "pt2_name": "2755"
+    },
+    {
+      "uname": "2926",
+      "label": "B97",
+      "type": "Beam",
+      "x1": -1376.443,
+      "y1": 3280.0,
+      "z1": 5480.0,
+      "x2": -1376.443,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2717",
+      "pt2_name": "2756"
+    },
+    {
+      "uname": "2927",
+      "label": "B98",
+      "type": "Beam",
+      "x1": -1376.443,
+      "y1": 4030.0,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 4030.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2757",
+      "pt2_name": "2758"
+    },
+    {
+      "uname": "2928",
+      "label": "B99",
+      "type": "Beam",
+      "x1": -1376.443,
+      "y1": 3782.49975585938,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 3782.5,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2759",
+      "pt2_name": "2760"
+    },
+    {
+      "uname": "2929",
+      "label": "B100",
+      "type": "Beam",
+      "x1": -986.8751,
+      "y1": 3782.49975585938,
+      "z1": 5480.0,
+      "x2": -986.8751,
+      "y2": 4030.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2761",
+      "pt2_name": "2762"
+    },
+    {
+      "uname": "2930",
+      "label": "B101",
+      "type": "Beam",
+      "x1": -1376.443,
+      "y1": 3905.6123046875,
+      "z1": 5480.0,
+      "x2": -986.8751,
+      "y2": 3906.25,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2763",
+      "pt2_name": "2764"
+    },
+    {
+      "uname": "2931",
+      "label": "B102",
+      "type": "Beam",
+      "x1": -656.0696,
+      "y1": 3782.49975585938,
+      "z1": 5480.0,
+      "x2": -656.0696,
+      "y2": 4030.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2765",
+      "pt2_name": "2766"
+    },
+    {
+      "uname": "2932",
+      "label": "B104",
+      "type": "Beam",
+      "x1": -1273.865,
+      "y1": 3782.5,
+      "z1": 5480.0,
+      "x2": -1273.865,
+      "y2": 3280.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2767",
+      "pt2_name": "2768"
+    },
+    {
+      "uname": "2933",
+      "label": "B105",
+      "type": "Beam",
+      "x1": -1221.25,
+      "y1": 1878.05883789063,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 1878.05883789063,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2769",
+      "pt2_name": "2770"
+    },
+    {
+      "uname": "2934",
+      "label": "B106",
+      "type": "Beam",
+      "x1": -780.0,
+      "y1": 1160.0,
+      "z1": 5480.0,
+      "x2": -780.0,
+      "y2": 1878.05883789063,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2771",
+      "pt2_name": "2772"
+    },
+    {
+      "uname": "2935",
+      "label": "B107",
+      "type": "Beam",
+      "x1": -780.0,
+      "y1": 1361.03833007813,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 1361.03833007813,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2773",
+      "pt2_name": "2774"
+    },
+    {
+      "uname": "2936",
+      "label": "B218",
+      "type": "Beam",
+      "x1": -338.75,
+      "y1": 4030.0,
+      "z1": 5480.0,
+      "x2": -248.75,
+      "y2": 4030.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2758",
+      "pt2_name": "2693"
+    },
+    {
+      "uname": "2937",
+      "label": "B219",
+      "type": "Beam",
+      "x1": -248.75,
+      "y1": 4030.0,
+      "z1": 5480.0,
+      "x2": -248.75,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2693",
+      "pt2_name": "2775"
+    },
+    {
+      "uname": "2938",
+      "label": "B220",
+      "type": "Beam",
+      "x1": -338.75,
+      "y1": 4285.0,
+      "z1": 5480.0,
+      "x2": -248.75,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 50.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2698",
+      "pt2_name": "2775"
+    },
+    {
+      "uname": "2939",
+      "label": "B221",
+      "type": "Beam",
+      "x1": -338.75,
+      "y1": 2730.0,
+      "z1": 5480.0,
+      "x2": -248.75,
+      "y2": 2730.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2719",
+      "pt2_name": "2694"
+    },
+    {
+      "uname": "2941",
+      "label": "B334",
+      "type": "Beam",
+      "x1": -603.9926,
+      "y1": 2446.42626953125,
+      "z1": 5480.0,
+      "x2": -603.9926,
+      "y2": 2730.0,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2778",
+      "pt2_name": "2779"
+    },
+    {
+      "uname": "2940",
+      "label": "B335",
+      "type": "Beam",
+      "x1": -1376.443,
+      "y1": 2446.42626953125,
+      "z1": 5480.0,
+      "x2": -338.75,
+      "y2": 2446.42626953125,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2776",
+      "pt2_name": "2777"
+    },
+    {
+      "uname": "5177",
+      "label": "B336",
+      "type": "Beam",
+      "x1": -338.75,
+      "y1": 2446.42626953125,
+      "z1": 5480.0,
+      "x2": -248.75,
+      "y2": 2446.42626953125,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2777",
+      "pt2_name": "5406"
+    },
+    {
+      "uname": "5178",
+      "label": "B337",
+      "type": "Beam",
+      "x1": -248.75,
+      "y1": 2730.0,
+      "z1": 5480.0,
+      "x2": -248.75,
+      "y2": 2446.42626953125,
+      "z2": 5480.0,
+      "section": "SB40",
+      "autoselect": "ASB",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 0.0,
+      "rigid_factor": 0.5,
+      "cardinal_pt": 8,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2694",
+      "pt2_name": "5406"
+    },
+    {
+      "uname": "4398",
+      "label": "C154",
+      "type": "Column",
+      "x1": -338.75,
+      "y1": 1160.0,
+      "z1": 5140.0,
+      "x2": -338.75,
+      "y2": 1160.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2608",
+      "pt2_name": "2695"
+    },
+    {
+      "uname": "4399",
+      "label": "C155",
+      "type": "Column",
+      "x1": -338.75,
+      "y1": 2180.0,
+      "z1": 5140.0,
+      "x2": -338.75,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2609",
+      "pt2_name": "2696"
+    },
+    {
+      "uname": "4400",
+      "label": "C156",
+      "type": "Column",
+      "x1": -338.75,
+      "y1": 3280.0,
+      "z1": 5140.0,
+      "x2": -338.75,
+      "y2": 3280.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2610",
+      "pt2_name": "2697"
+    },
+    {
+      "uname": "4401",
+      "label": "C157",
+      "type": "Column",
+      "x1": -338.75,
+      "y1": 4285.0,
+      "z1": 5140.0,
+      "x2": -338.75,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x40x40C630O",
+      "autoselect": "ACA5",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2611",
+      "pt2_name": "2698"
+    },
+    {
+      "uname": "4402",
+      "label": "C158",
+      "type": "Column",
+      "x1": -338.75,
+      "y1": 5235.0,
+      "z1": 5140.0,
+      "x2": -338.75,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACA6",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2612",
+      "pt2_name": "2699"
+    },
+    {
+      "uname": "4403",
+      "label": "C160",
+      "type": "Column",
+      "x1": -1221.25,
+      "y1": 1160.0,
+      "z1": 5140.0,
+      "x2": -1221.25,
+      "y2": 1160.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2613",
+      "pt2_name": "2700"
+    },
+    {
+      "uname": "4404",
+      "label": "C161",
+      "type": "Column",
+      "x1": -1221.25,
+      "y1": 5235.0,
+      "z1": 5140.0,
+      "x2": -1221.25,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACA6",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2614",
+      "pt2_name": "2701"
+    },
+    {
+      "uname": "4405",
+      "label": "C164",
+      "type": "Column",
+      "x1": -1676.25,
+      "y1": 2180.0,
+      "z1": 5140.0,
+      "x2": -1676.25,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "-2100x1000x65x65C630O",
+      "autoselect": "ACA4",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2615",
+      "pt2_name": "2702"
+    },
+    {
+      "uname": "4406",
+      "label": "C165",
+      "type": "Column",
+      "x1": -1676.25,
+      "y1": 3280.0,
+      "z1": 5140.0,
+      "x2": -1676.25,
+      "y2": 3280.0,
+      "z2": 5480.0,
+      "section": "-650x2100x65x65C630O",
+      "autoselect": "ACA3",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2616",
+      "pt2_name": "2703"
+    },
+    {
+      "uname": "4407",
+      "label": "C166",
+      "type": "Column",
+      "x1": -1676.25,
+      "y1": 4285.0,
+      "z1": 5140.0,
+      "x2": -1676.25,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "-2100x700x65x65C630O",
+      "autoselect": "ACA2",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2617",
+      "pt2_name": "2704"
+    },
+    {
+      "uname": "4408",
+      "label": "C167",
+      "type": "Column",
+      "x1": -1861.25,
+      "y1": 5235.0,
+      "z1": 5140.0,
+      "x2": -1861.25,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACA6",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2618",
+      "pt2_name": "2705"
+    },
+    {
+      "uname": "4409",
+      "label": "C169",
+      "type": "Column",
+      "x1": -1861.25,
+      "y1": 1160.0,
+      "z1": 5140.0,
+      "x2": -1861.25,
+      "y2": 1160.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2619",
+      "pt2_name": "2706"
+    },
+    {
+      "uname": "4410",
+      "label": "C170",
+      "type": "Column",
+      "x1": -2833.75,
+      "y1": 1160.0,
+      "z1": 5140.0,
+      "x2": -2833.75,
+      "y2": 1160.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2620",
+      "pt2_name": "2707"
+    },
+    {
+      "uname": "4411",
+      "label": "C171",
+      "type": "Column",
+      "x1": -2833.75,
+      "y1": 2180.0,
+      "z1": 5140.0,
+      "x2": -2833.75,
+      "y2": 2180.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2621",
+      "pt2_name": "2708"
+    },
+    {
+      "uname": "4412",
+      "label": "C172",
+      "type": "Column",
+      "x1": -2833.75,
+      "y1": 3420.0,
+      "z1": 5140.0,
+      "x2": -2833.75,
+      "y2": 3420.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2622",
+      "pt2_name": "2709"
+    },
+    {
+      "uname": "4413",
+      "label": "C173",
+      "type": "Column",
+      "x1": -2833.75,
+      "y1": 4285.0,
+      "z1": 5140.0,
+      "x2": -2833.75,
+      "y2": 4285.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2623",
+      "pt2_name": "2710"
+    },
+    {
+      "uname": "4414",
+      "label": "C174",
+      "type": "Column",
+      "x1": -2833.75,
+      "y1": 5235.0,
+      "z1": 5140.0,
+      "x2": -2833.75,
+      "y2": 5235.0,
+      "z2": 5480.0,
+      "section": "-1000x1000x36x36C630O",
+      "autoselect": "ACN1",
+      "ii_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "jj_releases": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ii_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "jj_values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "auto_offset": true,
+      "length1": 0.0,
+      "length2": 85.0,
+      "rigid_factor": 0.75,
+      "cardinal_pt": 10,
+      "mirror2": false,
+      "stiffTransform": false,
+      "offset1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "offset2": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "pier": "None",
+      "spandrel": "None",
+      "pt1_name": "2624",
+      "pt2_name": "2711"
+    }
+  ],
+  "areas": [
+    {
+      "uname": "1983",
+      "label": "F2100",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2702",
+        "2708",
+        "2714",
+        "2715"
+      ],
+      "coords": [
+        [
+          -1676.25,
+          2180.0,
+          5480.0
+        ],
+        [
+          -2833.75,
+          2180.0,
+          5480.0
+        ],
+        [
+          -2833.75,
+          1800.11633300781,
+          5480.0
+        ],
+        [
+          -1745.15,
+          1800.11633300781,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1984",
+      "label": "F2168",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2713",
+        "2712",
+        "2710",
+        "2704"
+      ],
+      "coords": [
+        [
+          -1721.861,
+          4519.21728515625,
+          5480.0
+        ],
+        [
+          -2833.75,
+          4519.21728515625,
+          5480.0
+        ],
+        [
+          -2833.75,
+          4285.0,
+          5480.0
+        ],
+        [
+          -1676.25,
+          4285.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1985",
+      "label": "F24",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2718",
+        "2719",
+        "2725",
+        "2724"
+      ],
+      "coords": [
+        [
+          -1376.443,
+          2730.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          2730.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          2985.89013671875,
+          5480.0
+        ],
+        [
+          -1376.443,
+          2985.89013671875,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1986",
+      "label": "F26",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2724",
+        "2725",
+        "2697",
+        "2717"
+      ],
+      "coords": [
+        [
+          -1376.443,
+          2985.89013671875,
+          5480.0
+        ],
+        [
+          -338.75,
+          2985.89013671875,
+          5480.0
+        ],
+        [
+          -338.75,
+          3280.0,
+          5480.0
+        ],
+        [
+          -1376.443,
+          3280.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2018",
+      "label": "F32",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2721",
+        "2720",
+        "2778",
+        "2779"
+      ],
+      "coords": [
+        [
+          -1129.384,
+          2730.0,
+          5480.0
+        ],
+        [
+          -1129.384,
+          2446.42626953125,
+          5480.0
+        ],
+        [
+          -603.9926,
+          2446.42626953125,
+          5480.0
+        ],
+        [
+          -603.9926,
+          2730.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1987",
+      "label": "F33",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2722",
+        "2723",
+        "2721",
+        "2718"
+      ],
+      "coords": [
+        [
+          -1376.443,
+          2579.33740234375,
+          5480.0
+        ],
+        [
+          -1129.384,
+          2579.33740234375,
+          5480.0
+        ],
+        [
+          -1129.384,
+          2730.0,
+          5480.0
+        ],
+        [
+          -1376.443,
+          2730.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1988",
+      "label": "F34",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2723",
+        "2722",
+        "2776",
+        "2720"
+      ],
+      "coords": [
+        [
+          -1129.384,
+          2579.33740234375,
+          5480.0
+        ],
+        [
+          -1376.443,
+          2579.33740234375,
+          5480.0
+        ],
+        [
+          -1376.443,
+          2446.42626953125,
+          5480.0
+        ],
+        [
+          -1129.384,
+          2446.42626953125,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1989",
+      "label": "F83",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2702",
+        "2755",
+        "2754",
+        "2706"
+      ],
+      "coords": [
+        [
+          -1676.25,
+          2180.0,
+          5480.0
+        ],
+        [
+          -1541.25,
+          2180.0,
+          5480.0
+        ],
+        [
+          -1541.25,
+          1160.0,
+          5480.0
+        ],
+        [
+          -1861.25,
+          1160.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1990",
+      "label": "F86",
+      "section": "DS25",
+      "num_pts": 4,
+      "pt_names": [
+        "2702",
+        "2716",
+        "2717",
+        "2703"
+      ],
+      "coords": [
+        [
+          -1676.25,
+          2180.0,
+          5480.0
+        ],
+        [
+          -1376.443,
+          2180.0,
+          5480.0
+        ],
+        [
+          -1376.443,
+          3280.0,
+          5480.0
+        ],
+        [
+          -1676.25,
+          3280.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1991",
+      "label": "F91",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2757",
+        "2758",
+        "2698",
+        "2756"
+      ],
+      "coords": [
+        [
+          -1376.443,
+          4030.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          4030.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          4285.0,
+          5480.0
+        ],
+        [
+          -1376.443,
+          4285.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1992",
+      "label": "F92",
+      "section": "DS25",
+      "num_pts": 4,
+      "pt_names": [
+        "2703",
+        "2717",
+        "2756",
+        "2704"
+      ],
+      "coords": [
+        [
+          -1676.25,
+          3280.0,
+          5480.0
+        ],
+        [
+          -1376.443,
+          3280.0,
+          5480.0
+        ],
+        [
+          -1376.443,
+          4285.0,
+          5480.0
+        ],
+        [
+          -1676.25,
+          4285.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1993",
+      "label": "F97",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2738",
+        "2739",
+        "2704",
+        "2710"
+      ],
+      "coords": [
+        [
+          -2833.75,
+          3852.50024414063,
+          5480.0
+        ],
+        [
+          -1676.25,
+          3852.50024414063,
+          5480.0
+        ],
+        [
+          -1676.25,
+          4285.0,
+          5480.0
+        ],
+        [
+          -2833.75,
+          4285.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1994",
+      "label": "F99",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2735",
+        "2734",
+        "2736",
+        "2737"
+      ],
+      "coords": [
+        [
+          -1676.25,
+          3021.95581054688,
+          5480.0
+        ],
+        [
+          -2833.75,
+          3021.95581054688,
+          5480.0
+        ],
+        [
+          -2833.75,
+          2604.06518554688,
+          5480.0
+        ],
+        [
+          -1676.25,
+          2604.06518554688,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1995",
+      "label": "F100",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2737",
+        "2736",
+        "2708",
+        "2702"
+      ],
+      "coords": [
+        [
+          -1676.25,
+          2604.06518554688,
+          5480.0
+        ],
+        [
+          -2833.75,
+          2604.06518554688,
+          5480.0
+        ],
+        [
+          -2833.75,
+          2180.0,
+          5480.0
+        ],
+        [
+          -1676.25,
+          2180.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1996",
+      "label": "F101",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2709",
+        "2703",
+        "2739",
+        "2738"
+      ],
+      "coords": [
+        [
+          -2833.75,
+          3420.0,
+          5480.0
+        ],
+        [
+          -1676.25,
+          3280.0,
+          5480.0
+        ],
+        [
+          -1676.25,
+          3852.50024414063,
+          5480.0
+        ],
+        [
+          -2833.75,
+          3852.50024414063,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1997",
+      "label": "F102",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2703",
+        "2709",
+        "2734",
+        "2735"
+      ],
+      "coords": [
+        [
+          -1676.25,
+          3280.0,
+          5480.0
+        ],
+        [
+          -2833.75,
+          3420.0,
+          5480.0
+        ],
+        [
+          -2833.75,
+          3021.95581054688,
+          5480.0
+        ],
+        [
+          -1676.25,
+          3021.95581054688,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1998",
+      "label": "F103",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2727",
+        "2701",
+        "2746",
+        "2747"
+      ],
+      "coords": [
+        [
+          -1221.25,
+          4285.0,
+          5480.0
+        ],
+        [
+          -1221.25,
+          5235.0,
+          5480.0
+        ],
+        [
+          -1541.25,
+          5235.0,
+          5480.0
+        ],
+        [
+          -1538.855,
+          4285.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "1999",
+      "label": "F105",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2747",
+        "2746",
+        "2705",
+        "2704"
+      ],
+      "coords": [
+        [
+          -1538.855,
+          4285.0,
+          5480.0
+        ],
+        [
+          -1541.25,
+          5235.0,
+          5480.0
+        ],
+        [
+          -1861.25,
+          5235.0,
+          5480.0
+        ],
+        [
+          -1676.25,
+          4285.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2000",
+      "label": "F107",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2749",
+        "2748",
+        "2727",
+        "2698"
+      ],
+      "coords": [
+        [
+          -338.75,
+          4509.51318359375,
+          5480.0
+        ],
+        [
+          -1221.25,
+          4509.51318359375,
+          5480.0
+        ],
+        [
+          -1221.25,
+          4285.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          4285.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2001",
+      "label": "F108",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2750",
+        "2751",
+        "2701",
+        "2748"
+      ],
+      "coords": [
+        [
+          -780.0,
+          4509.51318359375,
+          5480.0
+        ],
+        [
+          -780.0,
+          5235.0,
+          5480.0
+        ],
+        [
+          -1221.25,
+          5235.0,
+          5480.0
+        ],
+        [
+          -1221.25,
+          4509.51318359375,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2002",
+      "label": "F110",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2752",
+        "2753",
+        "2699",
+        "2751"
+      ],
+      "coords": [
+        [
+          -780.0,
+          4991.85546875,
+          5480.0
+        ],
+        [
+          -338.75,
+          4991.85546875,
+          5480.0
+        ],
+        [
+          -338.75,
+          5235.0,
+          5480.0
+        ],
+        [
+          -780.0,
+          5235.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2003",
+      "label": "F111",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2753",
+        "2752",
+        "2750",
+        "2749"
+      ],
+      "coords": [
+        [
+          -338.75,
+          4991.85546875,
+          5480.0
+        ],
+        [
+          -780.0,
+          4991.85546875,
+          5480.0
+        ],
+        [
+          -780.0,
+          4509.51318359375,
+          5480.0
+        ],
+        [
+          -338.75,
+          4509.51318359375,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2004",
+      "label": "F113",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2741",
+        "2740",
+        "2713",
+        "2705"
+      ],
+      "coords": [
+        [
+          -2252.928,
+          5235.0,
+          5480.0
+        ],
+        [
+          -2252.928,
+          4519.21728515625,
+          5480.0
+        ],
+        [
+          -1721.861,
+          4519.21728515625,
+          5480.0
+        ],
+        [
+          -1861.25,
+          5235.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2005",
+      "label": "F114",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2742",
+        "2743",
+        "2741",
+        "2711"
+      ],
+      "coords": [
+        [
+          -2833.75,
+          5009.02099609375,
+          5480.0
+        ],
+        [
+          -2252.928,
+          5009.02099609375,
+          5480.0
+        ],
+        [
+          -2252.928,
+          5235.0,
+          5480.0
+        ],
+        [
+          -2833.75,
+          5235.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2006",
+      "label": "F116",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2744",
+        "2745",
+        "2740",
+        "2743"
+      ],
+      "coords": [
+        [
+          -2543.339,
+          5009.02099609375,
+          5480.0
+        ],
+        [
+          -2541.304,
+          4519.21728515625,
+          5480.0
+        ],
+        [
+          -2252.928,
+          4519.21728515625,
+          5480.0
+        ],
+        [
+          -2252.928,
+          5009.02099609375,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2007",
+      "label": "F117",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2745",
+        "2744",
+        "2742",
+        "2712"
+      ],
+      "coords": [
+        [
+          -2541.304,
+          4519.21728515625,
+          5480.0
+        ],
+        [
+          -2543.339,
+          5009.02099609375,
+          5480.0
+        ],
+        [
+          -2833.75,
+          5009.02099609375,
+          5480.0
+        ],
+        [
+          -2833.75,
+          4519.21728515625,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2008",
+      "label": "F119",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2729",
+        "2728",
+        "2706",
+        "2715"
+      ],
+      "coords": [
+        [
+          -2233.863,
+          1800.11633300781,
+          5480.0
+        ],
+        [
+          -2233.863,
+          1160.0,
+          5480.0
+        ],
+        [
+          -1861.25,
+          1160.0,
+          5480.0
+        ],
+        [
+          -1745.15,
+          1800.11633300781,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2009",
+      "label": "F121",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2700",
+        "2726",
+        "2755",
+        "2754"
+      ],
+      "coords": [
+        [
+          -1221.25,
+          1160.0,
+          5480.0
+        ],
+        [
+          -1221.25,
+          2180.0,
+          5480.0
+        ],
+        [
+          -1541.25,
+          2180.0,
+          5480.0
+        ],
+        [
+          -1541.25,
+          1160.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2011",
+      "label": "F125",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2772",
+        "2769",
+        "2700",
+        "2771"
+      ],
+      "coords": [
+        [
+          -780.0,
+          1878.05883789063,
+          5480.0
+        ],
+        [
+          -1221.25,
+          1878.05883789063,
+          5480.0
+        ],
+        [
+          -1221.25,
+          1160.0,
+          5480.0
+        ],
+        [
+          -780.0,
+          1160.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2012",
+      "label": "F128",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2773",
+        "2774",
+        "2770",
+        "2772"
+      ],
+      "coords": [
+        [
+          -780.0,
+          1361.03833007813,
+          5480.0
+        ],
+        [
+          -338.75,
+          1361.03833007813,
+          5480.0
+        ],
+        [
+          -338.75,
+          1878.05883789063,
+          5480.0
+        ],
+        [
+          -780.0,
+          1878.05883789063,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2013",
+      "label": "F129",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2774",
+        "2773",
+        "2771",
+        "2695"
+      ],
+      "coords": [
+        [
+          -338.75,
+          1361.03833007813,
+          5480.0
+        ],
+        [
+          -780.0,
+          1361.03833007813,
+          5480.0
+        ],
+        [
+          -780.0,
+          1160.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          1160.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2014",
+      "label": "F130",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2733",
+        "2732",
+        "2731",
+        "2729"
+      ],
+      "coords": [
+        [
+          -2533.806,
+          1800.11633300781,
+          5480.0
+        ],
+        [
+          -2533.806,
+          1355.48229980469,
+          5480.0
+        ],
+        [
+          -2233.863,
+          1355.48229980469,
+          5480.0
+        ],
+        [
+          -2233.863,
+          1800.11633300781,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2016",
+      "label": "F132",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2732",
+        "2733",
+        "2714",
+        "2730"
+      ],
+      "coords": [
+        [
+          -2533.806,
+          1355.48229980469,
+          5480.0
+        ],
+        [
+          -2533.806,
+          1800.11633300781,
+          5480.0
+        ],
+        [
+          -2833.75,
+          1800.11633300781,
+          5480.0
+        ],
+        [
+          -2833.75,
+          1355.48229980469,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2010",
+      "label": "F134",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2769",
+        "2770",
+        "2696",
+        "2726"
+      ],
+      "coords": [
+        [
+          -1221.25,
+          1878.05883789063,
+          5480.0
+        ],
+        [
+          -338.75,
+          1878.05883789063,
+          5480.0
+        ],
+        [
+          -338.75,
+          2180.0,
+          5480.0
+        ],
+        [
+          -1221.25,
+          2180.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2015",
+      "label": "F135",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2731",
+        "2730",
+        "2707",
+        "2728"
+      ],
+      "coords": [
+        [
+          -2233.863,
+          1355.48229980469,
+          5480.0
+        ],
+        [
+          -2833.75,
+          1355.48229980469,
+          5480.0
+        ],
+        [
+          -2833.75,
+          1160.0,
+          5480.0
+        ],
+        [
+          -2233.863,
+          1160.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2017",
+      "label": "F262",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2758",
+        "2693",
+        "2775",
+        "2698"
+      ],
+      "coords": [
+        [
+          -338.75,
+          4030.0,
+          5480.0
+        ],
+        [
+          -248.75,
+          4030.0,
+          5480.0
+        ],
+        [
+          -248.75,
+          4285.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          4285.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2020",
+      "label": "F331",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2778",
+        "2777",
+        "2719",
+        "2779"
+      ],
+      "coords": [
+        [
+          -603.9926,
+          2446.42626953125,
+          5480.0
+        ],
+        [
+          -338.75,
+          2446.42626953125,
+          5480.0
+        ],
+        [
+          -338.75,
+          2730.0,
+          5480.0
+        ],
+        [
+          -603.9926,
+          2730.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2019",
+      "label": "F333",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2716",
+        "2696",
+        "2777",
+        "2776"
+      ],
+      "coords": [
+        [
+          -1376.443,
+          2180.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          2180.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          2446.42626953125,
+          5480.0
+        ],
+        [
+          -1376.443,
+          2446.42626953125,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2021",
+      "label": "F334",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2765",
+        "2766",
+        "2762",
+        "2761"
+      ],
+      "coords": [
+        [
+          -656.0696,
+          3782.49975585938,
+          5480.0
+        ],
+        [
+          -656.0696,
+          4030.0,
+          5480.0
+        ],
+        [
+          -986.8751,
+          4030.0,
+          5480.0
+        ],
+        [
+          -986.8751,
+          3782.49975585938,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2022",
+      "label": "F335",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2766",
+        "2765",
+        "2760",
+        "2758"
+      ],
+      "coords": [
+        [
+          -656.0696,
+          4030.0,
+          5480.0
+        ],
+        [
+          -656.0696,
+          3782.49975585938,
+          5480.0
+        ],
+        [
+          -338.75,
+          3782.5,
+          5480.0
+        ],
+        [
+          -338.75,
+          4030.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2023",
+      "label": "F336",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2763",
+        "2764",
+        "2762",
+        "2757"
+      ],
+      "coords": [
+        [
+          -1376.443,
+          3905.6123046875,
+          5480.0
+        ],
+        [
+          -986.8751,
+          3906.25,
+          5480.0
+        ],
+        [
+          -986.8751,
+          4030.0,
+          5480.0
+        ],
+        [
+          -1376.443,
+          4030.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2024",
+      "label": "F337",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2764",
+        "2763",
+        "2759",
+        "2761"
+      ],
+      "coords": [
+        [
+          -986.8751,
+          3906.25,
+          5480.0
+        ],
+        [
+          -1376.443,
+          3905.6123046875,
+          5480.0
+        ],
+        [
+          -1376.443,
+          3782.49975585938,
+          5480.0
+        ],
+        [
+          -986.8751,
+          3782.49975585938,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2867",
+      "label": "F25",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2767",
+        "2768",
+        "2697",
+        "2760"
+      ],
+      "coords": [
+        [
+          -1273.865,
+          3782.5,
+          5480.0
+        ],
+        [
+          -1273.865,
+          3280.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          3280.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          3782.5,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "2868",
+      "label": "F27",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2768",
+        "2767",
+        "2759",
+        "2717"
+      ],
+      "coords": [
+        [
+          -1273.865,
+          3280.0,
+          5480.0
+        ],
+        [
+          -1273.865,
+          3782.5,
+          5480.0
+        ],
+        [
+          -1376.443,
+          3782.49975585938,
+          5480.0
+        ],
+        [
+          -1376.443,
+          3280.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    },
+    {
+      "uname": "3592",
+      "label": "F1111",
+      "section": "DS15",
+      "num_pts": 4,
+      "pt_names": [
+        "2777",
+        "5406",
+        "2694",
+        "2719"
+      ],
+      "coords": [
+        [
+          -338.75,
+          2446.42626953125,
+          5480.0
+        ],
+        [
+          -248.75,
+          2446.42626953125,
+          5480.0
+        ],
+        [
+          -248.75,
+          2730.0,
+          5480.0
+        ],
+        [
+          -338.75,
+          2730.0,
+          5480.0
+        ]
+      ],
+      "modifiers": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diaphragm": "None",
+      "pier": "None",
+      "spandrel": "None"
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "Analysis & Results": [
+    "cAnalysisResults",
+    "cAnalysisResultsSetup",
+    "cAnalyze"
+  ],
+  "Load Cases": [
+    "cCaseDirectHistoryLinear",
+    "cCaseDirectHistoryNonlinear",
+    "cCaseHyperStatic",
+    "cCaseModalEigen",
+    "cCaseModalHistoryLinear",
+    "cCaseModalHistoryNonlinear",
+    "cCaseModalRitz",
+    "cCaseResponseSpectrum",
+    "cCaseStaticLinear",
+    "cCaseStaticNonlinear",
+    "cCaseStaticNonlinearStaged"
+  ],
+  "Load Definitions": [
+    "cLoadCases",
+    "cLoadPatterns",
+    "cCombo"
+  ],
+  "Design - Concrete": [
+    "cDesignConcrete",
+    "cDesignConcreteSlab",
+    "cDesignShearWall",
+    "cDConcreteShellDesignRequest"
+  ],
+  "Design - Steel": [
+    "cDesignSteel"
+  ],
+  "Design - Composite": [
+    "cDesignCompositeBeam",
+    "cDesignCompositeColumn"
+  ],
+  "Design - Results/Forces": [
+    "cDesignForces",
+    "cDesignResults"
+  ],
+  "Modeling - Frame": [
+    "cFrameObj",
+    "cEditFrame",
+    "cLineElm"
+  ],
+  "Modeling - Area": [
+    "cAreaObj",
+    "cAreaElm"
+  ],
+  "Modeling - Point": [
+    "cPointObj",
+    "cPointElm"
+  ],
+  "Modeling - Link/Tendon": [
+    "cLinkObj",
+    "cTendonObj"
+  ],
+  "Properties - Frame": [
+    "cPropFrame",
+    "cPropFrameSDShape"
+  ],
+  "Properties - Area": [
+    "cPropArea",
+    "cPropAreaSpring"
+  ],
+  "Properties - Material": [
+    "cPropMaterial",
+    "cPropRebar",
+    "cPropTendon"
+  ],
+  "Properties - Spring": [
+    "cPropPointSpring",
+    "cPropLineSpring",
+    "cPropAreaSpring"
+  ],
+  "Properties - Link": [
+    "cPropLink"
+  ],
+  "Structure Definition": [
+    "cStory",
+    "cTower",
+    "cGridSys",
+    "cDiaphragm",
+    "cPierLabel",
+    "cSpandrelLabel",
+    "cConstraint"
+  ],
+  "Model Operations": [
+    "cSapModel",
+    "cFile",
+    "cView",
+    "cSelect",
+    "cOptions"
+  ],
+  "Database Tables": [
+    "cDatabaseTables"
+  ],
+  "Groups & Selection": [
+    "cGroup",
+    "cSelect"
+  ],
+  "Functions": [
+    "cFunction",
+    "cFunctionRS"
+  ],
+  "Seismic": [
+    "cAutoSeismic"
+  ],
+  "Plugin System": [
+    "cPluginCallback",
+    "cPluginContract"
+  ],
+  "Utilities": [
+    "cHelper",
+    "cOAPI",
+    "cEditGeneral",
+    "cGenDispl",
+    "cDetailing",
+    "cDesignStrip"
+  ]
+}

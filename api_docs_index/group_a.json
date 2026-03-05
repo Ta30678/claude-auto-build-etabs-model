@@ -1,0 +1,2035 @@
+{
+  "cAnalysisResults": {
+    "page": "html/b64f2f6e-9759-e542-faf2-0905474a04a7.htm",
+    "properties": [
+      {
+        "name": "Setup",
+        "page": "html/1060f888-cf6d-80b8-5d18-87892b8ca373.htm"
+      }
+    ],
+    "methods": [
+      {
+        "name": "AreaForceShell",
+        "page": "html/cc92bdd3-f712-d741-1805-4c7c9bbbb2d7.htm"
+      },
+      {
+        "name": "AreaJointForceShell",
+        "page": "html/e83ea1bd-2d2c-a16d-1f82-230a5507d21d.htm"
+      },
+      {
+        "name": "AreaStrainShell",
+        "page": "html/e3af8854-2722-5c0b-0b64-f89c3bde3ae9.htm"
+      },
+      {
+        "name": "AreaStrainShellLayered",
+        "page": "html/cc09c570-9398-aa93-04e3-a140cb43a56e.htm"
+      },
+      {
+        "name": "AreaStressShell",
+        "page": "html/23519273-ad66-603c-48a3-b4bba4a42f89.htm"
+      },
+      {
+        "name": "AreaStressShellLayered",
+        "page": "html/650241c3-e7c4-f4ab-b291-a264031c3a1a.htm"
+      },
+      {
+        "name": "AssembledJointMass",
+        "page": "html/fc9f1192-cb22-44d9-b8ae-65e824d41f30.htm"
+      },
+      {
+        "name": "AssembledJointMass_1",
+        "page": "html/87cf0f6a-b145-4788-620b-4b5e0d377ef0.htm"
+      },
+      {
+        "name": "BaseReact",
+        "page": "html/b1254c38-a9f8-0f7b-3aa4-e7bde8a96e3a.htm"
+      },
+      {
+        "name": "BaseReactWithCentroid",
+        "page": "html/e2cbc77a-9631-e2bc-b6ad-83d31c727360.htm"
+      },
+      {
+        "name": "BucklingFactor",
+        "page": "html/4c601f77-172b-00c9-8ac2-bd528c32a3ff.htm"
+      },
+      {
+        "name": "FrameForce",
+        "page": "html/5efb0061-e25c-363c-1191-6fb001f48978.htm"
+      },
+      {
+        "name": "FrameJointForce",
+        "page": "html/548786a1-f0ec-a2d0-a63f-006270f14a2a.htm"
+      },
+      {
+        "name": "GeneralizedDispl",
+        "page": "html/519448d1-d939-0e13-78b6-277524f006d3.htm"
+      },
+      {
+        "name": "JointAcc",
+        "page": "html/ec67238a-c59c-b8ca-6173-0abc1d78bd3a.htm"
+      },
+      {
+        "name": "JointAccAbs",
+        "page": "html/ef3a4790-6beb-f608-92cf-95ebcfdfcaad.htm"
+      },
+      {
+        "name": "JointDispl",
+        "page": "html/993054d6-91df-b03c-5f1f-79ab0dfce583.htm"
+      },
+      {
+        "name": "JointDisplAbs",
+        "page": "html/b34d2e86-416a-2fa7-0d85-5dd976de9485.htm"
+      },
+      {
+        "name": "JointDrifts",
+        "page": "html/b2807bfa-64f8-514d-c61a-9840d6cd6712.htm"
+      },
+      {
+        "name": "JointReact",
+        "page": "html/10645966-190c-ff74-46f2-a87da774df65.htm"
+      },
+      {
+        "name": "JointVel",
+        "page": "html/5fe1fc79-a7a5-20b9-0e10-f15c5e1527c5.htm"
+      },
+      {
+        "name": "JointVelAbs",
+        "page": "html/80dc677c-8a12-6eac-9fde-52aa5a7c73b3.htm"
+      },
+      {
+        "name": "LinkDeformation",
+        "page": "html/f9d1cea0-6835-a029-e1ad-c5cb15cb3646.htm"
+      },
+      {
+        "name": "LinkForce",
+        "page": "html/d2d21dfe-986f-d503-0684-a464aad70a41.htm"
+      },
+      {
+        "name": "LinkJointForce",
+        "page": "html/9bd1b7db-a41e-e6b8-72de-bcd26f0b3cbb.htm"
+      },
+      {
+        "name": "ModalLoadParticipationRatios",
+        "page": "html/d4a55aa7-88e9-b9ec-64a2-76d1afa84314.htm"
+      },
+      {
+        "name": "ModalParticipatingMassRatios",
+        "page": "html/97d6a0a9-ed2e-ce1c-061b-ea0791157e7b.htm"
+      },
+      {
+        "name": "ModalParticipationFactors",
+        "page": "html/967c4d0a-8c94-890c-55af-bb4169411ea4.htm"
+      },
+      {
+        "name": "ModalPeriod",
+        "page": "html/c0865d18-6586-a23a-b8dd-f25e132845b2.htm"
+      },
+      {
+        "name": "ModeShape",
+        "page": "html/92a9bfef-a6f8-8252-8097-4b09423e10a7.htm"
+      },
+      {
+        "name": "PanelZoneDeformation",
+        "page": "html/7a2b313c-fc1d-8ee7-51b6-5872f473f6d5.htm"
+      },
+      {
+        "name": "PanelZoneForce",
+        "page": "html/0d526d7d-7435-16c8-0ccb-13fd534f3458.htm"
+      },
+      {
+        "name": "PierForce",
+        "page": "html/a724ff58-b1e9-5faa-621d-de7b535c1afe.htm"
+      },
+      {
+        "name": "SectionCutAnalysis",
+        "page": "html/c10bd12f-ed43-cb2b-4fc9-95922251b017.htm"
+      },
+      {
+        "name": "SectionCutDesign",
+        "page": "html/f0710aaf-08b4-6dfc-2c67-29b27bb9acbb.htm"
+      },
+      {
+        "name": "SpandrelForce",
+        "page": "html/67d2885e-e75b-b11b-8e2b-6912d697c336.htm"
+      },
+      {
+        "name": "StoryDrifts",
+        "page": "html/34ebac17-0e58-0071-0ec1-81f3b572cf75.htm"
+      }
+    ]
+  },
+  "cAnalysisResultsSetup": {
+    "page": "html/25527ed4-d035-9576-e3ec-a63103f2c352.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "DeselectAllCasesAndCombosForOutput",
+        "page": "html/59e98a30-56bc-d6b7-00ff-e622b8f38224.htm"
+      },
+      {
+        "name": "GetCaseSelectedForOutput",
+        "page": "html/76ee3052-9f18-fd0a-368c-828ff880318d.htm"
+      },
+      {
+        "name": "GetComboSelectedForOutput",
+        "page": "html/a079962d-9455-ecc8-6667-f8bc6bf40317.htm"
+      },
+      {
+        "name": "GetOptionBaseReactLoc",
+        "page": "html/13d5546b-9997-5097-0f36-4c20eb88a54b.htm"
+      },
+      {
+        "name": "GetOptionBucklingMode",
+        "page": "html/cc52d5f2-f222-4442-5e84-58393d112a8d.htm"
+      },
+      {
+        "name": "GetOptionDirectHist",
+        "page": "html/a6f3b13b-1c0d-f8d4-2050-92365655df5d.htm"
+      },
+      {
+        "name": "GetOptionModalHist",
+        "page": "html/503e9679-30d3-0826-6505-c08bd9a2f2f8.htm"
+      },
+      {
+        "name": "GetOptionModeShape",
+        "page": "html/fc4249b0-7abc-6a81-a81d-b6f34233b0ec.htm"
+      },
+      {
+        "name": "GetOptionMultiStepStatic",
+        "page": "html/59a5a183-5d00-3734-2c6a-a82516839872.htm"
+      },
+      {
+        "name": "GetOptionMultiValuedCombo",
+        "page": "html/2e7a93d5-4dd6-7b49-8825-47a8dafa1fc1.htm"
+      },
+      {
+        "name": "GetOptionNLStatic",
+        "page": "html/c860a7a1-9ebb-e0c5-249a-ae3c4e88f208.htm"
+      },
+      {
+        "name": "SetCaseSelectedForOutput",
+        "page": "html/9a897e48-fbcd-d8cc-90f3-8aab80ae0e51.htm"
+      },
+      {
+        "name": "SetComboSelectedForOutput",
+        "page": "html/50252dbb-7c20-eee8-ac7f-a58d8d50a695.htm"
+      },
+      {
+        "name": "SetOptionBaseReactLoc",
+        "page": "html/e97dc297-8881-1400-795c-8a3dcd4250c8.htm"
+      },
+      {
+        "name": "SetOptionBucklingMode",
+        "page": "html/4e7ecd46-19ce-4334-33c9-ce00fec190f8.htm"
+      },
+      {
+        "name": "SetOptionDirectHist",
+        "page": "html/18e76e12-b578-e6dd-e1c2-0fc065dcebae.htm"
+      },
+      {
+        "name": "SetOptionModalHist",
+        "page": "html/0f2ce067-2764-ca48-83ef-4ef8c2e7c0f2.htm"
+      },
+      {
+        "name": "SetOptionModeShape",
+        "page": "html/7e39a7f0-7090-87fc-ad6f-b4c252733246.htm"
+      },
+      {
+        "name": "SetOptionMultiStepStatic",
+        "page": "html/d11ccc1a-11c1-84a9-ae06-76581f787e44.htm"
+      },
+      {
+        "name": "SetOptionMultiValuedCombo",
+        "page": "html/aa1ed7b4-1be1-638e-8050-bc38910a550c.htm"
+      },
+      {
+        "name": "SetOptionNLStatic",
+        "page": "html/70ee8920-c6e4-ae91-d223-4320b1090ca5.htm"
+      }
+    ]
+  },
+  "cAnalyze": {
+    "page": "html/025793e2-df8b-7de9-b63c-3a76763bae64.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "CreateAnalysisModel",
+        "page": "html/4e608741-8192-d3b4-84e3-e6c550a1c2db.htm"
+      },
+      {
+        "name": "DeleteResults",
+        "page": "html/78802e8a-ceff-bb3b-4f27-a805ef90d148.htm"
+      },
+      {
+        "name": "GetActiveDOF",
+        "page": "html/95b62dec-d494-53d7-1c3d-5d4b77cc51bf.htm"
+      },
+      {
+        "name": "GetCaseStatus",
+        "page": "html/94fc4a33-5784-228c-62ad-edcc74eaf034.htm"
+      },
+      {
+        "name": "GetDesignResponseOption",
+        "page": "html/5be30001-f29e-f709-abf2-a9ec6ca1b958.htm"
+      },
+      {
+        "name": "GetRunCaseFlag",
+        "page": "html/b3d6546c-93c6-fc1a-d017-21984aa3bc12.htm"
+      },
+      {
+        "name": "GetSolverOption",
+        "page": "html/64847815-d20b-32b8-42fd-b2dc2e9a126b.htm"
+      },
+      {
+        "name": "GetSolverOption_1",
+        "page": "html/d0def199-7ee4-873f-5016-a1d8a11f7b1f.htm"
+      },
+      {
+        "name": "GetSolverOption_2",
+        "page": "html/f07d0feb-6508-0ec3-b47a-f5186f578689.htm"
+      },
+      {
+        "name": "GetSolverOption_3",
+        "page": "html/be3d8ebc-bc94-8008-4c90-24bc79442266.htm"
+      },
+      {
+        "name": "MergeAnalysisResults",
+        "page": "html/26af0e87-c842-7e4d-a961-4da0a6c10252.htm"
+      },
+      {
+        "name": "ModifyUndeformedGeometry",
+        "page": "html/a9bbb6f9-14eb-b4ee-1605-7c12b76194a5.htm"
+      },
+      {
+        "name": "ModifyUndeformedGeometryModeShape",
+        "page": "html/e3fc25af-bf08-962f-a11a-000ceecb4191.htm"
+      },
+      {
+        "name": "RunAnalysis",
+        "page": "html/516e7b74-8cb4-af27-31d5-38bb95b3c1d1.htm"
+      },
+      {
+        "name": "SetActiveDOF",
+        "page": "html/a4c9b05e-c2cc-364a-7f26-63cc50d098ba.htm"
+      },
+      {
+        "name": "SetDesignResponseOption",
+        "page": "html/24f58704-0fea-a875-67f9-d1f4d4b68044.htm"
+      },
+      {
+        "name": "SetRunCaseFlag",
+        "page": "html/7ff1159c-d38b-1c69-1eaa-a25957f5abe8.htm"
+      },
+      {
+        "name": "SetSolverOption",
+        "page": "html/cbc26a3c-b6e6-d05f-494d-9b7b2d2f15bc.htm"
+      },
+      {
+        "name": "SetSolverOption_1",
+        "page": "html/e3777e3a-2d74-9045-aeef-e98c78c5f14f.htm"
+      },
+      {
+        "name": "SetSolverOption_2",
+        "page": "html/ff5e11c8-9a3f-a8aa-859b-663d8a11804e.htm"
+      },
+      {
+        "name": "SetSolverOption_3",
+        "page": "html/1c3fbc28-90b1-2cf7-ebad-cce5f53883ba.htm"
+      }
+    ]
+  },
+  "cAreaElm": {
+    "page": "html/acb57064-1690-8643-a153-8afe57d5852d.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "Count",
+        "page": "html/3386ce79-de99-2031-38c4-c533e0fe1055.htm"
+      },
+      {
+        "name": "GetLoadTemperature",
+        "page": "html/936908e7-9a69-ae27-82e1-8d1bd50fd83c.htm"
+      },
+      {
+        "name": "GetLoadUniform",
+        "page": "html/a68cab9e-7ce5-9834-b555-8272e9c453d7.htm"
+      },
+      {
+        "name": "GetLocalAxes",
+        "page": "html/219cafa5-3fbe-822d-64fb-5ee4fd47c16b.htm"
+      },
+      {
+        "name": "GetMaterialOverwrite",
+        "page": "html/bf62ac17-aa04-b15e-e981-59bd39b6b9bd.htm"
+      },
+      {
+        "name": "GetModifiers",
+        "page": "html/b9c837fb-9bd0-7718-10bb-6f3570e79452.htm"
+      },
+      {
+        "name": "GetNameList",
+        "page": "html/1d7aed8e-8bf9-d709-89b9-74d8bd2a6419.htm"
+      },
+      {
+        "name": "GetObj",
+        "page": "html/d3b6abc1-eded-1b1f-72f5-81d6e419018b.htm"
+      },
+      {
+        "name": "GetOffsets",
+        "page": "html/ab68d7b3-193c-40b5-5b4e-d54a7fe50f2d.htm"
+      },
+      {
+        "name": "GetPoints",
+        "page": "html/95a1c079-a280-a948-f914-0524808565fa.htm"
+      },
+      {
+        "name": "GetProperty",
+        "page": "html/20bb09b1-ff5f-deff-0c09-357ae2fdd55b.htm"
+      },
+      {
+        "name": "GetThickness",
+        "page": "html/893716e6-a788-96ad-1b48-3b2ad639a5a8.htm"
+      },
+      {
+        "name": "GetTransformationMatrix",
+        "page": "html/4307a2bb-de1e-c04b-f42a-9b36f6329cdd.htm"
+      }
+    ]
+  },
+  "cAreaObj": {
+    "page": "html/2cda9b42-232e-6821-8caa-dc87fd84fed0.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "AddByCoord",
+        "page": "html/71ca5d8f-4d86-1446-4ff7-65dbdf9c08f6.htm"
+      },
+      {
+        "name": "AddByPoint",
+        "page": "html/6a404e6a-2795-2581-4a79-2affd4575f71.htm"
+      },
+      {
+        "name": "ChangeName",
+        "page": "html/5a9929b5-e100-ddcf-d8f5-9707861e9783.htm"
+      },
+      {
+        "name": "Count",
+        "page": "html/bb5826b4-6eea-b9c5-b920-92fe46ffe295.htm"
+      },
+      {
+        "name": "Delete",
+        "page": "html/a9c44534-4aaa-9e2b-a000-cd6704fd5c64.htm"
+      },
+      {
+        "name": "DeleteLoadTemperature",
+        "page": "html/1cd839e0-1578-adc3-d21b-54c7bd3fe615.htm"
+      },
+      {
+        "name": "DeleteLoadUniform",
+        "page": "html/7e5c58ca-096c-6128-57a1-ffc15ebabf6d.htm"
+      },
+      {
+        "name": "DeleteLoadUniformToFrame",
+        "page": "html/bd4f27fb-70ba-0532-234a-45b0e02dc720.htm"
+      },
+      {
+        "name": "DeleteLoadWindPressure",
+        "page": "html/5709d569-db1e-5230-b3d3-14b8ef2a5932.htm"
+      },
+      {
+        "name": "DeleteMass",
+        "page": "html/f2455243-044f-e7b5-ad91-abea49a3cbfa.htm"
+      },
+      {
+        "name": "DeleteModifiers",
+        "page": "html/e80b1442-9f05-4c4c-3476-c4c5924db9f9.htm"
+      },
+      {
+        "name": "DeleteSpring",
+        "page": "html/8c7cc164-a774-dd0f-e88b-b6047bd10c8a.htm"
+      },
+      {
+        "name": "GetAllAreas",
+        "page": "html/f3d7a53a-260c-c290-ab5b-47d49ea40c9d.htm"
+      },
+      {
+        "name": "GetCurvedEdges",
+        "page": "html/57627146-e5b1-9303-0272-6daf623aaec6.htm"
+      },
+      {
+        "name": "GetDesignOrientation",
+        "page": "html/b666f884-88f7-3037-8eb7-05b64d8d2460.htm"
+      },
+      {
+        "name": "GetDiaphragm",
+        "page": "html/de2770ec-9c94-c3e2-d633-3e7a98787fd2.htm"
+      },
+      {
+        "name": "GetEdgeConstraint",
+        "page": "html/cc997487-53b8-2dfa-b7f9-47b1b1e7119d.htm"
+      },
+      {
+        "name": "GetElm",
+        "page": "html/ee969854-eb6e-b6a8-02c8-c4bb6c66991d.htm"
+      },
+      {
+        "name": "GetGroupAssign",
+        "page": "html/8776baf9-d226-ea7f-17ec-cc6d569d220c.htm"
+      },
+      {
+        "name": "GetGUID",
+        "page": "html/ffb6ef94-eb13-970b-8272-87062de64cff.htm"
+      },
+      {
+        "name": "GetLabelFromName",
+        "page": "html/8a01f576-f427-d98e-5e2c-0750f5cc33ee.htm"
+      },
+      {
+        "name": "GetLabelNameList",
+        "page": "html/3dfa558d-3fe7-5770-3396-20d991af442f.htm"
+      },
+      {
+        "name": "GetLoadTemperature",
+        "page": "html/242cede3-2e07-5344-8264-fb80aee8064e.htm"
+      },
+      {
+        "name": "GetLoadUniform",
+        "page": "html/f4d14f8a-2e07-8f09-314e-263eed7ac6b3.htm"
+      },
+      {
+        "name": "GetLoadUniformToFrame",
+        "page": "html/968cf2dd-a72d-871e-fbbd-d78483fed1fd.htm"
+      },
+      {
+        "name": "GetLoadWindPressure",
+        "page": "html/b57bf34a-aa5a-4a6a-0251-18e6ce2b65be.htm"
+      },
+      {
+        "name": "GetLocalAxes",
+        "page": "html/e9f531b3-191a-3000-e81f-dcf6f6744bb1.htm"
+      },
+      {
+        "name": "GetMass",
+        "page": "html/5d115da2-1fd2-5426-6915-20291230777b.htm"
+      },
+      {
+        "name": "GetMaterialOverwrite",
+        "page": "html/43c95fc0-4ba7-d784-857b-99a68d0498c3.htm"
+      },
+      {
+        "name": "GetModifiers",
+        "page": "html/841eeab5-f16c-06d3-9b6b-fae39c983622.htm"
+      },
+      {
+        "name": "GetNameFromLabel",
+        "page": "html/311df7a9-c5c4-deec-252f-fc195e54a721.htm"
+      },
+      {
+        "name": "GetNameList",
+        "page": "html/dc5d348b-7836-c2a9-b6ef-25c4cf6c312a.htm"
+      },
+      {
+        "name": "GetNameListOnStory",
+        "page": "html/6cc08826-586d-7069-d336-aac9d985cf2c.htm"
+      },
+      {
+        "name": "GetOffsets3",
+        "page": "html/df102335-11c9-c868-b2f7-c9f78b992cf6.htm"
+      },
+      {
+        "name": "GetOpening",
+        "page": "html/67b55aaa-ec09-e7da-4f3e-c23c2e296956.htm"
+      },
+      {
+        "name": "GetPier",
+        "page": "html/4a1c04ab-dd28-8548-c880-c47895234adc.htm"
+      },
+      {
+        "name": "GetPoints",
+        "page": "html/82ce0995-7c27-e15e-7ebd-91107c59a20a.htm"
+      },
+      {
+        "name": "GetProperty",
+        "page": "html/b7fb5305-2031-436c-2188-12e8de9ec260.htm"
+      },
+      {
+        "name": "GetRebarDataPier",
+        "page": "html/49c31649-f9ef-d966-ae4f-205b4cb63c17.htm"
+      },
+      {
+        "name": "GetRebarDataSpandrel",
+        "page": "html/5111a570-abfa-e500-e7df-daa14679d672.htm"
+      },
+      {
+        "name": "GetSelected",
+        "page": "html/687a6bb7-9c2c-d3ac-6049-bcbd607c4cab.htm"
+      },
+      {
+        "name": "GetSelectedEdge",
+        "page": "html/97a23f78-51ca-8e02-1c41-78090832050c.htm"
+      },
+      {
+        "name": "GetSpandrel",
+        "page": "html/a9235924-2019-efed-6151-cdc77235d922.htm"
+      },
+      {
+        "name": "GetSpringAssignment",
+        "page": "html/a0e0b8ca-0cf9-a240-25d9-3176ccb3efa2.htm"
+      },
+      {
+        "name": "GetTransformationMatrix",
+        "page": "html/1661c84a-6c48-b705-cfa6-cf7fbe3bf05a.htm"
+      },
+      {
+        "name": "SetDiaphragm",
+        "page": "html/042d1a7d-080b-3f5d-22ef-92e7eefa6dac.htm"
+      },
+      {
+        "name": "SetEdgeConstraint",
+        "page": "html/ccc21efb-1ce3-6330-64e3-5bb958248629.htm"
+      },
+      {
+        "name": "SetGroupAssign",
+        "page": "html/c8b85bd3-0091-4475-a4eb-3f4b1db96641.htm"
+      },
+      {
+        "name": "SetGUID",
+        "page": "html/5f5c48af-66dd-6d13-bfc5-c174e573c98e.htm"
+      },
+      {
+        "name": "SetLoadTemperature",
+        "page": "html/c7d8dd6e-0404-d30d-6c0a-7f5962a37f91.htm"
+      },
+      {
+        "name": "SetLoadUniform",
+        "page": "html/447c25fc-5ce3-322e-b34b-2482d2ae9126.htm"
+      },
+      {
+        "name": "SetLoadUniformToFrame",
+        "page": "html/7980160a-749b-ae20-20d5-f111b11c946b.htm"
+      },
+      {
+        "name": "SetLoadWindPressure",
+        "page": "html/0593a517-720b-6b42-3f0a-70757810c3c4.htm"
+      },
+      {
+        "name": "SetLocalAxes",
+        "page": "html/a7e5e395-0910-7b29-fbfc-3eb692e27666.htm"
+      },
+      {
+        "name": "SetMass",
+        "page": "html/7a0bb225-e73f-47c9-e47d-3f2eab7c756a.htm"
+      },
+      {
+        "name": "SetMaterialOverwrite",
+        "page": "html/4e718a9f-1f08-25bb-5334-74cb682a4338.htm"
+      },
+      {
+        "name": "SetModifiers",
+        "page": "html/f6ca6db1-2fc2-9d16-cdd9-b59758c628a8.htm"
+      },
+      {
+        "name": "SetOpening",
+        "page": "html/0c885ca6-e280-084d-04eb-833995481056.htm"
+      },
+      {
+        "name": "SetPier",
+        "page": "html/74d7d02e-9e30-eaf4-f127-55a7dcc839cc.htm"
+      },
+      {
+        "name": "SetProperty",
+        "page": "html/02c0c7ca-1bab-7787-c5c0-eb1ba791d2e9.htm"
+      },
+      {
+        "name": "SetSelected",
+        "page": "html/7ab72494-730b-e1b8-3064-d0ddf78cf692.htm"
+      },
+      {
+        "name": "SetSelectedEdge",
+        "page": "html/9d16276a-fac7-104f-21ec-8e5e1265fbdf.htm"
+      },
+      {
+        "name": "SetSpandrel",
+        "page": "html/8132524d-9eea-23d6-7204-a267cbdd0d4d.htm"
+      },
+      {
+        "name": "SetSpringAssignment",
+        "page": "html/31a68107-e914-b7cc-6068-735c4101a64c.htm"
+      }
+    ]
+  },
+  "cAutoSeismic": {
+    "page": "html/f2f6e7f5-4e26-ec58-22ee-1de39d107e36.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetASCE716",
+        "page": "html/47c131d2-9867-3385-ca4c-798e79f18985.htm"
+      },
+      {
+        "name": "GetASCE716_1",
+        "page": "html/f060c877-713c-d5ff-8fec-68936d2625bc.htm"
+      },
+      {
+        "name": "GetIBC2006",
+        "page": "html/7c11ed7e-a605-0bdc-a235-2daf28f2abee.htm"
+      },
+      {
+        "name": "SetASCE716",
+        "page": "html/59f6c93d-0ffa-90fc-81a1-6d25344087c3.htm"
+      },
+      {
+        "name": "SetASCE716_1",
+        "page": "html/38c53b37-92a1-cb91-e0bb-18a06168850e.htm"
+      },
+      {
+        "name": "SetIBC2006",
+        "page": "html/ecea74c8-8fa2-7dfb-63db-e85b38bba662.htm"
+      }
+    ]
+  },
+  "cCaseDirectHistoryLinear": {
+    "page": "html/850266fb-88b7-b169-a8ee-5516ac35b97a.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetLoads",
+        "page": "html/8184ae75-474e-4935-9dcb-3076960d6a26.htm"
+      }
+    ]
+  },
+  "cCaseDirectHistoryNonlinear": {
+    "page": "html/b972439f-6ba7-3032-4a10-21f70f68b398.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetLoads",
+        "page": "html/d1be4bc0-48d3-a75f-7eea-9617baf81164.htm"
+      }
+    ]
+  },
+  "cCaseHyperStatic": {
+    "page": "html/f550a21c-b27f-8121-5418-6bfad8689ffe.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetBaseCase",
+        "page": "html/da31904b-424f-4a57-2cfd-3465ca822ee3.htm"
+      },
+      {
+        "name": "SetBaseCase",
+        "page": "html/60a20576-f92f-9abc-0a4f-30fb1fcd3bdb.htm"
+      },
+      {
+        "name": "SetCase",
+        "page": "html/803f0e60-1c9a-46b6-9e62-b38133b8d45f.htm"
+      }
+    ]
+  },
+  "cCaseModalEigen": {
+    "page": "html/ce70bec1-1d64-58a3-047b-ac9da596193f.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetInitialCase",
+        "page": "html/41d57552-6645-ac71-0edd-42845a5d998e.htm"
+      },
+      {
+        "name": "GetLoads",
+        "page": "html/199c8deb-64b2-af34-18e9-f647266d1807.htm"
+      },
+      {
+        "name": "GetNumberModes",
+        "page": "html/52e23119-6f71-8023-b99e-192fabdc1d62.htm"
+      },
+      {
+        "name": "GetParameters",
+        "page": "html/5a80f41e-dbc7-85bb-e5fd-51f9c3b751d5.htm"
+      },
+      {
+        "name": "SetCase",
+        "page": "html/a8d131ae-b6b5-4d62-8bca-1c81ffd4ccbc.htm"
+      },
+      {
+        "name": "SetInitialCase",
+        "page": "html/1ebd4652-968f-75de-e5d7-a7bca7838d64.htm"
+      },
+      {
+        "name": "SetLoads",
+        "page": "html/a5b40286-ea3e-3627-85ff-ad4a260371ca.htm"
+      },
+      {
+        "name": "SetNumberModes",
+        "page": "html/db67005d-4dfd-578b-174b-507ac8ca7291.htm"
+      },
+      {
+        "name": "SetParameters",
+        "page": "html/618a0e83-e694-c99d-7669-3f8cbc80f86f.htm"
+      }
+    ]
+  },
+  "cCaseModalHistoryLinear": {
+    "page": "html/596d9c06-2cea-4637-ae55-f2a928834e68.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetLoads",
+        "page": "html/4905ea47-6672-0c04-fcca-93465d50de74.htm"
+      },
+      {
+        "name": "SetCase",
+        "page": "html/94fff18d-dbeb-9291-561d-7d7367121448.htm"
+      },
+      {
+        "name": "SetLoads",
+        "page": "html/90f2a069-a2b5-fed8-bd22-bb1218789ead.htm"
+      }
+    ]
+  },
+  "cCaseModalHistoryNonlinear": {
+    "page": "html/b51a1358-051c-8c42-1694-daa3f7d6bc25.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetLoads",
+        "page": "html/1da22741-a6f7-5b57-d12d-319bcf2073ac.htm"
+      }
+    ]
+  },
+  "cCaseModalRitz": {
+    "page": "html/b941bbb0-14e1-89de-a23d-04ab460380bd.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetInitialCase",
+        "page": "html/efb9379d-e229-3fcd-8fcd-e7e47b78ad6e.htm"
+      },
+      {
+        "name": "GetLoads",
+        "page": "html/2c49fe76-6841-5ff1-c738-90b06d729719.htm"
+      },
+      {
+        "name": "GetNumberModes",
+        "page": "html/cf7df130-bf0f-c2d1-b390-b89e5f88f53c.htm"
+      },
+      {
+        "name": "SetCase",
+        "page": "html/6f29c2a3-de59-5e51-67cb-5b77bc79ae97.htm"
+      },
+      {
+        "name": "SetInitialCase",
+        "page": "html/3310cfea-974e-c2e3-316c-ecf61f1420e8.htm"
+      },
+      {
+        "name": "SetLoads",
+        "page": "html/128ef1d6-77da-0985-5429-396661797440.htm"
+      },
+      {
+        "name": "SetNumberModes",
+        "page": "html/d4146d8b-ce42-c966-eb5f-374327b0d4db.htm"
+      }
+    ]
+  },
+  "cCaseResponseSpectrum": {
+    "page": "html/f7256d7e-b1fc-de3c-58c2-7283a518e9a1.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetDampConstant",
+        "page": "html/7785948f-e10a-d61f-ec12-bf58c541a5cf.htm"
+      },
+      {
+        "name": "GetDampInterpolated",
+        "page": "html/0482c0ea-30a7-4469-87cb-6c63e7c52c99.htm"
+      },
+      {
+        "name": "GetDampOverrides",
+        "page": "html/6a70f842-ba8e-494d-31d8-b1c59c5a2834.htm"
+      },
+      {
+        "name": "GetDampProportional",
+        "page": "html/9ec73221-8075-d719-9dae-c417f59554c0.htm"
+      },
+      {
+        "name": "GetDampType",
+        "page": "html/da3ea47a-969f-37e1-6348-2a71ab4e35f6.htm"
+      },
+      {
+        "name": "GetDiaphragmEccentricityOverride",
+        "page": "html/531e5934-b9ad-3cee-aa21-8d44c18129d5.htm"
+      },
+      {
+        "name": "GetDirComb",
+        "page": "html/2f6e176e-bce1-349c-a7dc-a05266c77aba.htm"
+      },
+      {
+        "name": "GetEccentricity",
+        "page": "html/4468cb04-8848-6333-c557-5664f05c28af.htm"
+      },
+      {
+        "name": "GetLoads",
+        "page": "html/06e7c71e-e419-bc28-6164-4cba88ce1d18.htm"
+      },
+      {
+        "name": "GetModalCase",
+        "page": "html/1554f0e6-1ac3-baae-f0d1-d69e955d57ed.htm"
+      },
+      {
+        "name": "GetModalComb",
+        "page": "html/db6f22f7-a0df-f11c-c531-4039357a25b2.htm"
+      },
+      {
+        "name": "GetModalComb_1",
+        "page": "html/6c0c7293-0592-d018-2cce-2364982c7677.htm"
+      },
+      {
+        "name": "SetCase",
+        "page": "html/d457f415-bda6-d865-8d4d-1d5cb09967d8.htm"
+      },
+      {
+        "name": "SetEccentricity",
+        "page": "html/b3fcdb01-8d3b-9d81-ec54-f8d774bae4b1.htm"
+      },
+      {
+        "name": "SetLoads",
+        "page": "html/1df947e1-e04d-483f-6dc8-f4986513e0a3.htm"
+      },
+      {
+        "name": "SetModalCase",
+        "page": "html/6a062987-bf6f-2be3-4e5e-2fca843ba87f.htm"
+      }
+    ]
+  },
+  "cCaseStaticLinear": {
+    "page": "html/f6b858ea-249e-f79d-4679-b81c04f8660e.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetInitialCase",
+        "page": "html/f7701fac-9d31-4e45-be6b-57a3ac47745b.htm"
+      },
+      {
+        "name": "GetLoads",
+        "page": "html/19a889e9-08f7-22a6-6216-8092541bc6fe.htm"
+      },
+      {
+        "name": "SetCase",
+        "page": "html/312cebd3-88ff-24aa-51ff-8d3aba210890.htm"
+      },
+      {
+        "name": "SetInitialCase",
+        "page": "html/7c3ea9e0-50a0-2585-4460-415fb47c6db6.htm"
+      },
+      {
+        "name": "SetLoads",
+        "page": "html/4b79ff00-70ba-a026-338d-77a3f144c678.htm"
+      }
+    ]
+  },
+  "cCaseStaticNonlinear": {
+    "page": "html/f9b065f8-b096-3a32-1e6d-bdc5420bb195.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetGeometricNonlinearity",
+        "page": "html/343070dd-bd74-80ac-a209-01d56a517ae3.htm"
+      },
+      {
+        "name": "GetHingeUnloading",
+        "page": "html/14c6dcb8-f788-62c2-4ff2-a841ceb433fe.htm"
+      },
+      {
+        "name": "GetInitialCase",
+        "page": "html/640dc198-e4b0-b57f-d571-8397cb048a39.htm"
+      },
+      {
+        "name": "GetLoadApplication",
+        "page": "html/a48c44f4-0bd6-b973-ad02-85e312c33faf.htm"
+      },
+      {
+        "name": "GetLoads",
+        "page": "html/01eb6b02-4c25-f9b5-8961-a8a3b0760697.htm"
+      },
+      {
+        "name": "GetMassSource",
+        "page": "html/73c2cc5e-c8c3-be6b-62c8-095fd7aef3c2.htm"
+      },
+      {
+        "name": "GetModalCase",
+        "page": "html/36817530-a753-c765-fe88-9ecfa71892ab.htm"
+      },
+      {
+        "name": "GetResultsSaved",
+        "page": "html/a996e37b-6f9e-0ace-1e9f-d6a345b3eb9a.htm"
+      },
+      {
+        "name": "GetSolControlParameters",
+        "page": "html/2ae6b8fb-540a-da21-61ce-cf10cdec6c2a.htm"
+      },
+      {
+        "name": "GetTargetForceParameters",
+        "page": "html/f150a464-1c37-b18d-f2be-6824b93fc303.htm"
+      },
+      {
+        "name": "SetCase",
+        "page": "html/662d94dd-3461-64b6-7597-855ecf848dcd.htm"
+      },
+      {
+        "name": "SetGeometricNonlinearity",
+        "page": "html/d6143c78-dcee-0c6c-6055-7eb2ff1b623d.htm"
+      },
+      {
+        "name": "SetHingeUnloading",
+        "page": "html/aac8206d-2cd1-cc84-d80a-023586822b08.htm"
+      },
+      {
+        "name": "SetInitialCase",
+        "page": "html/ba263306-9154-f893-166e-9cfb7cd22eac.htm"
+      },
+      {
+        "name": "SetLoadApplication",
+        "page": "html/b2a1e257-7338-66bf-4eba-0e1d67168e79.htm"
+      },
+      {
+        "name": "SetLoads",
+        "page": "html/41c8854b-6e37-0b44-36e3-cb622b49b591.htm"
+      },
+      {
+        "name": "SetMassSource",
+        "page": "html/e7871c09-bf0d-29ef-ed9a-349d6c09914b.htm"
+      },
+      {
+        "name": "SetModalCase",
+        "page": "html/2186488c-7163-3c75-6ec2-90ebe2e3ebd7.htm"
+      },
+      {
+        "name": "SetResultsSaved",
+        "page": "html/ee310e1d-6624-29fc-f566-bf5910e9fda4.htm"
+      },
+      {
+        "name": "SetSolControlParameters",
+        "page": "html/d752e14c-a906-638e-b384-7f8b75029f1d.htm"
+      },
+      {
+        "name": "SetTargetForceParameters",
+        "page": "html/b43c1d0d-7224-52c1-2950-b1a71782d22f.htm"
+      }
+    ]
+  },
+  "cCaseStaticNonlinearStaged": {
+    "page": "html/0a685b17-0f95-86e9-5911-13d6f362fdfc.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetGeometricNonlinearity",
+        "page": "html/119f1686-8e34-56fe-1a12-837ee9408508.htm"
+      },
+      {
+        "name": "GetHingeUnloading",
+        "page": "html/7fc2c8a5-d398-26a2-1408-8b7d1d6fb590.htm"
+      },
+      {
+        "name": "GetInitialCase",
+        "page": "html/75188402-d930-30b3-d332-e25fbcadf54f.htm"
+      },
+      {
+        "name": "GetMassSource",
+        "page": "html/3c41dc56-7aed-8a4e-6731-6af960c3eebf.htm"
+      },
+      {
+        "name": "GetMaterialNonlinearity",
+        "page": "html/193d0d7c-c34e-d9e3-4178-061c3e3c0e8e.htm"
+      },
+      {
+        "name": "GetResultsSaved",
+        "page": "html/ffd3c8c0-24aa-a72f-66fd-3e1ba242f528.htm"
+      },
+      {
+        "name": "GetSolControlParameters",
+        "page": "html/4f90d84a-87f9-3e4f-438e-efdfbd719679.htm"
+      },
+      {
+        "name": "GetStageData",
+        "page": "html/c8b70a4c-cf92-67d2-a2e8-f00d67f568cd.htm"
+      },
+      {
+        "name": "GetStageData_1",
+        "page": "html/39237b66-a2d5-6104-399f-036c1672634e.htm"
+      },
+      {
+        "name": "GetStageData_2",
+        "page": "html/e7a62f45-6944-1f26-ca31-08c55389ed2b.htm"
+      },
+      {
+        "name": "GetStageDefinitions",
+        "page": "html/bc2c30e2-a81f-51c7-9db8-d6b8a6256160.htm"
+      },
+      {
+        "name": "GetStageDefinitions_1",
+        "page": "html/633ce791-1c9f-4278-9350-12bddac2c7ff.htm"
+      },
+      {
+        "name": "GetStageDefinitions_2",
+        "page": "html/294c97c9-90c9-881e-3ec3-78b26355730a.htm"
+      },
+      {
+        "name": "GetTargetForceParameters",
+        "page": "html/01fbfb22-54b2-06b0-a81e-7e444cb5fd0a.htm"
+      },
+      {
+        "name": "SetCase",
+        "page": "html/e8d6a8e9-0c66-8707-60d5-aaf804241daf.htm"
+      },
+      {
+        "name": "SetGeometricNonlinearity",
+        "page": "html/7f89fd6c-0181-0cb8-5854-da1db24c27a9.htm"
+      },
+      {
+        "name": "SetHingeUnloading",
+        "page": "html/6483d877-af45-a829-965f-cb6d0c0eb74e.htm"
+      },
+      {
+        "name": "SetInitialCase",
+        "page": "html/405fec32-48cd-a5d3-9e17-1a9dc6fac7de.htm"
+      },
+      {
+        "name": "SetMassSource",
+        "page": "html/3548f9e4-6b01-e4b2-cd42-b0d206bfff88.htm"
+      },
+      {
+        "name": "SetMaterialNonlinearity",
+        "page": "html/c1c36d69-15ab-42a4-5a41-78878a314761.htm"
+      },
+      {
+        "name": "SetResultsSaved",
+        "page": "html/40445c24-ca6a-68f0-2800-5f939b1c172d.htm"
+      },
+      {
+        "name": "SetSolControlParameters",
+        "page": "html/f8e926e8-188c-6039-bddc-cc6a455a28b2.htm"
+      },
+      {
+        "name": "SetStageData",
+        "page": "html/d15cf517-ab44-9fd9-bd3f-b127ff219f80.htm"
+      },
+      {
+        "name": "SetStageData_1",
+        "page": "html/93afd346-1131-be7c-2921-6c8b6b4cb79d.htm"
+      },
+      {
+        "name": "SetStageData_2",
+        "page": "html/44d53218-5da8-837d-b0fd-968042e4ac51.htm"
+      },
+      {
+        "name": "SetStageDefinitions",
+        "page": "html/2cff128c-67fc-a982-1c51-f79432adfd04.htm"
+      },
+      {
+        "name": "SetStageDefinitions_1",
+        "page": "html/0f61ff65-f9f9-f0c4-0434-c0b894448d5d.htm"
+      },
+      {
+        "name": "SetStageDefinitions_2",
+        "page": "html/fdd842d9-b1d8-c6ec-7eb2-e58929e3e946.htm"
+      },
+      {
+        "name": "SetTargetForceParameters",
+        "page": "html/59d51a3d-2708-6a41-dcfc-bddd709ff1b8.htm"
+      }
+    ]
+  },
+  "cCombo": {
+    "page": "html/8c1d1b19-f7ba-858c-25b3-5986a0d9cbb8.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "Add",
+        "page": "html/a709a568-c718-34d2-34dd-3733e8d1c557.htm"
+      },
+      {
+        "name": "AddDesignDefaultCombos",
+        "page": "html/8e66f9a6-58b9-f13e-86e3-c75bd2e74701.htm"
+      },
+      {
+        "name": "Delete",
+        "page": "html/72196c83-36bb-5a07-431e-a018f4e0de9a.htm"
+      },
+      {
+        "name": "DeleteCase",
+        "page": "html/f32f05ff-f188-83ad-73fd-4d215c5c3b52.htm"
+      },
+      {
+        "name": "GetCaseList",
+        "page": "html/b730838d-9040-2b9e-dc16-ea8acac60325.htm"
+      },
+      {
+        "name": "GetCaseList_1",
+        "page": "html/bfa3a317-c450-7776-09e9-05f14a2df7f5.htm"
+      },
+      {
+        "name": "GetNameList",
+        "page": "html/deb0f8fc-5299-e233-3747-9d051a0a31f8.htm"
+      },
+      {
+        "name": "GetTypeCombo",
+        "page": "html/f8046636-92a5-0c11-14a1-90bc006c4c7a.htm"
+      },
+      {
+        "name": "GetTypeOAPI",
+        "page": "html/a2eb25a7-77f9-f4ff-25af-8ef51f3c06ac.htm"
+      },
+      {
+        "name": "SetCaseList",
+        "page": "html/1e0b79da-c352-43f5-11aa-570a850ea0c0.htm"
+      },
+      {
+        "name": "SetCaseList_1",
+        "page": "html/d8916b66-1705-c8be-bcdf-ef1104d4a959.htm"
+      }
+    ]
+  },
+  "cConstraint": {
+    "page": "html/59714db0-7a51-f435-5340-64df81d3b6e0.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "Delete",
+        "page": "html/6f121d91-7e39-8093-44ef-1c710dd5ace8.htm"
+      },
+      {
+        "name": "GetDiaphragm",
+        "page": "html/77251fb1-8041-f191-1845-45a67c805819.htm"
+      },
+      {
+        "name": "GetNameList",
+        "page": "html/e5825611-2ba8-6876-a197-82753ddd3eae.htm"
+      },
+      {
+        "name": "SetDiaphragm",
+        "page": "html/eff6b91e-6ba0-2c75-f13c-ec51f50d41aa.htm"
+      }
+    ]
+  },
+  "cDCoACI318_08_IBC2009": {
+    "page": "html/23a9047c-4a13-cd7e-42a2-1909a4342bf1.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/a52bfca9-c511-89db-72d3-24978c101ebf.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/e336a428-3b5b-3ed0-3458-7d6dbebe2c4e.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/836010d7-77d5-2401-f866-48aaeecc8954.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/a3d5a286-3bbe-77bf-befb-9d48f3974966.htm"
+      }
+    ]
+  },
+  "cDCoACI318_11": {
+    "page": "html/ae880455-37b1-c286-a119-13b1bce9dd67.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/d39da1f8-79cd-0028-3bd3-7c46debd22f9.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/223d1ea1-719b-45d9-bbaa-57eb9c0e0c6d.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/efd616b1-3dbb-0da0-3a34-af95d9c005d4.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/0cb19d2e-b8e8-a1eb-d162-cbe0208fcc82.htm"
+      }
+    ]
+  },
+  "cDCoACI318_14": {
+    "page": "html/609c97e4-7051-ee4a-f7cb-2c7df86a78f8.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/02476e2b-4983-0baa-1187-bae02d85565f.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/535e0c2d-3464-efa7-9cdc-cfdcf150f37b.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/dae6e08a-3bd8-c51b-f16c-f29f759ea1d5.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/efc7b6d5-5456-31fe-b0ee-d218c2156a93.htm"
+      }
+    ]
+  },
+  "cDCoACI318_19": {
+    "page": "html/2c872dbd-aef9-af1d-310f-eb0ea1e49cc0.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/63644c98-c49c-8563-e9b5-49b409fd5ab9.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/e706423d-c27f-a90d-2830-9ff6b3bfb363.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/6706c66b-90fb-e2ef-38ec-efe3f659947f.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/00d5c357-5232-c82a-928d-9859705f55ec.htm"
+      }
+    ]
+  },
+  "cDCoAS_3600_09": {
+    "page": "html/b9c3d950-ab47-cb88-3846-76138f7bef64.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/38f53853-4986-fb1e-be36-01fab67b57e9.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/cbf4d05c-d6f2-9c14-ea37-681f3e5057f5.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/b7b6c81f-5aa6-c48b-44a3-236c3edf8f92.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/ebd1445b-9e75-09ba-af49-43c009045ce9.htm"
+      }
+    ]
+  },
+  "cDCoAS_3600_2018": {
+    "page": "html/50ea656a-a6eb-673b-c6c4-90ac077c31dd.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/d2b7f230-15cc-4982-f357-ec384b63d84c.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/f4ddd6c7-829f-25f8-1ac8-67070389e5f4.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/bb27588f-be01-2210-f436-29e735d55ac0.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/66823abc-7da1-ba0a-bc02-ea0f867f181d.htm"
+      }
+    ]
+  },
+  "cDCoBS8110_97": {
+    "page": "html/32e22438-09cf-62a6-8e8f-882d43576d09.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/17298d07-1894-4c8a-d5b8-7d3d464e4eff.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/943b549e-8fe6-2be8-1e3d-c6985a26441d.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/ab5f1bc3-0880-d21d-9f22-409618e2883f.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/187f0930-17f9-5c0e-bebb-d73f22843177.htm"
+      }
+    ]
+  },
+  "cDCoChinese_2010": {
+    "page": "html/ff3d92a2-b111-e78d-5a81-9bdcfc5772ff.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/cab3cc80-8825-0b3c-0e33-148360983324.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/a4facad3-7522-d99b-0efd-b32279f87fc6.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/2415acca-a385-adb9-6d7c-e3002c31b8b0.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/9878443c-a300-f373-008b-d8b2c55002bf.htm"
+      }
+    ]
+  },
+  "cDCoEurocode_2_2004": {
+    "page": "html/141ae9d4-bdc4-4f67-24c5-c0b94e4ee79b.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/d5eb3c6b-354a-ff26-beaa-3e52069fc564.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/ea4c7938-f666-a9b7-f491-52e531c7f0c7.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/58d38812-9a8c-88e1-9ac0-e745b5139c73.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/396434ae-d288-b10b-d482-9bb1a8530538.htm"
+      }
+    ]
+  },
+  "cDCoHong_Kong_CP_2013": {
+    "page": "html/d673297b-548e-e00e-1bdc-448723b7d97c.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/c59ec813-288b-71c2-29c2-a5a557597b74.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/e95a09eb-6eae-7816-5c4e-919cf77d897b.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/faebddf4-b236-150f-b3f4-a6e946f2e866.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/345b2681-b6b3-60a7-971f-16e55826646f.htm"
+      }
+    ]
+  },
+  "cDCoIndian_IS_456_2000": {
+    "page": "html/f394ca67-62c6-6d49-e752-fa4dbf1696ad.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/0e8dca2e-3975-c145-b3ba-e75cc0477152.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/835c9622-2498-30e6-d876-c9a11208e212.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/5eda798f-8e0b-5251-d757-bb71e3d2baf2.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/7e106a1a-fae2-864c-9e98-da5c31ad4fee.htm"
+      }
+    ]
+  },
+  "cDCoItalianNTC2008C": {
+    "page": "html/df376ea7-dc14-947e-d99c-faa508bc2fe6.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/1a79b1c4-c1d5-e307-b81d-f2c20902c5c8.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/23b93462-d397-400d-6afb-fe797abeb374.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/1cdb85ae-760b-6c93-9628-874db8c70949.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/d677bfa4-d427-5542-0500-a0e239d240d2.htm"
+      }
+    ]
+  },
+  "cDCoMexican_RCDF_2004": {
+    "page": "html/cbde9763-3608-121e-a091-320ff206d3ba.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/77d3d65e-f86b-3ae2-e71b-6194ac384190.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/d6bb1acd-e314-7737-7fa3-4a37634f75b7.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/9912100e-520c-efee-2f4b-5d7573ce2ce7.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/76d25845-a307-bae8-bddd-92f34986e584.htm"
+      }
+    ]
+  },
+  "cDCoMexican_RCDF_2017": {
+    "page": "html/f919ecfa-e0c2-5158-7043-1832562fab3a.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/efbafc20-adab-21a1-b66f-c006b38deed4.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/a80ac7e2-dfea-159d-e9fc-8145cbeaa40d.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/34309fa2-5087-1f7b-4421-7d2058af628c.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/fce2f24b-1086-28ff-479e-aeb80f4b19ce.htm"
+      }
+    ]
+  },
+  "cDCoNZS_3101_2006": {
+    "page": "html/6b06dee2-5704-a111-41b6-23c6e5e7283e.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/5844281b-20db-8371-b1c3-962710eda105.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/57efdfb5-2cae-b7f6-9fd7-d24b7da83c7f.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/72a0f7ac-0856-1d54-6b8b-8458de203e66.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/09da80b3-2cdf-ebc4-6619-ef9331dafbc9.htm"
+      }
+    ]
+  },
+  "cDCoSP63133302011": {
+    "page": "html/4a800ffa-6371-09f7-cbb2-a7d82d09dc54.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/06416049-cc64-aa56-0dbb-32f5ef32e375.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/b0ca698e-c33c-bb52-231a-41b2d020ae7f.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/8217959b-ca49-a113-b09a-02733a611fdc.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/1500a9a8-a482-5fa1-9778-cf62c8c2e0ea.htm"
+      }
+    ]
+  },
+  "cDCoTS_500_2000": {
+    "page": "html/4ab0877c-424c-8a86-dd2b-1eb83dce6184.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/e3f553bb-5b93-dfa8-d853-577b7982bf19.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/4077763c-d76b-2fc2-872b-0c13d20409d0.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/25511b82-7d56-f8ec-1c8d-32b35997e281.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/59b1c034-d76a-47c3-f7c1-b2a71c5603f1.htm"
+      }
+    ]
+  },
+  "cDCoTS_500_2000_R2018": {
+    "page": "html/4b834ddb-2e44-23a4-a75d-7dedf8ea9b26.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/ada6cc42-4312-311e-c6a4-c41f827d0b2b.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/779868fd-f450-01f9-bb1a-0ef5549fe66d.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/15db4673-22b3-16d9-cb71-c63e91692330.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/5e886b5e-2ead-e171-54f8-6184a6029246.htm"
+      }
+    ]
+  },
+  "cDCompColAISC360_22": {
+    "page": "html/0c3948ac-6e9e-2ade-2105-987bae6156c3.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/e9071f7f-2e0d-3223-14c0-9dca1ca82934.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/4c2c9b62-1011-a79e-142f-cd9f1c244723.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/b6a19b82-0c94-794a-173d-f2c590d48e93.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/908e456e-9ec6-48a6-a618-ebd2f76e9d50.htm"
+      }
+    ]
+  },
+  "cDCompColCSAS16_19": {
+    "page": "html/f31b51b6-a658-c137-7e5c-4e56b9d3557d.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/85a5c249-c17a-640e-7b26-c051c778b235.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/6a58913d-6c9b-184d-8444-76b6b945630c.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/55c5de2d-2b81-3df4-212d-dba5987cf39b.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/b9394350-1c9a-04f6-5c11-db04da06b10d.htm"
+      }
+    ]
+  },
+  "cDCompColEurocode_4_2004": {
+    "page": "html/a32f162e-92db-d04a-fb96-8274a968430c.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/5ab50008-563e-e1cc-f8a6-00c2d2a1990d.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/28b1a39d-4553-b2eb-ba03-02bd27dbcaf4.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/128451cc-42b1-52f6-07c0-ff0e1bc98138.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/d1a97c09-7a91-a50f-54f7-b60a08ed9fbc.htm"
+      }
+    ]
+  },
+  "cDConcShellACI350_20": {
+    "page": "html/95abb813-aa76-9830-337b-15daf0fe55e0.htm",
+    "properties": [],
+    "methods": []
+  },
+  "cDConcSlabACI318_14": {
+    "page": "html/059283ad-35d5-aba4-c96a-29dfafca6523.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetPreference",
+        "page": "html/0ad6be82-577b-cc5e-b0df-d5364ffd8b0d.htm"
+      }
+    ]
+  },
+  "cDConcSlabACI318_19": {
+    "page": "html/506c2878-46ae-27f7-00ce-98324976cba5.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetPreference",
+        "page": "html/ba6d7365-bd84-710f-d006-844333ccc695.htm"
+      }
+    ]
+  },
+  "cDConcreteShellDesignRequest": {
+    "page": "html/04ba3b6b-f00a-dc87-72de-aa364404295a.htm",
+    "properties": [],
+    "methods": []
+  },
+  "cDStAISC360_05_IBC2006": {
+    "page": "html/95d16455-f7a6-10e7-95d4-c9947549f89a.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/98ed21ad-e5fe-fd17-2495-9305b1a38993.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/4ae1d595-129f-44d5-1cb5-85a0dba4161a.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/0ff3fdf1-c03d-3e21-a87e-8def8cc8e4aa.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/1991a2d8-6cdb-1510-e6ac-44747e301734.htm"
+      }
+    ]
+  },
+  "cDStAISC360_10": {
+    "page": "html/8fae9984-b4f1-cd12-e034-99012a53c54e.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/5effe6d8-fceb-1987-2f09-d14e8e51c094.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/5d0d8966-06cf-1a1e-56da-51893ea0fbea.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/eccc6c7d-b6ae-ab55-4591-7320d55b0d3b.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/d04c8b8f-491d-9a4e-f94d-b29ecd943d78.htm"
+      }
+    ]
+  },
+  "cDStAISC360_16": {
+    "page": "html/ed3b1c48-027b-663b-0119-7042e883bcaf.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/d7c8d7ec-6766-c91b-5718-25e9b7fcdbba.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/4ffc69bb-7bd7-4c83-3ede-0ef8f4ee3a1e.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/03d7c35b-c5d9-7c76-a8b5-07d715f78149.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/6fac5c68-e868-c286-71f7-4a7d9b6f0dd4.htm"
+      }
+    ]
+  },
+  "cDStAISC360_22": {
+    "page": "html/ebdfd781-adc7-f60e-2d33-d9bf8af08635.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/f0c21d6c-bd1f-ebb5-9965-651175cb532d.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/beb666dd-9b4c-1888-8636-f91f4d620956.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/00988fe8-36b2-bb03-174e-164e474bf9fa.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/bd802cf8-bafa-56e6-4314-8a1562057a63.htm"
+      }
+    ]
+  },
+  "cDStAISC_ASD89": {
+    "page": "html/cff7156c-2b7b-fc56-c079-9592a695dba7.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/a39c673b-a74c-db7f-bc10-398a14d48c6f.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/7a9b6cc8-24a6-504a-dc26-6ae5c3fdddb0.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/ba992ec7-df88-59f4-85a2-3dbfff4639ad.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/12d83bcd-88c7-831d-524b-b09d959deb0e.htm"
+      }
+    ]
+  },
+  "cDStAISC_LRFD93": {
+    "page": "html/71e56c6a-748e-6022-8ae2-ec499d16c6d6.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/29b07089-dd8c-0a8a-0f29-9ba7f47526a8.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/010f393e-037d-1eaa-1088-1574654a4c98.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/5de1a6a5-f1f1-68e5-d153-d4c138db2aae.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/1fe66244-4d86-e106-2992-c985cc1893be.htm"
+      }
+    ]
+  },
+  "cDStAustralian_AS4100_2020": {
+    "page": "html/0c973b59-70d0-a571-cb4f-781867a9a7eb.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/9a0b664f-b243-2782-beb2-a1278004de47.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/84555c32-ab5b-b20a-b31c-1bd652ebec45.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/b1cccbb1-31d4-a36e-72da-100c361360c8.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/25f8260a-9e0d-2fa9-a1e4-f57c86052920.htm"
+      }
+    ]
+  },
+  "cDStAustralian_AS4100_98": {
+    "page": "html/2f607101-828b-627d-098e-4c646b1a3ae4.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/b44a47fa-82dd-bd5a-5903-0ff6ff66129d.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/be6e285e-b65f-8a74-f8bd-2334e551c36b.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/e600f260-ff14-c6c1-f28a-76a5b26362e0.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/31562cda-b5dc-8c80-e786-a33b2153dff2.htm"
+      }
+    ]
+  },
+  "cDStBS5950_2000": {
+    "page": "html/15dcafaa-fe1a-8211-2cc0-4755fcb91377.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/ffbc1f76-dd5d-3149-4651-1dd13661a826.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/a1b25cf5-77d1-7547-303f-2ac9002d5e16.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/5a721b38-6acf-146d-9bdc-5198c2dee2e1.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/8ca7ba43-ee44-51ba-ceb1-16f7750b7009.htm"
+      }
+    ]
+  },
+  "cDStCanadian_S16_09": {
+    "page": "html/8098b016-457a-70e2-6231-e36898328a5a.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/82f890ae-002d-98b6-a755-c374307513ee.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/396f3c12-1d05-32c9-4833-736de84fa3ba.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/ebf126e0-c04a-31d1-8c96-d8effc0ddd20.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/b7561e99-fbd3-0f28-b031-733c91eed145.htm"
+      }
+    ]
+  },
+  "cDStCanadian_S16_14": {
+    "page": "html/65d5c385-1c24-dc87-e852-0781118caca2.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/90c1fbd6-0941-6f65-acc5-8ce02a797503.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/68ea2c8b-efff-c6d1-da2b-3209e1d430f3.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/096bdde1-3e2e-8644-4838-c61157a31508.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/6b9afc01-6510-6b55-b09a-4c804ccc1167.htm"
+      }
+    ]
+  },
+  "cDStCanadian_S16_19": {
+    "page": "html/46b93cb0-d93c-a735-c636-0afb21458156.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/c18d3c58-1144-35e8-8afb-712ccd9db275.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/efa3b9c6-c8b7-61a9-c259-21f7ba33b139.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/df3e1092-1e9f-3eb5-7557-9a2c84d9ca49.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/6ebc306a-4f51-4b1c-b729-7381743821ed.htm"
+      }
+    ]
+  },
+  "cDStCanadian_S16_24": {
+    "page": "html/d7112150-beb0-01ec-428e-c14f6ce1b9e5.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/57b3703b-4d76-833b-33ed-489a6b591aaa.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/54ad657e-6d52-1ae7-f9bb-66074666862c.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/ca144710-8517-4f90-b5f9-afb156e8b33e.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/f85bf53d-e2d0-8e3b-970d-9ae43ee61968.htm"
+      }
+    ]
+  },
+  "cDStChinese_2010": {
+    "page": "html/179483fa-6c7a-6035-7d81-8adfb00f46f3.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/62e20d21-2148-6c83-3073-1b8bb3b2741b.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/033e1246-bddc-7bdc-340d-1f35645e77a1.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/89d0c9d4-47f5-762d-900e-187d721c4355.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/01b8aba0-5652-d11f-6c60-b4df04135075.htm"
+      }
+    ]
+  },
+  "cDStChinese_2018": {
+    "page": "html/56e8d07c-bbc2-7d75-2937-c59193215a25.htm",
+    "properties": [],
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "page": "html/ae7abe13-fc9a-81bc-3bc5-2c03023432c8.htm"
+      },
+      {
+        "name": "GetPreference",
+        "page": "html/5e4f73d0-2887-8be8-0494-1aca507a1382.htm"
+      },
+      {
+        "name": "SetOverwrite",
+        "page": "html/07f26bae-084f-bcdb-a80a-1681d984d342.htm"
+      },
+      {
+        "name": "SetPreference",
+        "page": "html/59a19f49-c9d4-05b8-f511-6644aff3e9a1.htm"
+      }
+    ]
+  }
+}

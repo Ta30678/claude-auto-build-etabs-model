@@ -1,0 +1,38 @@
+# Binary model files
+*.EDB
+*.edb
+*.e2k
+*.chm
+*.mdb
+*.ldb
+*.bak
+
+# ETABS reference models
+ETABS REF/
+
+# Large MCP server development archives
+scripts/structural-mcp-servers/servers/etabs_mcp/Etabs_Models/
+scripts/structural-mcp-servers/servers/etabs_mcp/archive/
+scripts/structural-mcp-servers/servers/etabs_mcp/001-*/
+scripts/structural-mcp-servers/servers/etabs_mcp/002-*/
+scripts/structural-mcp-servers/servers/etabs_mcp/003-*/
+scripts/structural-mcp-servers/servers/etabs_mcp/004-*/
+scripts/structural-mcp-servers/servers/etabs_mcp/005-*/
+scripts/structural-mcp-servers/servers/etabs_mcp/006-*/
+scripts/structural-mcp-servers/servers/etabs_mcp/007-*/
+
+# Temp / cache
+temp_import/
+__pycache__/
+*.pyc
+node_modules/
+.venv/
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
+scripts/structural-mcp-servers/

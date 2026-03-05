@@ -1,0 +1,869 @@
+{
+  "cDStEN1993_1_1_2005": {
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "signature": "int GetOverwrite(\n\tstring Name,\n\tint Item,\n\tref double Value,\n\tref bool ProgDet\n)",
+        "description": "Retrieves the value of a steel design overwrite item"
+      },
+      {
+        "name": "GetPreference",
+        "signature": "int GetPreference(\n\tint Item,\n\tref double Value\n)",
+        "description": "Retrieves the value of a steel design preference item."
+      },
+      {
+        "name": "SetOverwrite",
+        "signature": "int SetOverwrite(\n\tstring Name,\n\tint Item,\n\tdouble Value,\n\teItemType ItemType = eItemType.Objects\n)",
+        "description": "Sets the value of a steel design overwrite item"
+      },
+      {
+        "name": "SetPreference",
+        "signature": "int SetPreference(\n\tint Item,\n\tdouble Value\n)",
+        "description": "Sets the value of a steel design preference item."
+      }
+    ],
+    "properties": []
+  },
+  "cDStEN1993_1_1_2022": {
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "signature": "int GetOverwrite(\n\tstring Name,\n\tint Item,\n\tref double Value,\n\tref bool ProgDet\n)",
+        "description": "Retrieves the value of a steel design overwrite item"
+      },
+      {
+        "name": "GetPreference",
+        "signature": "int GetPreference(\n\tint Item,\n\tref double Value\n)",
+        "description": "Retrieves the value of a steel design preference item."
+      },
+      {
+        "name": "SetOverwrite",
+        "signature": "int SetOverwrite(\n\tstring Name,\n\tint Item,\n\tdouble Value,\n\teItemType ItemType = eItemType.Objects\n)",
+        "description": "Sets the value of a steel design overwrite item"
+      },
+      {
+        "name": "SetPreference",
+        "signature": "int SetPreference(\n\tint Item,\n\tdouble Value\n)",
+        "description": "Sets the value of a steel design preference item."
+      }
+    ],
+    "properties": []
+  },
+  "cDStEurocode_3_2005": {
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "signature": "int GetOverwrite(\n\tstring Name,\n\tint Item,\n\tref double Value,\n\tref bool ProgDet\n)",
+        "description": "DEPRECATED ; refer to GetOverwrite(String, Int32, DoubleAddLanguageSpecificTextSet(\"LSTD43446DE_1?cpp=%\");, BooleanAddLanguageSpecificTextSet(\"LSTD43446DE_2?cpp=%\");)"
+      },
+      {
+        "name": "GetPreference",
+        "signature": "int GetPreference(\n\tint Item,\n\tref double Value\n)",
+        "description": "DEPRECATED ; refer to GetPreference(Int32, DoubleAddLanguageSpecificTextSet(\"LST9C063C7A_1?cpp=%\");)"
+      },
+      {
+        "name": "SetOverwrite",
+        "signature": "int SetOverwrite(\n\tstring Name,\n\tint Item,\n\tdouble Value,\n\teItemType ItemType = eItemType.Objects\n)",
+        "description": "DEPRECATED ; refer to SetOverwrite(String, Int32, Double, eItemType)"
+      },
+      {
+        "name": "SetPreference",
+        "signature": "int SetPreference(\n\tint Item,\n\tdouble Value\n)",
+        "description": "DEPRECATED ; refer to SetPreference(Int32, Double)"
+      }
+    ],
+    "properties": []
+  },
+  "cDStIndian_IS_800_2007": {
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "signature": "int GetOverwrite(\n\tstring Name,\n\tint Item,\n\tref double Value,\n\tref bool ProgDet\n)",
+        "description": ""
+      },
+      {
+        "name": "GetPreference",
+        "signature": "int GetPreference(\n\tint Item,\n\tref double Value\n)",
+        "description": ""
+      },
+      {
+        "name": "SetOverwrite",
+        "signature": "int SetOverwrite(\n\tstring Name,\n\tint Item,\n\tdouble Value,\n\teItemType ItemType = eItemType.Objects\n)",
+        "description": ""
+      },
+      {
+        "name": "SetPreference",
+        "signature": "int SetPreference(\n\tint Item,\n\tdouble Value\n)",
+        "description": ""
+      }
+    ],
+    "properties": []
+  },
+  "cDStItalianNTC2008S": {
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "signature": "int GetOverwrite(\n\tstring Name,\n\tint Item,\n\tref double Value,\n\tref bool ProgDet\n)",
+        "description": "Retrieves the value of a steel design overwrite item"
+      },
+      {
+        "name": "GetPreference",
+        "signature": "int GetPreference(\n\tint Item,\n\tref double Value\n)",
+        "description": "Retrieves the value of a steel design preference item."
+      },
+      {
+        "name": "SetOverwrite",
+        "signature": "int SetOverwrite(\n\tstring Name,\n\tint Item,\n\tdouble Value,\n\teItemType ItemType = eItemType.Objects\n)",
+        "description": "Sets the value of a steel design overwrite item"
+      },
+      {
+        "name": "SetPreference",
+        "signature": "int SetPreference(\n\tint Item,\n\tdouble Value\n)",
+        "description": "Sets the value of a steel design preference item."
+      }
+    ],
+    "properties": []
+  },
+  "cDStItalianNTC2018S": {
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "signature": "int GetOverwrite(\n\tstring Name,\n\tint Item,\n\tref string textValue,\n\tref double numericValue,\n\tref bool ProgDet\n)",
+        "description": "Retrieves the value of a steel design overwrite item"
+      },
+      {
+        "name": "GetPreference",
+        "signature": "int GetPreference(\n\tint Item,\n\tref string textValue,\n\tref double numericValue\n)",
+        "description": "Retrieves the value of a steel design preference item."
+      },
+      {
+        "name": "SetOverwrite",
+        "signature": "int SetOverwrite(\n\tstring Name,\n\tint Item,\n\tstring textValue,\n\tdouble numericValue,\n\teItemType ItemType = eItemType.Objects\n)",
+        "description": "Sets the value of a steel design overwrite item"
+      },
+      {
+        "name": "SetPreference",
+        "signature": "int SetPreference(\n\tint Item,\n\tstring textValue,\n\tdouble numericValue\n)",
+        "description": "Sets the value of a steel design preference item."
+      }
+    ],
+    "properties": []
+  },
+  "cDStNewZealand_NZS3404_97": {
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "signature": "int GetOverwrite(\n\tstring Name,\n\tint Item,\n\tref double Value,\n\tref bool ProgDet\n)",
+        "description": ""
+      },
+      {
+        "name": "GetPreference",
+        "signature": "int GetPreference(\n\tint Item,\n\tref double Value\n)",
+        "description": ""
+      },
+      {
+        "name": "SetOverwrite",
+        "signature": "int SetOverwrite(\n\tstring Name,\n\tint Item,\n\tdouble Value,\n\teItemType ItemType = eItemType.Objects\n)",
+        "description": ""
+      },
+      {
+        "name": "SetPreference",
+        "signature": "int SetPreference(\n\tint Item,\n\tdouble Value\n)",
+        "description": ""
+      }
+    ],
+    "properties": []
+  },
+  "cDStSP16_13330_2011": {
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "signature": "int GetOverwrite(\n\tstring Name,\n\tint Item,\n\tref double Value,\n\tref bool ProgDet\n)",
+        "description": "Retrieves the value of a steel design overwrite item"
+      },
+      {
+        "name": "GetPreference",
+        "signature": "int GetPreference(\n\tint Item,\n\tref double Value\n)",
+        "description": "Retrieves the value of a steel design preference item"
+      },
+      {
+        "name": "SetOverwrite",
+        "signature": "int SetOverwrite(\n\tstring Name,\n\tint Item,\n\tdouble Value,\n\teItemType ItemType = eItemType.Objects\n)",
+        "description": "Sets the value of a steel design overwrite item"
+      },
+      {
+        "name": "SetPreference",
+        "signature": "int SetPreference(\n\tint Item,\n\tdouble Value\n)",
+        "description": "Sets the value of a steel design preference item"
+      }
+    ],
+    "properties": []
+  },
+  "cDStSP16_13330_2017": {
+    "methods": [
+      {
+        "name": "GetOverwrite",
+        "signature": "int GetOverwrite(\n\tstring Name,\n\tint Item,\n\tref double Value,\n\tref bool ProgDet\n)",
+        "description": "Retrieves the value of a steel design overwrite item"
+      },
+      {
+        "name": "GetPreference",
+        "signature": "int GetPreference(\n\tint Item,\n\tref double Value\n)",
+        "description": "Retrieves the value of a steel design preference item"
+      },
+      {
+        "name": "SetOverwrite",
+        "signature": "int SetOverwrite(\n\tstring Name,\n\tint Item,\n\tdouble Value,\n\teItemType ItemType = eItemType.Objects\n)",
+        "description": "Sets the value of a steel design overwrite item"
+      },
+      {
+        "name": "SetPreference",
+        "signature": "int SetPreference(\n\tint Item,\n\tdouble Value\n)",
+        "description": "Sets the value of a steel design preference item"
+      }
+    ],
+    "properties": []
+  },
+  "cDesignResults": {
+    "methods": [],
+    "properties": [
+      {
+        "name": "DesignForces",
+        "page": "html/4f29c7e2-caf0-9d5b-5eb0-ef6305a31620.htm"
+      }
+    ]
+  },
+  "cEditFrame": {
+    "methods": [
+      {
+        "name": "ChangeConnectivity",
+        "signature": "int ChangeConnectivity(\n\tstring Name,\n\tstring Point1,\n\tstring Point2\n)",
+        "description": "Modifies the connectivity of a frame object"
+      }
+    ],
+    "properties": []
+  },
+  "cEditGeneral": {
+    "methods": [
+      {
+        "name": "Move",
+        "signature": "int Move(\n\tdouble DX,\n\tdouble DY,\n\tdouble DZ\n)",
+        "description": "Moves selected point, frame, cable, tendon, area, solid and link objects."
+      }
+    ],
+    "properties": []
+  },
+  "cFunction": {
+    "methods": [
+      {
+        "name": "ChangeName",
+        "signature": "int ChangeName(\n\tstring Name,\n\tstring NewName\n)",
+        "description": ""
+      },
+      {
+        "name": "ConvertToUser",
+        "signature": "int ConvertToUser(\n\tstring Name\n)",
+        "description": ""
+      },
+      {
+        "name": "Count",
+        "signature": "int Count(\n\tint FuncType = 0\n)",
+        "description": ""
+      },
+      {
+        "name": "Delete",
+        "signature": "int Delete(\n\tstring Name\n)",
+        "description": ""
+      },
+      {
+        "name": "GetNameList",
+        "signature": "int GetNameList(\n\tref int NumberNames,\n\tref string[] MyName,\n\tint FuncType = 0\n)",
+        "description": ""
+      },
+      {
+        "name": "GetTypeOAPI",
+        "signature": "int GetTypeOAPI(\n\tstring Name,\n\tref int FuncType,\n\tref int AddType\n)",
+        "description": "Retrieves the function type for the specified function"
+      },
+      {
+        "name": "GetValues",
+        "signature": "int GetValues(\n\tstring Name,\n\tref int NumberItems,\n\tref double[] MyTime,\n\tref double[] Value\n)",
+        "description": ""
+      }
+    ],
+    "properties": [
+      {
+        "name": "FuncRS",
+        "page": "html/f0fa74b7-8098-b290-e365-8b85f8904db6.htm"
+      },
+      {
+        "name": "FuncTH",
+        "page": "html/3a832d23-1e96-eb62-c07e-8f1a93f33bc1.htm"
+      }
+    ]
+  },
+  "cFunctionRS": {
+    "methods": [
+      {
+        "name": "GetNTC2008",
+        "signature": "int GetNTC2008(\n\tstring Name,\n\tref int ParamsOption,\n\tref double Latitude,\n\tref double Longitude,\n\tref int Island,\n\tref int LimitState,\n\tref int UsageClass,\n\tref double NomLife,\n\tref double PeakAccel,\n\tref double F0,\n\tref double Tcs,\n\tref int SpecType,\n\tref int SoilType,\n\tref int Topography,\n\tref double hRatio,\n\tref double Damping,\n\tref double q\n)",
+        "description": "Retrieves the definition of a NTC2008 response spectrum function"
+      },
+      {
+        "name": "GetNTC2018",
+        "signature": "int GetNTC2018(\n\tstring Name,\n\tref int ParamsOption,\n\tref double Latitude,\n\tref double Longitude,\n\tref int Island,\n\tref int LimitState,\n\tref int UsageClass,\n\tref double NomLife,\n\tref double PeakAccel,\n\tref double F0,\n\tref double Tcs,\n\tref int SpecType,\n\tref int SoilType,\n\tref int Topography,\n\tref double hRatio,\n\tref double Damping,\n\tref double q\n)",
+        "description": "Retrieves the definition of a NTC 2018 response spectrum function"
+      },
+      {
+        "name": "SetNTC2008",
+        "signature": "int SetNTC2008(\n\tstring Name,\n\tint ParamsOption,\n\tdouble Latitude,\n\tdouble Longitude,\n\tint Island,\n\tint LimitState,\n\tint UsageClass,\n\tdouble NomLife,\n\tdouble PeakAccel,\n\tdouble F0,\n\tdouble Tcs,\n\tint SpecType,\n\tint SoilType,\n\tint Topography,\n\tdouble hRatio,\n\tdouble Damping,\n\tdouble q\n)",
+        "description": "Defines a NTC2008 response spectrum function"
+      },
+      {
+        "name": "SetNTC2018",
+        "signature": "int SetNTC2018(\n\tstring Name,\n\tint ParamsOption,\n\tdouble Latitude,\n\tdouble Longitude,\n\tint Island,\n\tint LimitState,\n\tint UsageClass,\n\tdouble NomLife,\n\tdouble PeakAccel,\n\tdouble F0,\n\tdouble Tcs,\n\tint SpecType,\n\tint SoilType,\n\tint Topography,\n\tdouble hRatio,\n\tdouble Damping,\n\tdouble q\n)",
+        "description": "Defines a NTC 2018 response spectrum function"
+      }
+    ],
+    "properties": []
+  },
+  "cGenDispl": {
+    "methods": [
+      {
+        "name": "Add",
+        "signature": "int Add(\n\tstring Name,\n\tint MyType\n)",
+        "description": ""
+      },
+      {
+        "name": "ChangeName",
+        "signature": "int ChangeName(\n\tstring Name,\n\tstring NewName\n)",
+        "description": ""
+      },
+      {
+        "name": "Count",
+        "signature": "int Count()",
+        "description": ""
+      },
+      {
+        "name": "CountPoint",
+        "signature": "int CountPoint(\n\tstring Name,\n\tref int Count\n)",
+        "description": ""
+      },
+      {
+        "name": "Delete",
+        "signature": "int Delete(\n\tstring Name\n)",
+        "description": ""
+      },
+      {
+        "name": "DeletePoint",
+        "signature": "int DeletePoint(\n\tstring Name,\n\tstring PointName\n)",
+        "description": ""
+      },
+      {
+        "name": "GetNameList",
+        "signature": "int GetNameList(\n\tref int NumberNames,\n\tref string[] MyName\n)",
+        "description": ""
+      },
+      {
+        "name": "GetPoint",
+        "signature": "int GetPoint(\n\tstring Name,\n\tref int NumberItems,\n\tref string[] PointName,\n\tref double[] U1,\n\tref double[] U2,\n\tref double[] U3,\n\tref double[] R1,\n\tref double[] R2,\n\tref double[] R3\n)",
+        "description": ""
+      },
+      {
+        "name": "GetTypeGenDispl",
+        "signature": "int GetTypeGenDispl(\n\tstring Name,\n\tref int MyType\n)",
+        "description": ""
+      },
+      {
+        "name": "GetTypeOAPI",
+        "signature": "int GetTypeOAPI(\n\tstring name,\n\tref int MyType\n)",
+        "description": ""
+      },
+      {
+        "name": "SetPoint",
+        "signature": "int SetPoint(\n\tstring Name,\n\tstring PointName,\n\tref double[] SF\n)",
+        "description": ""
+      },
+      {
+        "name": "SetType",
+        "signature": "int SetType(\n\tstring Name,\n\tint MyType\n)",
+        "description": ""
+      },
+      {
+        "name": "SetTypeOAPI",
+        "signature": "int SetTypeOAPI(\n\tstring Name,\n\tint MyType\n)",
+        "description": ""
+      }
+    ],
+    "properties": []
+  },
+  "cLineElm": {
+    "methods": [
+      {
+        "name": "Count",
+        "signature": "int Count()",
+        "description": ""
+      },
+      {
+        "name": "GetEndLengthOffset",
+        "signature": "int GetEndLengthOffset(\n\tstring Name,\n\tref double Length1,\n\tref double Length2,\n\tref double RZ\n)",
+        "description": ""
+      },
+      {
+        "name": "GetInsertionPoint",
+        "signature": "int GetInsertionPoint(\n\tstring Name,\n\tref double[] Offset1,\n\tref double[] Offset2\n)",
+        "description": ""
+      },
+      {
+        "name": "GetLoadDistributed",
+        "signature": "int GetLoadDistributed(\n\tstring Name,\n\tref int NumberItems,\n\tref string[] LineName,\n\tref string[] LoadPat,\n\tref int[] MyType,\n\tref string[] CSys,\n\tref int[] Dir,\n\tref double[] RD1,\n\tref double[] RD2,\n\tref double[] Dist1,\n\tref double[] Dist2,\n\tref double[] Val1,\n\tref double[] Val2,\n\teItemTypeElm ItemTypeElm = eItemTypeElm.Element\n)",
+        "description": ""
+      },
+      {
+        "name": "GetLoadPoint",
+        "signature": "int GetLoadPoint(\n\tstring Name,\n\tref int NumberItems,\n\tref string[] LineName,\n\tref string[] LoadPat,\n\tref int[] MyType,\n\tref string[] CSys,\n\tref int[] Dir,\n\tref double[] RelDist,\n\tref double[] Dist,\n\tref double[] Val,\n\teItemTypeElm ItemTypeElm = eItemTypeElm.Element\n)",
+        "description": ""
+      },
+      {
+        "name": "GetLoadTemperature",
+        "signature": "int GetLoadTemperature(\n\tstring Name,\n\tref int NumberItems,\n\tref string[] LineName,\n\tref string[] LoadPat,\n\tref int[] MyType,\n\tref double[] Val,\n\tref string[] PatternName,\n\teItemTypeElm ItemTypeElm = eItemTypeElm.Element\n)",
+        "description": ""
+      },
+      {
+        "name": "GetLocalAxes",
+        "signature": "int GetLocalAxes(\n\tstring Name,\n\tref double Ang\n)",
+        "description": ""
+      },
+      {
+        "name": "GetMaterialOverwrite",
+        "signature": "int GetMaterialOverwrite(\n\tstring Name,\n\tref string PropName\n)",
+        "description": ""
+      },
+      {
+        "name": "GetModifiers",
+        "signature": "int GetModifiers(\n\tstring Name,\n\tref double[] Value\n)",
+        "description": ""
+      },
+      {
+        "name": "GetNameList",
+        "signature": "int GetNameList(\n\tref int NumberNames,\n\tref string[] MyName\n)",
+        "description": ""
+      },
+      {
+        "name": "GetObj",
+        "signature": "int GetObj(\n\tstring Name,\n\tref string Obj,\n\tref int ObjType,\n\tref double RDI,\n\tref double RDJ\n)",
+        "description": ""
+      },
+      {
+        "name": "GetPoints",
+        "signature": "int GetPoints(\n\tstring Name,\n\tref string Point1,\n\tref string Point2\n)",
+        "description": ""
+      },
+      {
+        "name": "GetProperty",
+        "signature": "int GetProperty(\n\tstring Name,\n\tref string PropName,\n\tref int ObjType,\n\tref bool Var,\n\tref double SVarRelStartLoc,\n\tref double SVarTotalLength\n)",
+        "description": ""
+      },
+      {
+        "name": "GetReleases",
+        "signature": "int GetReleases(\n\tstring Name,\n\tref bool[] II,\n\tref bool[] JJ,\n\tref double[] StartValue,\n\tref double[] EndValue\n)",
+        "description": ""
+      },
+      {
+        "name": "GetTCLimits",
+        "signature": "int GetTCLimits(\n\tstring Name,\n\tref bool LimitCompressionExists,\n\tref double LimitCompression,\n\tref bool LimitTensionExists,\n\tref double LimitTension\n)",
+        "description": ""
+      },
+      {
+        "name": "GetTransformationMatrix",
+        "signature": "int GetTransformationMatrix(\n\tstring Name,\n\tref double[] Value\n)",
+        "description": ""
+      }
+    ],
+    "properties": []
+  },
+  "cOptions": {
+    "methods": [
+      {
+        "name": "GetDefaultFunctionFolder",
+        "signature": "int GetDefaultFunctionFolder(\n\tref string Path\n)",
+        "description": "Returns the default folder to (recursively) search if a function data file is not found in the specified path or in the model folder. This is a global setting for the user and applies to all models."
+      },
+      {
+        "name": "SetDefaultFunctionFolder",
+        "signature": "int SetDefaultFunctionFolder(\n\tstring Path\n)",
+        "description": "Sets the default folder to (recursively) search if a function data file is not found in the specified path or in the model folder. This is a global setting for the user and applies to all models."
+      }
+    ],
+    "properties": []
+  },
+  "cPluginCallback": {
+    "methods": [
+      {
+        "name": "Finish",
+        "signature": "void Finish(\n\tint iVal\n)",
+        "description": "This method must be called when the plugin has finished."
+      }
+    ],
+    "properties": [
+      {
+        "name": "ErrorFlag",
+        "page": "html/fd420db0-bf90-3193-9726-a24a133dfcdf.htm"
+      },
+      {
+        "name": "Finished",
+        "page": "html/d3de9875-a7f5-506e-b8a9-d751fa32c411.htm"
+      }
+    ]
+  },
+  "cPluginContract": {
+    "methods": [
+      {
+        "name": "Info",
+        "signature": "int Info(\n\tref string Text\n)",
+        "description": "Provides information about the plugin"
+      },
+      {
+        "name": "Main",
+        "signature": "void Main(\n\tref cSapModel SapModel,\n\tref cPluginCallback ISapPlugin\n)",
+        "description": "The entry point for launching the plugin"
+      }
+    ],
+    "properties": []
+  },
+  "cPointElm": {
+    "methods": [
+      {
+        "name": "Count",
+        "signature": "int Count()",
+        "description": ""
+      },
+      {
+        "name": "CountConstraint",
+        "signature": "int CountConstraint(\n\tref int Count,\n\tstring Name = \"\"\n)",
+        "description": ""
+      },
+      {
+        "name": "CountLoadDispl",
+        "signature": "int CountLoadDispl(\n\tref int Count,\n\tstring Name = \"\",\n\tstring LoadPat = \"\"\n)",
+        "description": ""
+      },
+      {
+        "name": "CountLoadForce",
+        "signature": "int CountLoadForce(\n\tref int Count,\n\tstring Name = \"\",\n\tstring LoadPat = \"\"\n)",
+        "description": ""
+      },
+      {
+        "name": "CountRestraint",
+        "signature": "int CountRestraint()",
+        "description": ""
+      },
+      {
+        "name": "CountSpring",
+        "signature": "int CountSpring()",
+        "description": ""
+      },
+      {
+        "name": "GetConnectivity",
+        "signature": "int GetConnectivity(\n\tstring Name,\n\tref int NumberItems,\n\tref int[] ObjectType,\n\tref string[] ObjectName,\n\tref int[] PointNumber\n)",
+        "description": ""
+      },
+      {
+        "name": "GetConstraint",
+        "signature": "int GetConstraint(\n\tstring Name,\n\tref int NumberItems,\n\tref string[] PointName,\n\tref string[] ConstraintName,\n\teItemTypeElm ItemTypeElm = eItemTypeElm.Element\n)",
+        "description": ""
+      },
+      {
+        "name": "GetCoordCartesian",
+        "signature": "int GetCoordCartesian(\n\tstring Name,\n\tref double X,\n\tref double Y,\n\tref double Z,\n\tstring CSys = \"Global\"\n)",
+        "description": ""
+      },
+      {
+        "name": "GetLoadDispl",
+        "signature": "int GetLoadDispl(\n\tstring Name,\n\tref int NumberItems,\n\tref string[] PointName,\n\tref string[] LoadPat,\n\tref int[] LcStep,\n\tref string[] CSys,\n\tref double[] U1,\n\tref double[] U2,\n\tref double[] U3,\n\tref double[] R1,\n\tref double[] R2,\n\tref double[] R3,\n\teItemTypeElm ItemTypeElm = eItemTypeElm.Element\n)",
+        "description": ""
+      },
+      {
+        "name": "GetLoadForce",
+        "signature": "int GetLoadForce(\n\tstring Name,\n\tref int NumberItems,\n\tref string[] PointName,\n\tref string[] LoadPat,\n\tref int[] LcStep,\n\tref string[] CSys,\n\tref double[] F1,\n\tref double[] F2,\n\tref double[] F3,\n\tref double[] M1,\n\tref double[] M2,\n\tref double[] M3,\n\teItemTypeElm ItemTypeElm = eItemTypeElm.Element\n)",
+        "description": ""
+      },
+      {
+        "name": "GetLocalAxes",
+        "signature": "int GetLocalAxes(\n\tstring Name,\n\tref double A,\n\tref double B,\n\tref double C\n)",
+        "description": ""
+      },
+      {
+        "name": "GetNameList",
+        "signature": "int GetNameList(\n\tref int NumberNames,\n\tref string[] MyName\n)",
+        "description": ""
+      },
+      {
+        "name": "GetObj",
+        "signature": "int GetObj(\n\tstring Name,\n\tref string Obj,\n\tref int ObjType\n)",
+        "description": ""
+      },
+      {
+        "name": "GetPatternValue",
+        "signature": "int GetPatternValue(\n\tstring Name,\n\tstring PatternName,\n\tref double Value\n)",
+        "description": ""
+      },
+      {
+        "name": "GetRestraint",
+        "signature": "int GetRestraint(\n\tstring Name,\n\tref bool[] Value\n)",
+        "description": ""
+      },
+      {
+        "name": "GetSpring",
+        "signature": "int GetSpring(\n\tstring Name,\n\tref double[] K\n)",
+        "description": ""
+      },
+      {
+        "name": "GetSpringCoupled",
+        "signature": "int GetSpringCoupled(\n\tstring Name,\n\tref double[] K\n)",
+        "description": ""
+      },
+      {
+        "name": "GetTransformationMatrix",
+        "signature": "int GetTransformationMatrix(\n\tstring Name,\n\tref double[] Value\n)",
+        "description": ""
+      },
+      {
+        "name": "IsSpringCoupled",
+        "signature": "int IsSpringCoupled(\n\tstring Name,\n\tref bool IsCoupled\n)",
+        "description": ""
+      }
+    ],
+    "properties": []
+  },
+  "cPropAreaSpring": {
+    "methods": [
+      {
+        "name": "ChangeName",
+        "signature": "int ChangeName(\n\tstring Name,\n\tstring NewName\n)",
+        "description": "Changes the name of a defined area spring property"
+      },
+      {
+        "name": "Delete",
+        "signature": "int Delete(\n\tstring Name\n)",
+        "description": "Deletes the specified area spring property"
+      },
+      {
+        "name": "GetAreaSpringProp",
+        "signature": "int GetAreaSpringProp(\n\tstring Name,\n\tref double U1,\n\tref double U2,\n\tref double U3,\n\tref int NonlinearOption3,\n\tref int SpringOption,\n\tref string SoilProfile,\n\tref double EndLengthRatio,\n\tref double Period,\n\tref int color,\n\tref string notes,\n\tref string iGUID\n)",
+        "description": "Retrieves an existing named area spring property"
+      },
+      {
+        "name": "GetNameList",
+        "signature": "int GetNameList(\n\tref int NumberNames,\n\tref string[] MyName\n)",
+        "description": "Retrieves the names of all defined area spring property"
+      },
+      {
+        "name": "SetAreaSpringProp",
+        "signature": "int SetAreaSpringProp(\n\tstring Name,\n\tdouble U1,\n\tdouble U2,\n\tdouble U3,\n\tint NonlinearOption3,\n\tint SpringOption = 1,\n\tstring SoilProfile = \"\",\n\tdouble EndLengthRatio = 0,\n\tdouble Period = 0,\n\tint color = 0,\n\tstring notes = \"\",\n\tstring iGUID = \"\"\n)",
+        "description": "Creates a new named area spring property, or modifies an existing named area spring property"
+      }
+    ],
+    "properties": []
+  },
+  "cPropFrameSDShape": {
+    "methods": [
+      {
+        "name": "GetAngle",
+        "signature": "int GetAngle(\n\tstring Name,\n\tstring ShapeName,\n\tref string MatProp,\n\tref string PropName,\n\tref int Color,\n\tref double XCenter,\n\tref double YCenter,\n\tref double H,\n\tref double Bf,\n\tref double Tf,\n\tref double Tw,\n\tref double Rotation\n)",
+        "description": "Retrieves property data for an Angle shape in a section designer section"
+      },
+      {
+        "name": "GetConcreteL",
+        "signature": "int GetConcreteL(\n\tstring Name,\n\tstring ShapeName,\n\tref string MatProp,\n\tref string PropName,\n\tref int Color,\n\tref double XCenter,\n\tref double YCenter,\n\tref double H,\n\tref double Bf,\n\tref double Tf,\n\tref double Tw,\n\tref double Rotation,\n\tref bool MirrorAbout2,\n\tref bool MirrorAbout3\n)",
+        "description": "Retrieves property data for a concrete L shape in a section designer section"
+      },
+      {
+        "name": "GetConcreteTee",
+        "signature": "int GetConcreteTee(\n\tstring Name,\n\tstring ShapeName,\n\tref string MatProp,\n\tref string PropName,\n\tref int Color,\n\tref double XCenter,\n\tref double YCenter,\n\tref double H,\n\tref double Bf,\n\tref double Tf,\n\tref double Tw,\n\tref double Rotation,\n\tref bool MirrorAbout3\n)",
+        "description": "Retrieves property data for a concrete tee shape in a section designer section"
+      },
+      {
+        "name": "GetISection",
+        "signature": "int GetISection(\n\tstring Name,\n\tstring ShapeName,\n\tref string MatProp,\n\tref string PropName,\n\tref int Color,\n\tref double XCenter,\n\tref double YCenter,\n\tref double H,\n\tref double Bf,\n\tref double Tf,\n\tref double Tw,\n\tref double Bfb,\n\tref double Tfb,\n\tref double Rotation\n)",
+        "description": "Retrieves property data for an I-section shape in a section designer section"
+      },
+      {
+        "name": "GetReinfCircle",
+        "signature": "int GetReinfCircle(\n\tstring Name,\n\tstring ShapeName,\n\tref double XCenter,\n\tref double YCenter,\n\tref double Diameter,\n\tref int NumBars,\n\tref double Rotation,\n\tref string RebarSize,\n\tref string MatRebar\n)",
+        "description": "Retrieves property data for a circular reinforcing shape in a section designer section"
+      },
+      {
+        "name": "GetReinfCorner",
+        "signature": "int GetReinfCorner(\n\tstring Name,\n\tstring ShapeName,\n\tref int NumberItems,\n\tref int[] PointNum,\n\tref string[] RebarSize\n)",
+        "description": "Retrieves corner point reinforcing data for solid rectangle, circle and polygon shapes in a section designer property"
+      },
+      {
+        "name": "GetReinfEdge",
+        "signature": "int GetReinfEdge(\n\tstring Name,\n\tstring ShapeName,\n\tref int NumberItems,\n\tref int[] EdgeNum,\n\tref string[] RebarSize,\n\tref double[] Spacing,\n\tref double[] Cover\n)",
+        "description": "Retrieves edge reinforcing data for solid rectangle, circle, polygon, and rectangular reinforcing shapes in a section designer property"
+      },
+      {
+        "name": "GetReinfLine",
+        "signature": "int GetReinfLine(\n\tstring Name,\n\tstring ShapeName,\n\tref double X1,\n\tref double Y1,\n\tref double X2,\n\tref double Y2,\n\tref double Spacing,\n\tref string RebarSize,\n\tref bool EndBars,\n\tref string MatRebar\n)",
+        "description": "Retrieves property data for a line reinforcing shape in a section designer section"
+      },
+      {
+        "name": "GetReinfRectangular",
+        "signature": "int GetReinfRectangular(\n\tstring Name,\n\tstring ShapeName,\n\tref double XCenter,\n\tref double YCenter,\n\tref double H,\n\tref double W,\n\tref double Rotation,\n\tref string MatRebar\n)",
+        "description": "Retrieves property data for a rectangular reinforcing shape in a section designer section"
+      },
+      {
+        "name": "GetReinfSingle",
+        "signature": "int GetReinfSingle(\n\tstring Name,\n\tstring ShapeName,\n\tref double XCenter,\n\tref double YCenter,\n\tref string RebarSize,\n\tref string MatRebar\n)",
+        "description": "Retrieves property data for a single bar reinforcing shape in a section designer section"
+      },
+      {
+        "name": "GetSolidCircle",
+        "signature": "int GetSolidCircle(\n\tstring Name,\n\tstring ShapeName,\n\tref string MatProp,\n\tref string SSOverwrite,\n\tref int Color,\n\tref double XCenter,\n\tref double YCenter,\n\tref double Diameter,\n\tref bool Reinf,\n\tref int NumberBars,\n\tref double Rotation,\n\tref double Cover,\n\tref string RebarSize,\n\tref string MatRebar\n)",
+        "description": "Retrieves property data for a solid circle shape in a section designer section"
+      },
+      {
+        "name": "GetSolidRect",
+        "signature": "int GetSolidRect(\n\tstring Name,\n\tstring ShapeName,\n\tref string MatProp,\n\tref string SSOverwrite,\n\tref int Color,\n\tref double XCenter,\n\tref double YCenter,\n\tref double H,\n\tref double W,\n\tref double Rotation,\n\tref bool Reinf,\n\tref string MatRebar\n)",
+        "description": "Retrieves property data for a solid rectangular shape in a section designer section"
+      },
+      {
+        "name": "GetTee",
+        "signature": "int GetTee(\n\tstring Name,\n\tstring ShapeName,\n\tref string MatProp,\n\tref string PropName,\n\tref int Color,\n\tref double XCenter,\n\tref double YCenter,\n\tref double H,\n\tref double Bf,\n\tref double Tf,\n\tref double Tw,\n\tref double Rotation\n)",
+        "description": "Retrieves property data for a Tee shape in a section designer section"
+      }
+    ],
+    "properties": []
+  },
+  "cPropLineSpring": {
+    "methods": [
+      {
+        "name": "ChangeName",
+        "signature": "int ChangeName(\n\tstring Name,\n\tstring NewName\n)",
+        "description": "Changes the name of a defined line spring property"
+      },
+      {
+        "name": "Delete",
+        "signature": "int Delete(\n\tstring Name\n)",
+        "description": "Deletes the specified line spring property"
+      },
+      {
+        "name": "GetLineSpringProp",
+        "signature": "int GetLineSpringProp(\n\tstring Name,\n\tref double U1,\n\tref double U2,\n\tref double U3,\n\tref double R1,\n\tref int NonlinearOption2,\n\tref int NonlinearOption3,\n\tref int color,\n\tref string notes,\n\tref string iGUID\n)",
+        "description": "Retrieves an existing named line spring property"
+      },
+      {
+        "name": "GetNameList",
+        "signature": "int GetNameList(\n\tref int NumberNames,\n\tref string[] MyName\n)",
+        "description": "Retrieves the names of all defined line spring property"
+      },
+      {
+        "name": "SetLineSpringProp",
+        "signature": "int SetLineSpringProp(\n\tstring Name,\n\tdouble U1,\n\tdouble U2,\n\tdouble U3,\n\tdouble R1,\n\tint NonlinearOption2,\n\tint NonlinearOption3,\n\tint color = 0,\n\tstring notes = \"\",\n\tstring iGUID = \"\"\n)",
+        "description": "Creates a new named line spring property, or modifies an existing named line spring property"
+      }
+    ],
+    "properties": []
+  },
+  "cPropPointSpring": {
+    "methods": [
+      {
+        "name": "ChangeName",
+        "signature": "int ChangeName(\n\tstring Name,\n\tstring NewName\n)",
+        "description": "Changes the name of a defined point spring property"
+      },
+      {
+        "name": "Delete",
+        "signature": "int Delete(\n\tstring Name\n)",
+        "description": "Deletes the specified point spring property"
+      },
+      {
+        "name": "GetLinks",
+        "signature": "int GetLinks(\n\tstring Name,\n\tref int NumberLinks,\n\tref string[] LinkNames,\n\tref int[] LinkAxialDirs,\n\tref double[] LinkAngles\n)",
+        "description": "Retrieves the single joint links for a named point spring property"
+      },
+      {
+        "name": "GetNameList",
+        "signature": "int GetNameList(\n\tref int NumberNames,\n\tref string[] MyName\n)",
+        "description": "Retrieves the names of all defined point spring property"
+      },
+      {
+        "name": "GetPointSpringProp",
+        "signature": "int GetPointSpringProp(\n\tstring Name,\n\tref int SpringOption,\n\tref double[] k,\n\tref string CSys,\n\tref string SoilProfile,\n\tref string Footing,\n\tref double Period,\n\tref int color,\n\tref string notes,\n\tref string iGUID\n)",
+        "description": "Retrieves an existing named point spring property"
+      },
+      {
+        "name": "SetLinks",
+        "signature": "int SetLinks(\n\tstring Name,\n\tint NumberLinks,\n\tref string[] LinkNames,\n\tref int[] LinkAxialDirs,\n\tref double[] LinkAngles\n)",
+        "description": "Sets single joint links for a named point spring property"
+      },
+      {
+        "name": "SetPointSpringProp",
+        "signature": "int SetPointSpringProp(\n\tstring Name,\n\tint SpringOption,\n\tref double[] k,\n\tstring CSys = \"\",\n\tstring SoilProfile = \"\",\n\tstring Footing = \"\",\n\tdouble Period = 0,\n\tint color = 0,\n\tstring notes = \"\",\n\tstring iGUID = \"\"\n)",
+        "description": "Creates a new named point spring property, or modifies an existing named point spring property"
+      }
+    ],
+    "properties": []
+  },
+  "cPropRebar": {
+    "methods": [
+      {
+        "name": "GetNameList",
+        "signature": "int GetNameList(\n\tref int NumberNames,\n\tref string[] MyName\n)",
+        "description": "Retrieves the names of all defined rebar properties"
+      },
+      {
+        "name": "GetNameListWithData",
+        "signature": "int GetNameListWithData(\n\tref int NumberNames,\n\tref string[] MyName,\n\tref double[] Areas,\n\tref double[] Diameters,\n\tref string[] MyGUID\n)",
+        "description": "Retrieves the names and data of all defined rebar properties"
+      },
+      {
+        "name": "GetRebarProps",
+        "signature": "int GetRebarProps(\n\tstring Name,\n\tref double Area,\n\tref double Diameter\n)",
+        "description": "Retrieves dimension data for a rebar property"
+      },
+      {
+        "name": "GetRebarPropsWithGUID",
+        "signature": "int GetRebarPropsWithGUID(\n\tstring Name,\n\tref double Area,\n\tref double Diameter,\n\tref string MyGUID\n)",
+        "description": "Retrieves dimension data and GUID for a rebar property"
+      }
+    ],
+    "properties": []
+  },
+  "cPropTendon": {
+    "methods": [
+      {
+        "name": "ChangeName",
+        "signature": "int ChangeName(\n\tstring Name,\n\tstring NewName\n)",
+        "description": "Changes the name of an existing tendon property."
+      },
+      {
+        "name": "Count",
+        "signature": "int Count()",
+        "description": "Retrieves the total number of defined tendon properties in the model."
+      },
+      {
+        "name": "Delete",
+        "signature": "int Delete(\n\tstring Name\n)",
+        "description": "Deletes a specified tendon property."
+      },
+      {
+        "name": "GetNameList",
+        "signature": "int GetNameList(\n\tref int NumberNames,\n\tref string[] MyName\n)",
+        "description": "Retrieves the names of all defined tendon properties in the model."
+      },
+      {
+        "name": "GetProp",
+        "signature": "int GetProp(\n\tstring Name,\n\tref string MatProp,\n\tref int ModelingOption,\n\tref double Area,\n\tref int Color,\n\tref string Notes,\n\tref string GUID\n)",
+        "description": "Retrieves tendon property definition data."
+      },
+      {
+        "name": "SetProp",
+        "signature": "int SetProp(\n\tstring Name,\n\tstring MatProp,\n\tint ModelingOption,\n\tdouble Area,\n\tint Color = -1,\n\tstring Notes = \"\",\n\tstring GUID = \"\"\n)",
+        "description": "Defines a tendon property"
+      }
+    ],
+    "properties": []
+  }
+}
