@@ -247,8 +247,8 @@ for i in range(ret[5]):
     row = data[i*nf:(i+1)*nf]
     print(f"  {row}")
 
-# Check if loads are assigned
-for lp in ["SDL", "Live"]:
+# Check if loads are assigned (DL and LL)
+for lp in ["DL", "LL"]:
     ret = SapModel.DatabaseTables.GetTableForDisplayArray(
         "Area Loads - Uniform", [], "All", 0, [], 0, [])
     if ret[0] == 0:
@@ -266,6 +266,9 @@ Run all checks above and compare against:
 [ ] Batch sections cover +-20cm/5cm/all grades
 [ ] Column/wall floors = plan +1
 [ ] Every floor has slabs (no missing)
+[ ] 樓板按大小梁切割（非直接 Grid 交點建板）
+[ ] FS 基礎版額外 2x2 切割
+[ ] 小梁兩端都有接合其他梁/柱
 [ ] Slab/wall ShellType = Membrane (2)
 [ ] Raft ShellType = ShellThick (1)
 [ ] Slab/wall modifier: f11=f22=f12=0.4
@@ -277,14 +280,23 @@ Run all checks above and compare against:
 [ ] Column cover: 7cm
 [ ] Column bar distribution matches W:D ratio
 [ ] Column ToBeDesigned = True
-[ ] Rigid zone = 0.75 for all frames
+[ ] Rigid zone = 0.75 for all frames (SetEndLengthOffset)
 [ ] Discontinuous beam ends have M2+M3 release
-[ ] Base restraints = UX,UY only (not full fixed)
+[ ] Base restraints = UX,UY at FS slab level (NOT at BASE)
 [ ] Raft points have Kv springs
+[ ] FS 基礎版有設 Diaphragm
+[ ] FS 基礎版有 DL=0.63 載重
 [ ] Edge beams have Kw line springs
-[ ] SDL and Live loads assigned to slabs
-[ ] Beam line loads (wall weight) assigned
-[ ] Response spectrum created from spectrum.txt
+[ ] DL and LL loads assigned to slabs (by zone defaults)
+[ ] 外牆線載重方向為 GRAVITY（正值，非負值）
+[ ] Exterior wall loads only where beam exists above
+[ ] 載重工況無 SDL（除非使用者要求）
+[ ] Load patterns: DL/LL/EQXP/EQXN/EQYP/EQYN
+[ ] EQ params: ECC=0.05, K=1, C=user value, Top=PRF, Bot=1F
+[ ] Response spectrum FROM FILE (SPECTRUM.TXT) imported
+[ ] 0SPECX/0SPECXY modified (NOT new RSX/RSY created)
+[ ] Load combo EQV scale factor set
+[ ] Diaphragm walls use C280
 [ ] Diaphragm only at slab corner points
 [ ] Model saved successfully
 ```

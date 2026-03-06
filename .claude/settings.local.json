@@ -1,7 +1,24 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "allow": [
-      "Skill(ralph-loop:ralph-loop)"
+      "Skill(ralph-loop:ralph-loop)",
+      "TeamCreate",
+      "TeamDelete",
+      "mcp__etabs__get_model_info",
+      "mcp__etabs__run_python",
+      "mcp__etabs__list_tables",
+      "mcp__etabs__read_table",
+      "mcp__etabs__refresh_view",
+      "mcp__etabs__get_stories",
+      "mcp__etabs__get_frame_sections",
+      "mcp__etabs__get_materials",
+      "mcp__etabs__set_units",
+      "mcp__etabs__unlock_model"
     ]
-  }
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "effortLevel": "high"
 }

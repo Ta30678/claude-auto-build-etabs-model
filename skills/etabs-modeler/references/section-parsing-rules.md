@@ -8,13 +8,16 @@
 | Small Beam | `SB{W}X{D}C{fc}` | SB35X65C280 | 0.65 | 0.35 |
 | Wall Beam | `WB{W}X{D}C{fc}` | WB50X70C350 | 0.70 | 0.50 |
 | Foundation Beam | `FB{W}X{D}C{fc}` | FB90X230C420 | 2.30 | 0.90 |
-| Column | `C{W}X{D}C{fc}` | C150X130C420 | 1.30 | 1.50 |
+| Column | `C{Xwidth}X{Ydepth}C{fc}` | C150X130C420 | 1.30 | 1.50 |
 | Slab | `S{T}C{fc}` | S15C280 | - | - |
 | Wall | `W{T}C{fc}` | W20C350 | - | - |
 | Raft Slab | `FS{T}C{fc}` | FS100C350 | - | - |
 
-**CRITICAL**: `PropFrame.SetRectangle(Name, Material, T3, T2)` — T3=Depth, T2=Width.
+**CRITICAL**: `PropFrame.SetRectangle(Name, Material, T3, T2)` -- T3=Depth, T2=Width.
 The naming format is `{PREFIX}{WIDTH}X{DEPTH}`, so parsing must swap: name gives W then D, but API wants D then W.
+
+**Column naming**: `C{Xwidth}X{Ydepth}` where Xwidth = Global X (horizontal) dimension, Ydepth = Global Y (vertical) dimension.
+Example: `C120X180` = 120cm in X-direction (horizontal), 180cm in Y-direction (vertical).
 
 ```
 B55X80C350 → W=55, D=80 → SetRectangle("B55X80C350", "C350", 0.80, 0.55)

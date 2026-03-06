@@ -163,20 +163,31 @@ SapModel.PointObj.SetDiaphragm(pt_name, 3, f"D_{story}")
 
 ## 6. Foundation Support
 
-### Base Restraints (NOT full fixed)
+### Base Restraints (NOT at BASE level)
+鎖點位於 BASE 上一層（FS 基礎版所在樓層），等同最底部柱子的底部端點。
 Only lock horizontal translations (UX, UY). Vertical handled by springs.
 
 ```python
+# 鎖點不在 BASE，而是在 BASE 上一層（FS 基礎版所在樓層）
 restraint = [True, True, False, False, False, False]  # UX, UY only
 SapModel.PointObj.SetRestraint(base_pt, restraint)
 ```
 
 ### Raft Slab Point Springs (Kv)
-Vertical spring at each raft slab point.
+Vertical spring at each raft slab point. Kv 彈簧設置在 FS 基礎版的節點上。
 
 ```python
 springs = [0, 0, Kv, 0, 0, 0]  # K3 = Kv
 SapModel.PointObj.SetSpring(pt_name, springs)
+```
+
+### Raft Slab Diaphragm
+FS 基礎版必須設定 Diaphragm（與一般樓層相同，設在板角點）。
+
+```python
+SapModel.Diaphragm.SetDiaphragm("D_FS", False)  # rigid
+for pt in raft_slab_corner_points:
+    SapModel.PointObj.SetDiaphragm(pt, 3, "D_FS")
 ```
 
 ### Edge Beam Line Springs (Kw)
