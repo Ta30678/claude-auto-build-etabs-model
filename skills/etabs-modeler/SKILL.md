@@ -717,6 +717,14 @@ At the start of modeling, collect these from the user:
 
 ## 10. Do's and Don'ts
 
+### 鐵則（ABSOLUTE RULE — 違反即失敗）
+
+1. **小梁位置絕對禁止用 1/2、1/3 grid 間距猜測！** 必須使用 plan-reader 從圖面逐根量測像素位置並等比例插值計算出的精確座標。如果 plan-reader 提供的座標全部落在等分位置，必須退回要求重新量測。小梁位置由住宅單元隔間決定，每根都不同。
+
+2. **結構配置必須從結構配置圖讀取，禁止從舊模型複製或按比例縮放。** 新模型 = 新圖面，不是舊模型的變體。
+
+3. **建模前必須交叉比對結構配置圖和建築平面圖**，確認實際建物範圍（可能不是完整矩形，例如 L 型缺角）。不可假設 Grid 交叉點全部有柱。
+
 ### DO
 - `SetPresentUnits(12)` always first
 - Parse D/B separately (T3=depth, T2=width)
@@ -746,6 +754,9 @@ At the start of modeling, collect these from the user:
 - **Read EQ_PARAMS.txt for C and scale factors, or ask user**
 
 ### DON'T
+- **用 1/2、1/3 等分假設放置小梁（鐵則禁令！必須從圖面量測像素位置計算）**
+- **從舊模型複製/縮放結構配置到新模型（鐵則禁令！必須從圖面讀取）**
+- **假設建物範圍是完整矩形（鐵則禁令！必須交叉比對建築平面）**
 - Guess T3/T2 order -- always verify: T3=Depth, T2=Width
 - Assume a complete rectangular grid -- only use plan-reader data
 - Skip the +1 floor rule for columns/walls
