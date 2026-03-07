@@ -1,0 +1,145 @@
+{
+  "project": {
+    "name": "A21 捷運社宅",
+    "save_path": "C:/ETABS_Models/A21_golden.EDB",
+    "units": 12,
+    "new_model": true
+  },
+  "grids": {
+    "x": [
+      {"label": "1", "coordinate": 0},
+      {"label": "2", "coordinate": 8.4},
+      {"label": "3", "coordinate": 16.8},
+      {"label": "4", "coordinate": 25.0},
+      {"label": "5", "coordinate": 33.4}
+    ],
+    "y": [
+      {"label": "A", "coordinate": 0},
+      {"label": "B", "coordinate": 6.0},
+      {"label": "C", "coordinate": 14.0},
+      {"label": "D", "coordinate": 20.0},
+      {"label": "E", "coordinate": 28.0}
+    ]
+  },
+  "stories": [
+    {"name": "B3F", "height": 3.6},
+    {"name": "B2F", "height": 3.2},
+    {"name": "B1F", "height": 3.2},
+    {"name": "1F",  "height": 4.2},
+    {"name": "2F",  "height": 3.2},
+    {"name": "3F",  "height": 3.2},
+    {"name": "4F",  "height": 3.2},
+    {"name": "5F",  "height": 3.2},
+    {"name": "6F",  "height": 3.2},
+    {"name": "7F",  "height": 3.2},
+    {"name": "8F",  "height": 3.2},
+    {"name": "9F",  "height": 3.2},
+    {"name": "10F", "height": 3.2},
+    {"name": "11F", "height": 3.2},
+    {"name": "12F", "height": 3.2},
+    {"name": "RF",  "height": 3.2},
+    {"name": "R1F", "height": 3.2},
+    {"name": "PRF", "height": 1.5}
+  ],
+  "base_elevation": -13.6,
+  "strength_map": {
+    "B3F~1F":  {"column": 490, "beam": 420, "wall": 420, "slab": 350},
+    "2F~7F":   {"column": 420, "beam": 350, "wall": 350, "slab": 280},
+    "8F~RF":   {"column": 350, "beam": 280, "wall": 280, "slab": 280},
+    "R1F~PRF": {"column": 350, "beam": 280, "wall": 280, "slab": 280}
+  },
+  "sections": {
+    "frame": [
+      "B55X80", "B50X70", "B40X60", "B30X50",
+      "SB30X50", "SB25X45",
+      "WB50X70", "WB40X60",
+      "FB90X230", "FB80X200",
+      "C90X90", "C80X80", "C60X90", "C150X130", "C120X120"
+    ],
+    "slab": [15, 20],
+    "wall": [20, 25, 30],
+    "raft": [100]
+  },
+  "columns": [
+    {
+      "grid_x": 0, "grid_y": 0,
+      "section": "C90X90",
+      "floors": ["B2F", "B1F", "1F", "2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "10F", "11F", "12F", "RF"]
+    },
+    {
+      "grid_x": 8.4, "grid_y": 0,
+      "section": "C120X120",
+      "floors": ["B2F", "B1F", "1F", "2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "10F", "11F", "12F", "RF"]
+    }
+  ],
+  "walls": [
+    {
+      "x1": 16.8, "y1": 6.0,
+      "x2": 16.8, "y2": 14.0,
+      "section": "W25",
+      "floors": ["B2F", "B1F", "1F", "2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "10F", "11F", "12F", "RF"],
+      "is_diaphragm_wall": false
+    }
+  ],
+  "beams": [
+    {
+      "x1": 0, "y1": 0,
+      "x2": 8.4, "y2": 0,
+      "section": "B55X80",
+      "floors": ["B3F", "B2F", "B1F", "1F", "2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "10F", "11F", "12F", "RF"]
+    },
+    {
+      "x1": 0, "y1": 0,
+      "x2": 0, "y2": 6.0,
+      "section": "B50X70",
+      "floors": ["B3F", "B2F", "B1F", "1F", "2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "10F", "11F", "12F", "RF"]
+    }
+  ],
+  "small_beams": [
+    {
+      "x1": 0, "y1": 2.85,
+      "x2": 8.4, "y2": 2.85,
+      "section": "SB30X50",
+      "floors": ["2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "10F", "11F", "12F"]
+    }
+  ],
+  "slabs": [
+    {
+      "corners": [[0, 0], [8.4, 0], [8.4, 2.85], [0, 2.85]],
+      "section": "S15",
+      "floors": ["2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "10F", "11F", "12F", "RF"]
+    },
+    {
+      "corners": [[0, 2.85], [8.4, 2.85], [8.4, 6.0], [0, 6.0]],
+      "section": "S15",
+      "floors": ["2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "10F", "11F", "12F", "RF"]
+    }
+  ],
+  "loads": {
+    "zone_defaults": {
+      "superstructure": {"DL": 0.45, "LL": 0.2},
+      "substructure":   {"DL": 0.15, "LL": 0.5},
+      "1F_indoor":      {"DL": 0.3,  "LL": 0.5},
+      "1F_outdoor":     {"DL": 0.6,  "LL": 1.0},
+      "FS":             {"DL": 0.63, "LL": 0}
+    },
+    "exterior_wall": {
+      "thickness": 0.15,
+      "unit_weight": 2.4,
+      "opening_factor": 0.6
+    },
+    "seismic": {
+      "base_shear_c": 0.072,
+      "top_story": "PRF",
+      "bottom_story": "1F",
+      "ecc_ratio": 0.05,
+      "k_exponent": 1
+    },
+    "eqv_scale_factor": 4.5
+  },
+  "foundation": {
+    "kv": 3000,
+    "kw": 500,
+    "restraint_floor": "B3F"
+  }
+}

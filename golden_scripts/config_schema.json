@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ETABS Model Configuration",
+  "description": "Configuration for golden_scripts to build an ETABS model deterministically.",
+  "type": "object",
+  "required": ["project", "grids", "stories", "strength_map", "sections"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": ["name", "save_path"],
+      "properties": {
+        "name": { "type": "string", "description": "Project name" },
+        "save_path": { "type": "string", "description": "Full path for .EDB file" },
+        "units": { "type": "integer", "default": 12, "description": "eUnits code (12=TON/M)" },
+        "new_model": { "type": "boolean", "default": false, "description": "True = create new blank model, False = attach to existing" }
+      }
+    },
+    "grids": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "coordinate"],
+            "properties": {
+              "label": { "type": "string" },
+              "coordinate": { "type": "number", "description": "X coordinate in meters" }
+            }
+          }
+        },
+        "y": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "coordinate"],
+            "properties": {
+              "label": { "type": "string" },
+              "coordinate": { "type": "number", "description": "Y coordinate in meters" }
+            }
+          }
+        }
+      }
+    },
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "height"],
+        "properties": {
+          "name": { "type": "string", "description": "Story name e.g. B3F, 1F, RF, PRF" },
+          "height": { "type": "number", "description": "Story height in meters" },
+          "elevation": { "type": "number", "description": "Story elevation in meters (auto-calculated if omitted)" },
+          "is_master": { "type": "boolean", "default": true }
+        }
+      }
+    },
+    "base_elevation": {
+      "type": "number",
+      "default": 0,
+      "description": "Base elevation in meters"
+    },
+    "strength_map": {
+      "type": "object",
+      "description": "Concrete grade per (story_range, element_type). Keys are story ranges like 'B3F~1F', values are objects with column/beam/wall/slab grades.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "column": { "type": "integer" },
+          "beam": { "type": "integer" },
+          "wall": { "type": "integer" },
+          "slab": { "type": "integer" }
+        }
+      }
+    },
+    "sections": {
+      "type": "object",
+      "description": "Base section names from plan-reader output. Used for batch expansion.",
+      "properties": {
+        "frame": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Base frame section names e.g. ['B55X80', 'C90X90']"
+        },
+        "slab": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Slab thicknesses in cm e.g. [15, 20]"
+        },
+        "wall": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Wall thicknesses in cm e.g. [20, 25]"
+        },
+        "raft": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Raft slab thicknesses in cm e.g. [100]"
+        }
+      }
+    },
+    "columns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["grid_x", "grid_y", "section", "floors"],
+        "properties": {
+          "grid_x": { "type": "number", "description": "X coordinate in meters" },
+          "grid_y": { "type": "number", "description": "Y coordinate in meters" },
+          "section": { "type": "string", "description": "Base section name without Cfc e.g. C90X90" },
+          "floors": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Plan floors where this column exists e.g. ['B3F','B2F','B1F','1F','2F']"
+          }
+        }
+      }
+    },
+    "walls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["x1", "y1", "x2", "y2", "section", "floors"],
+        "properties": {
+          "x1": { "type": "number" },
+          "y1": { "type": "number" },
+          "x2": { "type": "number" },
+          "y2": { "type": "number" },
+          "section": { "type": "string", "description": "Base section e.g. W20" },
+          "floors": { "type": "array", "items": { "type": "string" } },
+          "is_diaphragm_wall": { "type": "boolean", "default": false, "description": "If true, always uses C280" }
+        }
+      }
+    },
+    "beams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["x1", "y1", "x2", "y2", "section", "floors"],
+        "properties": {
+          "x1": { "type": "number" },
+          "y1": { "type": "number" },
+          "x2": { "type": "number" },
+          "y2": { "type": "number" },
+          "section": { "type": "string", "description": "Base section e.g. B55X80, WB50X70, FB90X230" },
+          "floors": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "small_beams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["x1", "y1", "x2", "y2", "section", "floors"],
+        "properties": {
+          "x1": { "type": "number" },
+          "y1": { "type": "number" },
+          "x2": { "type": "number" },
+          "y2": { "type": "number" },
+          "section": { "type": "string", "description": "Base section e.g. SB30X50" },
+          "floors": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "slabs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["corners", "section", "floors"],
+        "properties": {
+          "corners": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "description": "List of [x, y] corner coordinates in meters"
+          },
+          "section": { "type": "string", "description": "Base section e.g. S15, FS100" },
+          "floors": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "loads": {
+      "type": "object",
+      "properties": {
+        "zone_defaults": {
+          "type": "object",
+          "description": "Load defaults by zone",
+          "properties": {
+            "superstructure": {
+              "type": "object",
+              "properties": {
+                "DL": { "type": "number" },
+                "LL": { "type": "number" }
+              }
+            },
+            "substructure": {
+              "type": "object",
+              "properties": {
+                "DL": { "type": "number" },
+                "LL": { "type": "number" }
+              }
+            },
+            "1F_indoor": {
+              "type": "object",
+              "properties": {
+                "DL": { "type": "number" },
+                "LL": { "type": "number" }
+              }
+            },
+            "1F_outdoor": {
+              "type": "object",
+              "properties": {
+                "DL": { "type": "number" },
+                "LL": { "type": "number" }
+              }
+            },
+            "FS": {
+              "type": "object",
+              "properties": {
+                "DL": { "type": "number" },
+                "LL": { "type": "number" }
+              }
+            }
+          }
+        },
+        "exterior_wall": {
+          "type": "object",
+          "properties": {
+            "thickness": { "type": "number", "default": 0.15, "description": "Wall thickness in meters" },
+            "unit_weight": { "type": "number", "default": 2.4 },
+            "opening_factor": { "type": "number", "default": 0.6 }
+          }
+        },
+        "seismic": {
+          "type": "object",
+          "properties": {
+            "base_shear_c": { "type": "number" },
+            "top_story": { "type": "string", "default": "PRF" },
+            "bottom_story": { "type": "string", "default": "1F" },
+            "ecc_ratio": { "type": "number", "default": 0.05 },
+            "k_exponent": { "type": "number", "default": 1 }
+          }
+        },
+        "spectrum_file": { "type": "string", "description": "Path to SPECTRUM.TXT" },
+        "eqv_scale_factor": { "type": "number", "description": "EQV scale factor for combos" }
+      }
+    },
+    "foundation": {
+      "type": "object",
+      "properties": {
+        "kv": { "type": "number", "description": "Vertical spring stiffness (ton/m per point)" },
+        "kw": { "type": "number", "description": "Lateral spring stiffness for edge beams (ton/m/m)" },
+        "restraint_floor": { "type": "string", "description": "Floor where UX/UY restraints are applied (FS level)" },
+        "edge_beams": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Edge foundation beam identifiers for Kw springs"
+        }
+      }
+    }
+  }
+}
