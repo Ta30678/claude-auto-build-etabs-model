@@ -48,15 +48,35 @@ def place_slabs(SapModel, config, elev_map, strength_lookup):
             fc = strength_lookup.get((plan_floor, elem_type), 280)
             sec_name = f"{base_sec}C{fc}"
 
-            Z = [z] * n_pts
-
-            name = ""
-            ret = SapModel.AreaObj.AddByCoord(n_pts, X, Y, Z, name, sec_name)
-            if ret[0] == 0:
-                created.append(ret[1])
+            # FS 2x2 subdivision: split each FS slab into 4 sub-slabs
+            if is_raft and n_pts == 4:
+                min_x, max_x = min(X), max(X)
+                min_y, max_y = min(Y), max(Y)
+                mid_x = (min_x + max_x) / 2
+                mid_y = (min_y + max_y) / 2
+                sub_corners_list = [
+                    ([min_x, mid_x, mid_x, min_x], [min_y, min_y, mid_y, mid_y]),
+                    ([mid_x, max_x, max_x, mid_x], [min_y, min_y, mid_y, mid_y]),
+                    ([min_x, mid_x, mid_x, min_x], [mid_y, mid_y, max_y, max_y]),
+                    ([mid_x, max_x, max_x, mid_x], [mid_y, mid_y, max_y, max_y]),
+                ]
+                for sub_x, sub_y in sub_corners_list:
+                    sub_z = [z] * 4
+                    ret = SapModel.AreaObj.AddByCoord(4, sub_x, sub_y, sub_z, "", sec_name)
+                    if ret[0] == 0:
+                        created.append(ret[1])
+                    else:
+                        print(f"  WARN: Failed FS sub-slab {sec_name} at {plan_floor}")
+                        failed += 1
             else:
-                print(f"  WARN: Failed slab {sec_name} at {plan_floor}")
-                failed += 1
+                Z = [z] * n_pts
+                name = ""
+                ret = SapModel.AreaObj.AddByCoord(n_pts, X, Y, Z, name, sec_name)
+                if ret[0] == 0:
+                    created.append(ret[1])
+                else:
+                    print(f"  WARN: Failed slab {sec_name} at {plan_floor}")
+                    failed += 1
 
     print(f"  Slabs created: {len(created)} (failed: {failed})")
     return created

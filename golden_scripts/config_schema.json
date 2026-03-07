@@ -219,6 +219,14 @@
                 "LL": { "type": "number" }
               }
             },
+            "rooftop": {
+              "type": "object",
+              "description": "R1F~PRF rooftop zone loads",
+              "properties": {
+                "DL": { "type": "number" },
+                "LL": { "type": "number" }
+              }
+            },
             "FS": {
               "type": "object",
               "properties": {

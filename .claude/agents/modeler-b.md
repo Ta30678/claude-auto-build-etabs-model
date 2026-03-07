@@ -35,14 +35,9 @@ maxTurns: 80
 
 ## 基礎樓層規則（MANDATORY）
 
-基礎樓層 = BASE 上一層。BASE 層無任何物件。
+Foundation floor rules: see CLAUDE.md 'Foundation Floor Rules' section.
 
-你在基礎樓層負責的工作：
-- FS 基礎版（ShellThick，額外 2x2 切割）
-- 鎖點：基礎樓層節點設 UX/UY restraint
-- Kv 彈簧：基礎版節點設垂直彈簧
-- Kw 邊梁彈簧：外圍基礎梁設線彈簧
-- Diaphragm：基礎版板角點也需設定
+你在基礎樓層負責：FS 基礎版（ShellThick + 2x2 切割）、鎖點 UX/UY、Kv/Kw 彈簧、Diaphragm。
 
 ## 你的職責（按順序執行）
 
@@ -148,7 +143,7 @@ sm = etabs.SapModel
 - **板覆蓋**：必須覆蓋每個梁圍區域，用 `AreaObj.AddByCoord` 建立
 - **板切割**：樓板按大小梁邊界切割，不可用 Grid 交點直接建大板
 - **FS 基礎版額外 2x2 切割**（讓 Kv 分布更均勻）
-- **載重用 DL 不是 SDL**：SDL 預設不建立
+- **載重用 DL 不是 SDL**：SDL 絕對不建立。所有附加靜載重使用 DL pattern
 - **外牆線載重方向 = GRAVITY (正值, dir=11)**：`SetLoadDistributed(beam, "DL", 1, 11, 0, 1, w, w)` — 正值往下，負值往上（錯誤！）
 - **FS 基礎版也需要 Diaphragm**
 - 端部釋放判斷：小梁連接大梁端為不連續端，釋放 M2+M3

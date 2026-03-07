@@ -152,6 +152,23 @@ API D/B swap: T3=Depth, T2=Width (SetRectangle)
 Shell types: Membrane (2) for slabs/walls, ShellThick (1) for raft/FS
 ```
 
+### Foundation Floor Rules (MANDATORY)
+
+Foundation floor = BASE 上一層 (e.g. B3F). BASE has NO objects.
+
+| Rule | Detail |
+|------|--------|
+| Columns skip foundation floor | Column `floors` start from floor ABOVE foundation (e.g. B2F) |
+| Beams OK at foundation floor | FB/FWB/FSB beams are placed at foundation floor |
+| FS slab at foundation floor | ShellThick, RAFT_MODIFIERS, DL=0.63, LL=0 |
+| Restraints at foundation floor | UX/UY only (no UZ, no rotations) |
+| Kv springs at foundation floor | Vertical springs on all foundation floor joints |
+| Kw springs on edge FB beams | Lateral line springs on perimeter foundation beams |
+| Diaphragm on FS corners | FS slab corner points get diaphragm assignment |
+| FS 2x2 subdivision | Each FS slab auto-split into 4 for uniform Kv distribution |
+| No SDL | SDL load pattern is NEVER created. All additional dead loads use DL pattern. |
+| BS slab not modeled | 20cm BS slab above FS is not modeled; its weight included in FS DL=0.63 |
+
 ### Section Naming Convention
 - `B` = beam, `SB` = small beam, `WB` = wall beam, `FB` = foundation beam
 - `C` = column, `W` = wall, `S` = slab, `FS` = foundation slab
@@ -165,7 +182,7 @@ Shell types: Membrane (2) for slabs/walls, ShellThick (1) for raft/FS
 2. **Structural layout comes from plan images, never copied from old models.**
 3. **Building extents must be cross-referenced between structural and architectural plans.**
 4. **Mechanically equal-spaced small beam coordinates must be rejected and re-measured.**
-5. **No SDL load pattern** unless explicitly requested.
+5. **No SDL load pattern.** NEVER create SDL. All additional dead loads go under DL.
 6. **Each project is independent** — never infer from memory of other projects.
 
 ---

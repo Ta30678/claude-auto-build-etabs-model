@@ -71,6 +71,7 @@ maxTurns: 30
 ]
 ```
 **注意**：基礎樓層（BASE 上一層）不列入 floors。例如基礎層是 B3F，柱 floors 從 B2F 開始。
+Foundation floor rules: see CLAUDE.md 'Foundation Floor Rules' section.
 
 ### beams
 ```json

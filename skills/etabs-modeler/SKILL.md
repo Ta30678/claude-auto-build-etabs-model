@@ -91,6 +91,7 @@ If `EQ_PARAMS.txt` does not exist, **ask the user** for:
 | 區域 | DL | LL | 說明 |
 |------|-----|-----|------|
 | 上構樓板 (2F~RF) | 0.45 | 0.2 | 標準樓層 |
+| 屋突層 (R1F~PRF) | 0.45 | 0.3 | 屋突層 |
 | 下構樓板 (B_F~1F) | 0.15 | 0.5 | 地下室 |
 | 1F 室內 | 0.3 | 0.5 | 上構延伸至 1F 以內的範圍 |
 | 1F 室外 | 0.6 | 1.0 | 上構延伸至 1F 以外的範圍 |
@@ -458,7 +459,7 @@ SapModel.FrameObj.SetSpringAssignment(beam_name, "EdgeSpring")
 | `EQYP` | 5 (Quake)   | 0 | Seismic +Y |
 | `EQYN` | 5 (Quake)   | 0 | Seismic -Y |
 
-**SDL 預設不建立，除非使用者明確要求。**
+**SDL 絕對不建立。所有附加靜載重使用 DL pattern。**
 **Do NOT create other load pattern names** (no "Dead", "Live", "EQX", "EQY" etc.)
 
 ```python
@@ -470,7 +471,7 @@ patterns = [
     ("EQYP", 5, 0),    # Seismic +Y
     ("EQYN", 5, 0),    # Seismic -Y
 ]
-# SDL 預設不建立，除非使用者明確要求
+# SDL 絕對不建立。所有附加靜載重使用 DL pattern。
 ```
 
 **Step 22b**: Configure seismic load patterns (Auto Seismic)
@@ -496,6 +497,7 @@ For each EQ pattern, set User Coefficient parameters:
 | 區域 | DL (ton/m2) | LL (ton/m2) |
 |------|-------------|-------------|
 | 上構 (2F~RF) | 0.45 | 0.2 |
+| 屋突層 (R1F~PRF) | 0.45 | 0.3 |
 | 下構 (B_F~1F) | 0.15 | 0.5 |
 | 1F 室內 | 0.3 | 0.5 |
 | 1F 室外 | 0.6 | 1.0 |
@@ -698,7 +700,7 @@ At the start of modeling, collect these from the user:
 [ ] FS 基礎版有 DL=0.63 載重?
 [ ] 外牆線載重方向為 GRAVITY（正值，非負值）?
 [ ] Exterior wall line loads: only where beam exists above?
-[ ] 載重工況無 SDL（除非使用者要求）?
+[ ] 載重工況無 SDL（SDL 絕對不建立）?
 [ ] Load patterns correct? (DL/LL/EQXP/EQXN/EQYP/EQYN)
 [ ] EQ params: ECC=0.05, K=1, Top=PRF, Bottom=1F, C=user value?
 [ ] Response spectrum imported FROM FILE (SPECTRUM.TXT)?
@@ -771,7 +773,7 @@ At the start of modeling, collect these from the user:
 - Use ShellThick for regular slabs (use Membrane, except raft)
 - Assume concrete grades -- always reference the strength allocation table
 - **Skip steps when working with existing models**
-- **不要建立 SDL（除非使用者要求）**
+- **SDL 絕對不建立。所有附加靜載重使用 DL pattern。**
 - **Create "Dead", "Live", "EQX", "EQY" load patterns (use DL/LL/EQXP...)**
 - **Create new RSX/RSY load cases (modify existing 0SPECX/0SPECXY)**
 - **Assign exterior wall load to beams with no beam above**

@@ -118,6 +118,7 @@
   "loads": {
     "zone_defaults": {
       "superstructure": {"DL": 0.45, "LL": 0.2},
+      "rooftop":        {"DL": 0.45, "LL": 0.3},
       "substructure":   {"DL": 0.15, "LL": 0.5},
       "1F_indoor":      {"DL": 0.3,  "LL": 0.5},
       "1F_outdoor":     {"DL": 0.6,  "LL": 1.0},

@@ -69,9 +69,13 @@ ZERO_SPRINGS = [0.0] * 6
 BASE_RESTRAINT = [True, True, False, False, False, False]  # UX, UY only
 
 # ── Default Loads (ton/m2) ───────────────────────────────────
+# FS DL = 2.4(gamma_c) * 0.2(BS slab 20cm, not modeled) + 0.15(substructure DL) = 0.63
+# BS slab sits above FS at foundation level; only its weight is considered, not strength.
+# SDL is NEVER created. All additional dead loads use DL pattern.
 DEFAULT_LOADS = {
-    "superstructure": {"DL": 0.45, "LL": 0.2},
-    "substructure":   {"DL": 0.15, "LL": 0.5},
+    "superstructure": {"DL": 0.45, "LL": 0.2},    # 2F~RF
+    "rooftop":        {"DL": 0.45, "LL": 0.3},    # R1F~PRF
+    "substructure":   {"DL": 0.15, "LL": 0.5},    # B_F~1F
     "1F_indoor":      {"DL": 0.3,  "LL": 0.5},
     "1F_outdoor":     {"DL": 0.6,  "LL": 1.0},
     "FS":             {"DL": 0.63, "LL": 0},

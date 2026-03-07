@@ -47,15 +47,16 @@ argument-hint: "[樓層說明或附加指示]"
 | 1 | 結構配置圖 | 路徑 `{Case Folder}/結構配置圖/` | 自動掃描 |
 | 2 | 樓層高度表 | 各樓層高度 (m)，含基礎層 | **無，必問** |
 | 3 | 強度分配表 | 混凝土等級 by 樓層區段 | **無，必問** |
-| 4 | LL 值 | ton/m2 | 0.3 |
-| 5 | 基礎 Kv | 彈簧係數 | 可選 |
-| 6 | 邊梁 Kw | 側邊彈簧 | 可選 |
-| 7 | 反應譜檔案 | SPECTRUM.TXT | 可選 |
-| 8 | Base Shear C | 地震力係數 | 可選 |
-| 9 | EQV Scale Factor | 放大係數 | 可選 |
-| 10 | 板厚 | 各區 (cm) | **無，必問** |
-| 11 | 基礎樓層 | BASE 上一層 | **無，必問** |
-| 12 | EDB 存檔路徑 | 模型檔路徑 | **無，必問** |
+| 4 | 基礎 Kv | 彈簧係數 | 可選 |
+| 5 | 邊梁 Kw | 側邊彈簧 | 可選 |
+| 6 | 反應譜檔案 | SPECTRUM.TXT | 可選 |
+| 7 | Base Shear C | 地震力係數 | 可選 |
+| 8 | EQV Scale Factor | 放大係數 | 可選 |
+| 9 | 板厚 | 各區 (cm) | **無，必問** |
+| 10 | 基礎樓層 | BASE 上一層 | **無，必問** |
+| 11 | EDB 存檔路徑 | 模型檔路徑 | **無，必問** |
+
+> **LL values are zone-based defaults (see CLAUDE.md). No user input needed.**
 
 ### Phase 1: 建立 Team + 創建任務
 
@@ -132,7 +133,6 @@ Agent(
 - 強度分配表：[強度分配]
 - 板厚：[板厚]
 - 基礎樓層：[基礎樓層]
-- LL 值：[LIVE_VALUE] ton/m2
 - 基礎 Kv：[KV_VALUE]
 - 邊梁 Kw：[KW_VALUE]
 - EDB 存檔路徑：[SAVE_PATH]

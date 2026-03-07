@@ -51,6 +51,43 @@ def test_area_loads_assigned(SapModel):
     assert ret[5] > 0, "No area uniform loads assigned"
 
 
+def test_rooftop_ll_value(SapModel, request):
+    """Rooftop floors (R1F~PRF) should have LL=0.3 if they have area loads."""
+    import re
+
+    ret = SapModel.DatabaseTables.GetTableForDisplayArray(
+        "Area Loads - Uniform", [], "All", 0, [], 0, [])
+    if ret[0] != 0 or ret[5] == 0:
+        pytest.skip("No area loads table or no loads assigned")
+
+    fields = list(ret[4])
+    data = list(ret[6])
+    nf = len(fields)
+
+    story_idx = fields.index("Story") if "Story" in fields else -1
+    pattern_idx = fields.index("Pattern") if "Pattern" in fields else -1
+    value_idx = fields.index("Load") if "Load" in fields else -1
+
+    if story_idx < 0 or pattern_idx < 0 or value_idx < 0:
+        pytest.skip("Required fields not in area loads table")
+
+    rooftop_ll_values = []
+    for i in range(ret[5]):
+        row = data[i*nf:(i+1)*nf]
+        story = row[story_idx]
+        pattern = row[pattern_idx]
+        is_rooftop = bool(re.match(r'^R\d*F$', story) or story == "PRF")
+        if is_rooftop and pattern == "LL":
+            rooftop_ll_values.append((story, abs(float(row[value_idx]))))
+
+    if not rooftop_ll_values:
+        pytest.skip("No rooftop LL loads found (model may not have rooftop floors)")
+
+    for story, ll_val in rooftop_ll_values:
+        assert abs(ll_val - 0.3) < 0.05, (
+            f"Rooftop {story} LL={ll_val}, expected 0.3")
+
+
 def test_dl_self_weight(SapModel):
     """DL pattern should have self-weight multiplier = 1."""
     ret = SapModel.DatabaseTables.GetTableForDisplayArray(

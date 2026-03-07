@@ -9,6 +9,7 @@ Golden Script 10: Load Patterns and Assignments
 - Assigns foundation springs and restraints
 """
 import json
+import re
 import sys
 import os
 
@@ -17,6 +18,11 @@ from constants import (
     STANDARD_LOAD_PATTERNS, DEFAULT_LOADS, BASE_RESTRAINT,
     EXT_WALL_THICKNESS, EXT_WALL_UNIT_WEIGHT, EXT_WALL_OPENING_FACTOR,
 )
+
+
+def _is_rooftop_story(story_name):
+    """Check if a story is a rooftop story (R1F, R2F, R3F, PRF, etc.)."""
+    return bool(re.match(r'^R\d*F$', story_name) or story_name == "PRF")
 
 
 def define_load_patterns(SapModel, config):
@@ -86,6 +92,8 @@ def assign_slab_loads(SapModel, config, elev_map):
         for plan_floor in slab["floors"]:
             if is_raft:
                 zone = "FS"
+            elif _is_rooftop_story(plan_floor):
+                zone = "rooftop"
             elif plan_floor == "1F":
                 zone = "1F_indoor"
             elif plan_floor.startswith("B"):
@@ -123,6 +131,8 @@ def assign_slab_loads(SapModel, config, elev_map):
                 is_raft = section.startswith("FS")
                 if is_raft:
                     zone = "FS"
+                elif _is_rooftop_story(story):
+                    zone = "rooftop"
                 elif story == "1F":
                     zone = "1F_indoor"
                 elif story.startswith("B"):

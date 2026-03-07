@@ -47,22 +47,9 @@ maxTurns: 80
 
 ## 基礎樓層規則（MANDATORY）
 
-基礎樓層 = BASE 上一層。
+Foundation floor rules: see CLAUDE.md 'Foundation Floor Rules' section.
 
-```
-BASE 層：純參考高程，不會有任何物件。
-基礎樓層（例如 B3F）：
-  ✅ FS 基礎版（由 MODELER-B 建立）
-  ✅ 鎖點 UX/UY（由 MODELER-B 設置）
-  ✅ Kv 彈簧（由 MODELER-B 設置）
-  ✅ Kw 邊梁彈簧（由 MODELER-B 設置）
-  ❌ 不建立柱往 BASE（ETABS 中不在基礎樓層 story 建柱）
-
-柱從基礎樓層的上一層 story 開始建立。
-  例：BASE=-13.6m, 基礎樓層=B3F
-    → B3F story 不建柱（否則會產生 BASE→B3F 柱段）
-    → 柱從 B2F story 開始（柱底端點在 B3F 高程）
-```
+**關鍵**：基礎樓層（BASE 上一層）不建柱。柱從基礎樓層的上一層 story 開始建立。
 
 ## 參數強制確認規則（MANDATORY）
 
