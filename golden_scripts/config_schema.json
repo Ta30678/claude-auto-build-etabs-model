@@ -270,6 +270,27 @@
           "description": "Edge foundation beam identifiers for Kw springs"
         }
       }
+    },
+    "iteration": {
+      "type": "object",
+      "description": "Optional overrides for gs_12 iteration thresholds. All have defaults in constants.py.",
+      "properties": {
+        "max_iterations": { "type": "integer", "default": 5, "description": "Maximum iteration count" },
+        "col_rebar_downsize": { "type": "number", "default": 0.01, "description": "Column rebar ratio threshold for downsize (<=)" },
+        "col_rebar_max": { "type": "number", "default": 0.04, "description": "Column rebar ratio threshold for upsize (>)" },
+        "col_resize_step": { "type": "integer", "default": 10, "description": "Column resize step in cm (both W and D)" },
+        "beam_rebar_min": { "type": "number", "default": 0.01, "description": "Beam rebar ratio threshold for downsize (<)" },
+        "beam_rebar_max": { "type": "number", "default": 0.02, "description": "Beam rebar ratio threshold for upsize (>)" },
+        "beam_resize_step": { "type": "integer", "default": 5, "description": "Beam resize step in cm" },
+        "beam_max_width_ratio": { "type": "number", "default": 1.2, "description": "Max W/D ratio before switching to depth increase" },
+        "design_code": { "type": "string", "default": "ACI 318-19", "description": "Concrete design code name" },
+        "skip_prefixes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["FB", "FSB", "FWB"],
+          "description": "Frame section prefixes to exclude from iteration"
+        }
+      }
     }
   }
 }

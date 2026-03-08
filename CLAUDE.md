@@ -44,8 +44,13 @@ claude-auto-build-etabs-model/
 │   ├── constants.py                       # All hardcoded rules (modifiers, rebar, parsing)
 │   ├── config_schema.json                 # JSON Schema for model_config.json
 │   ├── example_config.json                # A21 reference config
-│   ├── gs_01_init.py → gs_11_diaphragms.py  # 11 sequential build steps
-│   └── __init__.py
+│   ├── __init__.py
+│   ├── modeling/                           # 11 sequential build steps
+│   │   ├── __init__.py
+│   │   ├── gs_01_init.py → gs_11_diaphragms.py
+│   └── design/                            # Analysis-design iteration
+│       ├── __init__.py
+│       └── gs_12_iterate.py
 ├── tests/                                 # pytest verification suite (requires running ETABS)
 │   ├── conftest.py                        # SapModel fixture, --config option, all_frames cache
 │   ├── test_units.py                      # Units = TON/M (12)
@@ -120,22 +125,31 @@ pytest -v -k test_sections                        # run single test
 
 ## Golden Scripts Architecture
 
-The 11 golden scripts (`gs_01` through `gs_11`) are **deterministic** — they read `model_config.json` and execute ETABS API calls with no AI reasoning. All structural engineering rules are hardcoded in `golden_scripts/constants.py`.
+The golden scripts are split into two sub-packages under `golden_scripts/`:
+- **`modeling/`** (gs_01–gs_11): Deterministic model construction — reads `model_config.json` and executes ETABS API calls with no AI reasoning.
+- **`design/`** (gs_12+): Analysis-design iteration and optimization.
 
-### Pipeline Steps
+All structural engineering rules are hardcoded in `golden_scripts/constants.py`.
+
+### Modeling Steps (01–11)
 | Step | Script | What it does |
 |------|--------|-------------|
-| 01 | gs_01_init.py | New model + materials (C280–C490, SD420/SD490) |
-| 02 | gs_02_sections.py | Batch section expansion + D/B swap + rebar + area modifiers |
-| 03 | gs_03_grid_stories.py | Grid system + story definitions |
-| 04 | gs_04_columns.py | Columns with +1 floor rule built-in |
-| 05 | gs_05_walls.py | Walls with +1 floor rule, diaphragm walls → C280 |
-| 06 | gs_06_beams.py | Beams (B, WB, FB) |
-| 07 | gs_07_small_beams.py | Small beams (SB) from explicit coordinates |
-| 08 | gs_08_slabs.py | Slabs (S=Membrane, FS=ShellThick) |
-| 09 | gs_09_properties.py | Modifiers + rigid zone (0.75) + end releases |
-| 10 | gs_10_loads.py | DL/LL/EQ + response spectrum + foundation springs |
-| 11 | gs_11_diaphragms.py | Diaphragm assignment at slab corner points |
+| 01 | modeling/gs_01_init.py | New model + materials (C280–C490, SD420/SD490) |
+| 02 | modeling/gs_02_sections.py | Batch section expansion + D/B swap + rebar + area modifiers |
+| 03 | modeling/gs_03_grid_stories.py | Grid system + story definitions |
+| 04 | modeling/gs_04_columns.py | Columns with +1 floor rule built-in |
+| 05 | modeling/gs_05_walls.py | Walls with +1 floor rule, diaphragm walls → C280 |
+| 06 | modeling/gs_06_beams.py | Beams (B, WB, FB) |
+| 07 | modeling/gs_07_small_beams.py | Small beams (SB) from explicit coordinates |
+| 08 | modeling/gs_08_slabs.py | Slabs (S=Membrane, FS=ShellThick) |
+| 09 | modeling/gs_09_properties.py | Modifiers + rigid zone (0.75) + end releases |
+| 10 | modeling/gs_10_loads.py | DL/LL/EQ + response spectrum + foundation springs |
+| 11 | modeling/gs_11_diaphragms.py | Diaphragm assignment at slab corner points |
+
+### Design Steps (12)
+| Step | Script | What it does |
+|------|--------|-------------|
+| 12 | design/gs_12_iterate.py | Analysis-design iteration (ACI 318-19 rebar ratio optimization) |
 
 ### Key Constants (from `constants.py`)
 ```

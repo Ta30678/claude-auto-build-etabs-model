@@ -53,7 +53,7 @@ The model folder (case folder) should contain:
 ```
 # Earthquake Parameters
 BASE_SHEAR_C=0.072
-EQV_SCALE_FACTOR=4.5
+EQV_SCALE_FACTOR=0.12
 ```
 
 If `EQ_PARAMS.txt` does not exist, **ask the user** for:

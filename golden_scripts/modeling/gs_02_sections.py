@@ -13,7 +13,9 @@ import json
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(__file__))
+_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
+sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import (
     CONCRETE_GRADES, EXPAND_RANGE, EXPAND_STEP,
     MIN_BEAM_W, MIN_BEAM_D, MIN_COL_DIM,

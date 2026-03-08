@@ -18,20 +18,21 @@ import argparse
 sys.path.insert(0, os.path.dirname(__file__))
 
 from constants import build_strength_lookup
-import gs_01_init
-import gs_02_sections
-import gs_03_grid_stories
-import gs_04_columns
-import gs_05_walls
-import gs_06_beams
-import gs_07_small_beams
-import gs_08_slabs
-import gs_09_properties
-import gs_10_loads
-import gs_11_diaphragms
+from modeling import gs_01_init
+from modeling import gs_02_sections
+from modeling import gs_03_grid_stories
+from modeling import gs_04_columns
+from modeling import gs_05_walls
+from modeling import gs_06_beams
+from modeling import gs_07_small_beams
+from modeling import gs_08_slabs
+from modeling import gs_09_properties
+from modeling import gs_10_loads
+from modeling import gs_11_diaphragms
+from design import gs_12_iterate
 
 
-STEPS = {
+MODELING_STEPS = {
     1:  ("Init + Materials",     gs_01_init),
     2:  ("Sections",             gs_02_sections),
     3:  ("Grids + Stories",      gs_03_grid_stories),
@@ -44,6 +45,10 @@ STEPS = {
     10: ("Loads",                gs_10_loads),
     11: ("Diaphragms",           gs_11_diaphragms),
 }
+DESIGN_STEPS = {
+    12: ("Iterate",              gs_12_iterate),
+}
+STEPS = {**MODELING_STEPS, **DESIGN_STEPS}
 
 
 def run_all(config, steps_to_run=None, dry_run=False):
@@ -100,6 +105,8 @@ def run_all(config, steps_to_run=None, dry_run=False):
                 module.run(SapModel, config, elev_map)
             elif num == 11:
                 module.run(SapModel, config)
+            elif num == 12:
+                module.run(SapModel, config)
 
             elapsed = time.time() - step_start
             print(f"  [{elapsed:.1f}s]\n")
@@ -136,7 +143,7 @@ def main():
     parser = argparse.ArgumentParser(description="Golden Scripts - ETABS Model Builder")
     parser.add_argument("--config", required=True, help="Path to model_config.json")
     parser.add_argument("--steps", type=str, default=None,
-                        help="Comma-separated step numbers to run (e.g. '1,2,3')")
+                        help="Step numbers (e.g. '1,2,3') or alias ('modeling', 'design')")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would be done without executing")
     args = parser.parse_args()
@@ -146,7 +153,12 @@ def main():
 
     steps = None
     if args.steps:
-        steps = set(int(s.strip()) for s in args.steps.split(","))
+        if args.steps.lower() == "modeling":
+            steps = set(MODELING_STEPS.keys())
+        elif args.steps.lower() == "design":
+            steps = set(DESIGN_STEPS.keys())
+        else:
+            steps = set(int(s.strip()) for s in args.steps.split(","))
 
     run_all(config, steps, args.dry_run)
 

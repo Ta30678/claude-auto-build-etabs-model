@@ -214,17 +214,17 @@ SendMessage(type="shutdown_request", recipient="CONFIG-BUILDER")
 
 | Step | 腳本 | 功能 | 典型錯誤消除 |
 |------|------|------|-------------|
-| 01 | gs_01_init.py | 材料 C280~C490 + SD420/SD490 | - |
-| 02 | gs_02_sections.py | 斷面展開 + D/B + rebar + area modifier | D/B swap |
-| 03 | gs_03_grid_stories.py | Grid + Stories | - |
-| 04 | gs_04_columns.py | 柱 (+1 rule 內建) | +1 遺忘 |
-| 05 | gs_05_walls.py | 牆 (+1 rule + diaphragm=C280) | - |
-| 06 | gs_06_beams.py | 大梁/壁梁/基礎梁 | - |
-| 07 | gs_07_small_beams.py | 小梁 | - |
-| 08 | gs_08_slabs.py | 板（含 FS ShellThick） | Shell Type 錯 |
-| 09 | gs_09_properties.py | Modifier + RZ=0.75 + 釋放 | Modifier 值錯 |
-| 10 | gs_10_loads.py | DL/LL/EQ + 反應譜 + 基礎 | 載重方向 |
-| 11 | gs_11_diaphragms.py | Diaphragm (slab corner only) | 漏 FS diaphragm |
+| 01 | modeling/gs_01_init.py | 材料 C280~C490 + SD420/SD490 | - |
+| 02 | modeling/gs_02_sections.py | 斷面展開 + D/B + rebar + area modifier | D/B swap |
+| 03 | modeling/gs_03_grid_stories.py | Grid + Stories | - |
+| 04 | modeling/gs_04_columns.py | 柱 (+1 rule 內建) | +1 遺忘 |
+| 05 | modeling/gs_05_walls.py | 牆 (+1 rule + diaphragm=C280) | - |
+| 06 | modeling/gs_06_beams.py | 大梁/壁梁/基礎梁 | - |
+| 07 | modeling/gs_07_small_beams.py | 小梁 | - |
+| 08 | modeling/gs_08_slabs.py | 板（含 FS ShellThick） | Shell Type 錯 |
+| 09 | modeling/gs_09_properties.py | Modifier + RZ=0.75 + 釋放 | Modifier 值錯 |
+| 10 | modeling/gs_10_loads.py | DL/LL/EQ + 反應譜 + 基礎 | 載重方向 |
+| 11 | modeling/gs_11_diaphragms.py | Diaphragm (slab corner only) | 漏 FS diaphragm |
 
 ---
 

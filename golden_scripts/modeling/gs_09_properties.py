@@ -11,7 +11,9 @@ import json
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(__file__))
+_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
+sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import (
     BEAM_MODIFIERS, COL_MODIFIERS,
     RIGID_ZONE_FACTOR,

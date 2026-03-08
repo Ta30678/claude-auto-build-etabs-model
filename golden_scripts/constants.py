@@ -68,6 +68,28 @@ ZERO_SPRINGS = [0.0] * 6
 # ── Foundation ───────────────────────────────────────────────
 BASE_RESTRAINT = [True, True, False, False, False, False]  # UX, UY only
 
+# ── Iteration Thresholds ──────────────────────────────────
+COL_REBAR_DOWNSIZE = 0.01    # = 1% (ETABS code minimum) -> downsize
+COL_REBAR_MAX = 0.04         # > 4% -> upsize
+COL_RESIZE_STEP = 10         # cm (both W and D)
+
+BEAM_REBAR_MIN = 0.01        # < 1% -> downsize
+BEAM_REBAR_MAX = 0.02        # > 2% -> upsize
+BEAM_RESIZE_STEP = 5         # cm
+BEAM_MAX_WIDTH_RATIO = 1.2   # W <= 1.2*D, then switch to D increase
+
+MAX_ITERATIONS = 5
+DESIGN_CODE = "ACI 318-19"
+ITER_SKIP_PREFIXES = ["FB", "FSB", "FWB"]  # foundation beams excluded
+
+# ── Sway Frame Types (ACI318_19.SetOverwrite Item=1) ─────
+SWAY_SPECIAL = 1   # Value 1 = Sway Special
+SWAY_ORDINARY = 3  # Value 3 = Sway Ordinary
+
+# ── Design Load Combinations (fixed) ─────────────────────
+SUPER_COMBOS = ["USS01", "USS02"] + [f"USS{i}S" for i in range(68, 84)]  # 18 combos
+SUB_COMBOS = [f"BUSS{i:02d}" for i in range(1, 68)]  # 67 combos
+
 # ── Default Loads (ton/m2) ───────────────────────────────────
 # FS DL = 2.4(gamma_c) * 0.2(BS slab 20cm, not modeled) + 0.15(substructure DL) = 0.63
 # BS slab sits above FS at foundation level; only its weight is considered, not strength.
