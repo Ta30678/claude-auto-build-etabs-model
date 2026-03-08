@@ -41,16 +41,23 @@ claude-auto-build-etabs-model/
 ├── CLAUDE.md                              # This file
 ├── golden_scripts/                        # Deterministic model-building pipeline
 │   ├── run_all.py                         # Master orchestrator (--config, --steps, --dry-run)
-│   ├── constants.py                       # All hardcoded rules (modifiers, rebar, parsing)
+│   ├── constants.py                       # All hardcoded rules (modifiers, rebar, parsing, story classification)
 │   ├── config_schema.json                 # JSON Schema for model_config.json
 │   ├── example_config.json                # A21 reference config
 │   ├── __init__.py
 │   ├── modeling/                           # 11 sequential build steps
 │   │   ├── __init__.py
 │   │   ├── gs_01_init.py → gs_11_diaphragms.py
-│   └── design/                            # Analysis-design iteration
+│   ├── design/                            # Analysis-design iteration
+│   │   ├── __init__.py
+│   │   └── gs_12_iterate.py
+│   └── tools/                             # E2K split/merge utilities
 │       ├── __init__.py
-│       └── gs_12_iterate.py
+│       ├── e2k_parser.py                  # General e2k parser (E2KModel class)
+│       ├── e2k_writer.py                  # E2k output (section ordering, formatting)
+│       ├── unit_converter.py              # Unit detection & conversion
+│       ├── gs_split.py                    # Split multi-building → single-building e2k
+│       └── gs_merge.py                    # Merge single-building e2k files → unified model
 ├── tests/                                 # pytest verification suite (requires running ETABS)
 │   ├── conftest.py                        # SapModel fixture, --config option, all_frames cache
 │   ├── test_units.py                      # Units = TON/M (12)
@@ -62,6 +69,9 @@ claude-auto-build-etabs-model/
 │   ├── test_loads.py                      # DL/LL/EQ patterns, no SDL, DL self-weight=1
 │   └── test_element_counts.py             # Frames, areas, columns, beams, stories exist
 ├── skills/
+│   ├── structural-glossary/SKILL.md       # Canonical structural terminology (上構/下構/屋突/共構)
+│   ├── e2k-split/SKILL.md                 # E2K split tool SOP
+│   ├── e2k-merge/SKILL.md                 # E2K merge tool SOP
 │   ├── plan-reader/SKILL.md               # Structural plan image reading SOP
 │   ├── etabs-modeler/SKILL.md             # Manual ETABS modeling skill (legacy)
 │   ├── etabs-modeler/references/          # modifier-rebar-rules.md, section-parsing-rules.md,
@@ -74,10 +84,14 @@ claude-auto-build-etabs-model/
 │   │   ├── sb-reader.md                   # SB-READER: small beam pixel measurement
 │   │   ├── config-builder.md              # CONFIG-BUILDER: generates model_config.json (bts-gs)
 │   │   ├── modeler-a.md                   # MODELER-A: materials/sections/columns/walls (legacy bts)
-│   │   └── modeler-b.md                   # MODELER-B: beams/slabs/loads/properties (legacy bts)
+│   │   ├── modeler-b.md                   # MODELER-B: beams/slabs/loads/properties (legacy bts)
+│   │   ├── e2k-splitter.md               # E2K-SPLITTER: split multi-building e2k
+│   │   └── e2k-merger.md                 # E2K-MERGER: merge building e2k files
 │   └── commands/
 │       ├── bts-gs.md                      # /bts-gs slash command (Golden Scripts flow)
-│       └── bts.md                         # /bts slash command (legacy 4-agent flow)
+│       ├── bts.md                         # /bts slash command (legacy 4-agent flow)
+│       ├── split.md                       # /split slash command (e2k split)
+│       └── merge.md                       # /merge slash command (e2k merge)
 ├── api_docs/                              # Raw ETABS API HTML docs (1693 files)
 │   ├── CSI API ETABS v1.hhc              # Searchable TOC
 │   └── html/                              # Individual method documentation
@@ -87,7 +101,6 @@ claude-auto-build-etabs-model/
 │   ├── group_b_analysis.md                # Modeling, Properties, Database Tables
 │   ├── categories.json                    # Interface-to-category mapping
 │   └── full_toc.json                      # Complete TOC
-├── scripts/                               # Ad-hoc scripts (historical, one-off)
 └── models/                                # Output model files (.EDB)
 ```
 
@@ -121,13 +134,40 @@ pytest -v -k test_sections                        # run single test
 - `/bts-gs [description]` — 3-agent team + Golden Scripts (READER + SB-READER + CONFIG-BUILDER)
 - `/bts [description]` — Legacy 4-agent team (READER + SB-READER + MODELER-A + MODELER-B)
 
+### E2K Split/Merge Tools
+```bash
+# Split: extract single building from multi-building e2k
+python -m golden_scripts.tools.gs_split --input all.e2k --building DA --output A.e2k
+python -m golden_scripts.tools.gs_split --input all.e2k --list-buildings
+
+# Merge: combine building e2k files into one model
+python -m golden_scripts.tools.gs_merge --base sub.e2k --buildings A=A.e2k B=B.e2k --output merged.e2k
+```
+
+### Slash commands (E2K Tools)
+- `/split [input] [building_id] [output]` — Split multi-building e2k
+- `/merge [base] [PREFIX=path ...] [output]` — Merge building e2k files
+
+---
+
+## Structural Terminology (see `skills/structural-glossary/SKILL.md`)
+
+| 術語 | English | 判斷邏輯 | Python function |
+|------|---------|---------|-----------------|
+| 下構 | substructure | `B*F`, `1F`, `BASE` | `constants.is_substructure_story()` |
+| 上構 | superstructure | `1MF`, `2F`~`RF` | `constants.is_superstructure_story()` |
+| 屋突 | rooftop | `R*F`, `PRF` | `constants.is_rooftop_story()` |
+| 共構 | shared sub | 多棟共用下構 | — |
+| 分棟 | building split | 靠 Diaphragm Name 辨識 | `gs_split.discover_buildings()` |
+
 ---
 
 ## Golden Scripts Architecture
 
-The golden scripts are split into two sub-packages under `golden_scripts/`:
+The golden scripts are split into three sub-packages under `golden_scripts/`:
 - **`modeling/`** (gs_01–gs_11): Deterministic model construction — reads `model_config.json` and executes ETABS API calls with no AI reasoning.
 - **`design/`** (gs_12+): Analysis-design iteration and optimization.
+- **`tools/`**: E2K split/merge utilities — e2k parser, writer, unit converter, split, merge.
 
 All structural engineering rules are hardcoded in `golden_scripts/constants.py`.
 

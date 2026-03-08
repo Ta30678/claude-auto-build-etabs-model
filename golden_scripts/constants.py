@@ -1,6 +1,11 @@
 """
 Shared constants for Golden Scripts.
 All deterministic values that were previously re-derived by AI each session.
+
+Story classification functions (see skills/structural-glossary/SKILL.md):
+  is_substructure_story(name)   — B*F, 1F, BASE
+  is_superstructure_story(name) — 1MF, 2F~RF (excludes rooftop)
+  is_rooftop_story(name)        — R*F, PRF
 """
 import re
 
@@ -228,3 +233,48 @@ def build_strength_lookup(strength_map_config, all_stories):
             for elem_type, fc in grades.items():
                 lookup[(story, elem_type)] = fc
     return lookup
+
+
+# ── Story Classification (see skills/structural-glossary/SKILL.md) ──
+
+SUBSTRUCTURE_PATTERNS = [
+    re.compile(r'^B\d+F$'),     # B1F, B2F, ...
+    re.compile(r'^1F$'),        # 1F
+    re.compile(r'^BASE$'),      # BASE
+]
+
+ROOFTOP_PATTERNS = [
+    re.compile(r'^R\d*F$'),     # RF, R1F, R2F, R3F, ...
+    re.compile(r'^PRF$'),       # PRF
+]
+
+
+def is_substructure_story(name):
+    """Check if story belongs to substructure (下構): B*F, 1F, BASE."""
+    return any(p.match(name) for p in SUBSTRUCTURE_PATTERNS)
+
+
+def is_rooftop_story(name):
+    """Check if story belongs to rooftop (屋突): R*F, PRF."""
+    return any(p.match(name) for p in ROOFTOP_PATTERNS)
+
+
+def is_superstructure_story(name):
+    """Check if story belongs to superstructure (上構): 1MF, 2F~RF (excludes rooftop)."""
+    return not is_substructure_story(name) and not is_rooftop_story(name)
+
+
+def classify_story(name):
+    """Classify a story name. Returns 'substructure', 'superstructure', or 'rooftop'."""
+    if is_substructure_story(name):
+        return "substructure"
+    if is_rooftop_story(name):
+        return "rooftop"
+    return "superstructure"
+
+
+def get_above_ground_stories(story_names):
+    """Filter story names to only above-ground (superstructure + rooftop).
+    Used for split/merge: these are the stories that belong to individual buildings.
+    """
+    return [s for s in story_names if not is_substructure_story(s)]
