@@ -5,6 +5,7 @@ No ETABS connection required.
 import sys
 import os
 import pytest
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "golden_scripts"))
 from design.gs_12_iterate import (
@@ -15,6 +16,8 @@ from design.gs_12_iterate import (
     enforce_column_constraints,
     make_section_name,
     is_rooftop_ordinary,
+    build_config_from_etabs,
+    classify_floors,
 )
 
 
@@ -283,3 +286,90 @@ class TestIsRooftopOrdinary:
 
     def test_basement(self):
         assert is_rooftop_ordinary("B2F") is False
+
+
+# ── build_config_from_etabs ─────────────────────────────
+
+def _make_mock_sapmodel():
+    """Create a mock SapModel with realistic story and frame data."""
+    sm = MagicMock()
+
+    # Stories: returned top-to-bottom by ETABS
+    # 3 stories: B1F (elev=0), 1F (elev=4.2), 2F (elev=7.5), RF (elev=10.8)
+    sm.Story.GetStories_2.return_value = (
+        -3.3,           # BaseElevation
+        4,              # NumberStories
+        ("RF", "2F", "1F", "B1F"),       # StoryNames (top-to-bottom)
+        (10.8, 7.5, 4.2, 0.0),          # StoryElevations
+        (3.3, 3.3, 4.2, 3.3),           # StoryHeights
+        (True, True, True, True),        # IsMaster
+        ("None", "None", "None", "None"),  # SimilarTo
+        (False, False, False, False),    # SpliceAbove
+        (0.0, 0.0, 0.0, 0.0),           # SpliceHeight
+        (0, 0, 0, 0),                   # Color
+    )
+
+    # Frames: 2 columns (vertical) + 2 beams (horizontal)
+    sm.FrameObj.GetAllFrames.return_value = (
+        4,                                          # count
+        ("C1", "C2", "B1", "B2"),                  # names
+        ("C80X80C420", "C80X80C350", "B55X80C350", "B55X80C420"),  # props
+        ("1F", "2F", "2F", "1F"),                  # stories
+        (0, 0, 0, 0),                              # dummy
+        (0, 0, 0, 0),                              # dummy
+        (0.0, 0.0, 0.0, 0.0),                     # pt1x
+        (0.0, 0.0, 0.0, 0.0),                     # pt1y
+        (4.2, 7.5, 7.5, 4.2),                     # pt1z
+        (0.0, 0.0, 6.0, 6.0),                     # pt2x
+        (0.0, 0.0, 0.0, 0.0),                     # pt2y
+        (7.5, 10.8, 7.5, 4.2),                    # pt2z
+        (0,), (0,), (0,), (0,), (0,), (0,), (0,), (0,),  # remaining fields
+    )
+
+    return sm
+
+
+class TestBuildConfigFromEtabs:
+    def test_stories_order(self):
+        """Stories should be sorted bottom-to-top by elevation."""
+        sm = _make_mock_sapmodel()
+        config = build_config_from_etabs(sm)
+        names = [s["name"] for s in config["stories"]]
+        assert names == ["B1F", "1F", "2F", "RF"]
+
+    def test_base_elevation(self):
+        sm = _make_mock_sapmodel()
+        config = build_config_from_etabs(sm)
+        assert config["base_elevation"] == -3.3
+
+    def test_strength_map_columns(self):
+        """Column fc inferred from section names per story."""
+        sm = _make_mock_sapmodel()
+        config = build_config_from_etabs(sm)
+        smap = config["strength_map"]
+        assert smap["1F"]["column"] == 420
+        assert smap["2F"]["column"] == 350
+
+    def test_strength_map_beams(self):
+        """Beam fc inferred from section names per story."""
+        sm = _make_mock_sapmodel()
+        config = build_config_from_etabs(sm)
+        smap = config["strength_map"]
+        assert smap["2F"]["beam"] == 350
+        assert smap["1F"]["beam"] == 420
+
+    def test_classify_floors_roundtrip(self):
+        """Auto-extracted config works with classify_floors."""
+        sm = _make_mock_sapmodel()
+        config = build_config_from_etabs(sm)
+        super_s, sub_s, elevs, all_names = classify_floors(config)
+        assert "B1F" in sub_s
+        assert "1F" in sub_s
+        assert "2F" in super_s
+        assert "RF" in super_s
+
+    def test_iteration_defaults(self):
+        """iteration key should be empty dict (use constants defaults)."""
+        sm = _make_mock_sapmodel()
+        config = build_config_from_etabs(sm)
+        assert config["iteration"] == {}

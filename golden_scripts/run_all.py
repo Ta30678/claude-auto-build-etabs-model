@@ -55,9 +55,11 @@ def run_all(config, steps_to_run=None, dry_run=False):
     """Run all golden scripts in sequence."""
     start_time = time.time()
 
+    project_name = config.get('project', {}).get('name', 'Unknown') if config else '(auto)'
+
     print("=" * 70)
     print("  GOLDEN SCRIPTS - ETABS Model Builder")
-    print(f"  Project: {config.get('project', {}).get('name', 'Unknown')}")
+    print(f"  Project: {project_name}")
     print(f"  Steps: {steps_to_run if steps_to_run else 'ALL'}")
     print("=" * 70)
 
@@ -71,10 +73,14 @@ def run_all(config, steps_to_run=None, dry_run=False):
     # Connect to ETABS
     SapModel = gs_01_init.connect_etabs(config)
 
-    # Prepare shared data
-    all_stories = [s["name"] for s in config.get("stories", [])]
-    strength_lookup = build_strength_lookup(
-        config.get("strength_map", {}), all_stories)
+    # Prepare shared data (skip if config=None, step 12 handles it internally)
+    if config is not None:
+        all_stories = [s["name"] for s in config.get("stories", [])]
+        strength_lookup = build_strength_lookup(
+            config.get("strength_map", {}), all_stories)
+    else:
+        all_stories = []
+        strength_lookup = {}
 
     elev_map = None
     results = {}
@@ -119,7 +125,7 @@ def run_all(config, steps_to_run=None, dry_run=False):
             break
 
     # Save model
-    save_path = config.get("project", {}).get("save_path")
+    save_path = config.get("project", {}).get("save_path") if config else None
     if save_path:
         ret = SapModel.File.Save(save_path)
         if ret == 0:
@@ -141,15 +147,13 @@ def run_all(config, steps_to_run=None, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Golden Scripts - ETABS Model Builder")
-    parser.add_argument("--config", required=True, help="Path to model_config.json")
+    parser.add_argument("--config", required=False, default=None,
+                        help="Path to model_config.json (optional for step 12 only)")
     parser.add_argument("--steps", type=str, default=None,
                         help="Step numbers (e.g. '1,2,3') or alias ('modeling', 'design')")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would be done without executing")
     args = parser.parse_args()
-
-    with open(args.config) as f:
-        config = json.load(f)
 
     steps = None
     if args.steps:
@@ -159,6 +163,16 @@ def main():
             steps = set(DESIGN_STEPS.keys())
         else:
             steps = set(int(s.strip()) for s in args.steps.split(","))
+
+    if args.config:
+        with open(args.config) as f:
+            config = json.load(f)
+    else:
+        # Config only optional when running step 12 alone
+        if steps and steps == {12}:
+            config = None
+        else:
+            parser.error("--config is required (unless running only --steps 12)")
 
     run_all(config, steps, args.dry_run)
 

@@ -13,6 +13,7 @@ Two phases:
 import sys
 import os
 import re
+from collections import Counter
 
 _dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
@@ -656,16 +657,94 @@ def _enforce_sub_column_sizes(SapModel, config, super_col_sizes,
 
 
 # ======================================================================
+# Auto-Extract Config from ETABS Model
+# ======================================================================
+
+def build_config_from_etabs(SapModel):
+    """One-time extraction of iteration config from the live ETABS model.
+
+    Reads stories and frame sections to infer all parameters needed
+    for the iteration loop. Called once; result reused across all iterations.
+    """
+    SapModel.SetPresentUnits(UNITS_TON_M)
+
+    # 1. Read stories
+    ret = SapModel.Story.GetStories_2(0.0, 0, [], [], [], [], [], [], [], [])
+    base_elev = ret[0]
+    num_stories = ret[1]
+    raw_names = list(ret[2])
+    raw_elevs = list(ret[3])
+    raw_heights = list(ret[4])
+
+    # Sort bottom-to-top by elevation
+    order = sorted(range(num_stories), key=lambda i: raw_elevs[i])
+    stories = [{"name": raw_names[i], "height": raw_heights[i]} for i in order]
+    all_story_names = [s["name"] for s in stories]
+
+    # 2. Scan frames to infer strength_map
+    frames_data = get_all_frames_data(SapModel)
+
+    story_fc = {}  # {(story, elem_type): Counter({fc: count})}
+    for i in range(frames_data["count"]):
+        prop = frames_data["props"][i]
+        story = frames_data["stories"][i]
+        prefix, w, d, fc = parse_frame_section(prop)
+        if not prefix or not fc:
+            continue
+
+        if prefix == "C" and _is_vertical(i, frames_data):
+            elem_type = "column"
+        elif prefix in ("B", "WB", "SB", "FB", "FSB", "FWB"):
+            elem_type = "beam"
+        else:
+            continue
+
+        key = (story, elem_type)
+        if key not in story_fc:
+            story_fc[key] = Counter()
+        story_fc[key][fc] += 1
+
+    # Build strength_map: per-story format (compatible with build_strength_lookup)
+    strength_map = {}
+    for (story, elem_type), counter in story_fc.items():
+        if story not in strength_map:
+            strength_map[story] = {}
+        strength_map[story][elem_type] = counter.most_common(1)[0][0]
+
+    config = {
+        "base_elevation": base_elev,
+        "stories": stories,
+        "strength_map": strength_map,
+        "iteration": {},  # use all defaults from constants
+    }
+
+    print(f"  Auto-extracted config from ETABS model:")
+    print(f"    Stories: {num_stories} ({all_story_names[0]} ~ {all_story_names[-1]})")
+    print(f"    Base elevation: {base_elev}m")
+    print(f"    Strength zones: {len(strength_map)} stories with fc data")
+
+    return config
+
+
+# ======================================================================
 # Main Entry Point
 # ======================================================================
 
-def run(SapModel, config):
-    """Execute step 12: analysis-design iteration loop."""
+def run(SapModel, config=None):
+    """Execute step 12: analysis-design iteration loop.
+
+    If config is None, automatically extracts all needed parameters
+    from the current ETABS model (one-time read).
+    """
     print("=" * 60)
     print("STEP 12: Analysis-Design Iteration")
     print("=" * 60)
 
     SapModel.SetPresentUnits(UNITS_TON_M)
+
+    if config is None:
+        print("\n  No config provided — reading from ETABS model...")
+        config = build_config_from_etabs(SapModel)
 
     # Build iteration config with defaults
     ic = config.get("iteration", {})
@@ -733,9 +812,12 @@ def run(SapModel, config):
 
 if __name__ == "__main__":
     import json
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "model_config.json"
-    with open(config_path) as f:
-        config = json.load(f)
     from modeling.gs_01_init import connect_etabs
-    SapModel = connect_etabs(config)
+    SapModel = connect_etabs(None)
+
+    config = None
+    if len(sys.argv) > 1:
+        with open(sys.argv[1]) as f:
+            config = json.load(f)
+
     run(SapModel, config)
