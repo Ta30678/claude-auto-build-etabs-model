@@ -21,6 +21,9 @@ maxTurns: 50
 1. **讀取 annotation.json**：從 `{Case Folder}/結構配置圖/annotations.json` 讀取標註資料
 2. 讀取完整的 Skill 指引：`skills/plan-reader/SKILL.md`
 3. 結構配置圖固定在 `{Case Folder}/結構配置圖/` 資料夾
+3a. 掃描 `{Case Folder}/結構配置圖/` 中的裁切 PNG（*_full.png, *_crop_*.png）
+    - 先看 _full.png 取得全局概覽
+    - 再看 _crop_*.png 取得局部細節（Grid 名稱、小梁位置等）
 4. 讀取團隊設定：`~/.claude/teams/bts-team/config.json`
 5. 用 `TaskList` 查看你被指派的任務
 6. 開始小梁驗證與格式化（用戶參數在啟動 prompt 中已提供）

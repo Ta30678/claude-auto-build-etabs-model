@@ -88,6 +88,30 @@ python -m golden_scripts.tools.pdf_annot_extractor \
   --output "{Case Folder}/結構配置圖/annotations.json"
 ```
 
+**裁切頁面為多張 PNG**（全圖 + 局部放大，方便 Agent 讀取細節）：
+
+```python
+# 5. 裁切頁面為多張 PNG（全圖 + 局部放大）
+from golden_scripts.tools.pdf_annot_extractor import crop_page_images
+
+image_paths = crop_page_images(
+    pdf_path=str(pdf_path),
+    page_num=目標頁碼,
+    output_dir=f"{Case Folder}/結構配置圖/",
+    annotations_json=result,  # 用標註密度智能分區
+    dpi=200
+)
+```
+
+或使用 CLI：
+```bash
+python -m golden_scripts.tools.pdf_annot_extractor \
+  --input "{Case Folder}/結構配置圖/結構尺寸配置.pdf" \
+  --pages 5 \
+  --output "{Case Folder}/結構配置圖/annotations.json" \
+  --crop --crop-dir "{Case Folder}/結構配置圖/"
+```
+
 **標註 JSON 已提取**：啟動 Agent 時在 prompt 中附帶 JSON 路徑，Agent 使用精確座標進行讀圖和驗證。
 
 ### Phase 1: 建立 Team + 創建任務

@@ -271,6 +271,16 @@
         }
       }
     },
+    "building_outline": {
+      "type": "array",
+      "description": "建築外框 polygon 座標 (m)，按順序排列。矩形可省略。",
+      "items": {
+        "type": "array",
+        "items": {"type": "number"},
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
     "iteration": {
       "type": "object",
       "description": "Optional overrides for gs_12 iteration thresholds. All have defaults in constants.py.",

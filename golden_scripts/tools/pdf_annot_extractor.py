@@ -760,6 +760,250 @@ def summarize(result: dict) -> str:
     return "\n".join(lines)
 
 
+# ─── Page image cropping ─────────────────────────────────────────────────────
+
+def crop_page_images(pdf_path: str, page_num: int, output_dir: str,
+                     annotations_json: Optional[dict] = None,
+                     dpi: int = 200) -> list[str]:
+    """Render a PDF page as full image + auto-cropped zoomed regions.
+
+    Strategy:
+    1. Render full page as {floor}_full.png
+    2. Analyze annotation density to find dense regions
+    3. Crop dense regions with padding as {floor}_crop_{N}.png
+
+    Args:
+        pdf_path: Path to the PDF file.
+        page_num: 1-based page number to render.
+        output_dir: Directory for output PNG files.
+        annotations_json: Optional extracted annotation data (from extract_pdf).
+            If provided, uses annotation density for smart cropping.
+        dpi: Resolution for rendering (default 200).
+
+    Returns:
+        List of output PNG file paths.
+    """
+    pdf_path = str(Path(pdf_path).resolve())
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    doc = fitz.open(pdf_path)
+    if page_num < 1 or page_num > doc.page_count:
+        doc.close()
+        raise ValueError(f"Page {page_num} out of range (1-{doc.page_count})")
+
+    page = doc[page_num - 1]
+    page_width = page.rect.width
+    page_height = page.rect.height
+
+    # Render full page
+    zoom = dpi / 72.0
+    mat = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=mat)
+
+    # Determine floor label from page number
+    floor_label = f"page{page_num}"
+
+    full_path = str(out_dir / f"{floor_label}_full.png")
+    pix.save(full_path)
+    output_paths = [full_path]
+    print(f"  Saved full page: {full_path}")
+
+    # Determine crop regions
+    crop_rects = _compute_crop_regions(
+        page_width, page_height, annotations_json, page_num
+    )
+
+    # Render each crop region
+    for i, rect in enumerate(crop_rects, 1):
+        x0, y0, x1, y1 = rect
+        # Add 10% padding
+        pad_x = (x1 - x0) * 0.10
+        pad_y = (y1 - y0) * 0.10
+        x0 = max(0, x0 - pad_x)
+        y0 = max(0, y0 - pad_y)
+        x1 = min(page_width, x1 + pad_x)
+        y1 = min(page_height, y1 + pad_y)
+
+        clip = fitz.Rect(x0, y0, x1, y1)
+        crop_pix = page.get_pixmap(matrix=mat, clip=clip)
+        crop_path = str(out_dir / f"{floor_label}_crop_{i}.png")
+        crop_pix.save(crop_path)
+        output_paths.append(crop_path)
+        print(f"  Saved crop {i}: {crop_path}")
+
+    doc.close()
+    return output_paths
+
+
+def _compute_crop_regions(page_width: float, page_height: float,
+                          annotations_json: Optional[dict],
+                          page_num: int) -> list[tuple]:
+    """Compute crop regions based on annotation density or uniform grid.
+
+    Returns list of (x0, y0, x1, y1) rectangles in PDF points.
+    """
+    # If we have annotation data, try density-based cropping
+    if annotations_json:
+        page_data = None
+        for pd in annotations_json.get("pages", []):
+            if pd.get("page_num") == page_num:
+                page_data = pd
+                break
+
+        if page_data and page_data.get("annotation_count", 0) > 0:
+            return _density_crop_regions(page_data, page_width, page_height)
+
+    # Fallback: uniform 2x2 grid
+    return _uniform_crop_regions(page_width, page_height, rows=2, cols=2)
+
+
+def _density_crop_regions(page_data: dict, page_width: float,
+                          page_height: float) -> list[tuple]:
+    """Compute crop regions based on annotation density.
+
+    Divides page into NxN grid, finds high-density cells, merges adjacent ones.
+    """
+    # Determine grid size based on annotation count
+    annot_count = page_data.get("annotation_count", 0)
+    if annot_count > 100:
+        grid_n = 4
+    elif annot_count > 30:
+        grid_n = 3
+    else:
+        grid_n = 2
+
+    cell_w = page_width / grid_n
+    cell_h = page_height / grid_n
+
+    # Count annotations per cell
+    density = [[0] * grid_n for _ in range(grid_n)]
+    annots = page_data.get("annotations", {})
+
+    # Collect all annotation center points
+    centers = []
+    for line in annots.get("lines", []):
+        pt = line.get("pt", {})
+        if pt:
+            cx = (pt.get("x1", 0) + pt.get("x2", 0)) / 2
+            cy = (pt.get("y1", 0) + pt.get("y2", 0)) / 2
+            centers.append((cx, cy))
+    for rect in annots.get("rectangles", []):
+        cp = rect.get("center_pt", [])
+        if len(cp) >= 2:
+            centers.append((cp[0], cp[1]))
+    for poly in annots.get("polygons", []):
+        verts = poly.get("vertices_pt", [])
+        if verts:
+            avg_x = sum(v[0] for v in verts) / len(verts)
+            avg_y = sum(v[1] for v in verts) / len(verts)
+            centers.append((avg_x, avg_y))
+
+    # Fill density grid
+    for cx, cy in centers:
+        col = min(int(cx / cell_w), grid_n - 1)
+        row = min(int(cy / cell_h), grid_n - 1)
+        if 0 <= col < grid_n and 0 <= row < grid_n:
+            density[row][col] += 1
+
+    # Find cells above average density
+    total = sum(sum(row) for row in density)
+    avg = total / (grid_n * grid_n) if grid_n > 0 else 0
+
+    high_cells = set()
+    for r in range(grid_n):
+        for c in range(grid_n):
+            if density[r][c] > avg * 0.5:  # Include cells with >50% of average
+                high_cells.add((r, c))
+
+    if not high_cells:
+        return _uniform_crop_regions(page_width, page_height, rows=2, cols=2)
+
+    # Merge adjacent high-density cells into rectangular regions
+    regions = _merge_adjacent_cells(high_cells, grid_n, cell_w, cell_h)
+
+    # If too few regions, fall back to uniform
+    if len(regions) < 2:
+        return _uniform_crop_regions(page_width, page_height, rows=2, cols=2)
+
+    return regions
+
+
+def _merge_adjacent_cells(cells: set, grid_n: int,
+                          cell_w: float, cell_h: float) -> list[tuple]:
+    """Merge adjacent grid cells into rectangular crop regions.
+
+    Uses simple greedy grouping: group cells into contiguous row-spans.
+    """
+    if not cells:
+        return []
+
+    # Group cells by row
+    row_groups = {}
+    for r, c in cells:
+        row_groups.setdefault(r, []).append(c)
+
+    regions = []
+    visited = set()
+
+    for r in sorted(row_groups.keys()):
+        cols = sorted(row_groups[r])
+        # Find contiguous column spans
+        spans = []
+        start = cols[0]
+        prev = cols[0]
+        for c in cols[1:]:
+            if c == prev + 1:
+                prev = c
+            else:
+                spans.append((start, prev))
+                start = c
+                prev = c
+        spans.append((start, prev))
+
+        for c_start, c_end in spans:
+            # Check if this span was already merged with row above
+            key = (r, c_start, c_end)
+            if key in visited:
+                continue
+
+            # Try to extend downward
+            r_end = r
+            for next_r in range(r + 1, grid_n):
+                next_cols = row_groups.get(next_r, [])
+                # Check if the span is covered in the next row
+                if all(c in next_cols for c in range(c_start, c_end + 1)):
+                    r_end = next_r
+                    visited.add((next_r, c_start, c_end))
+                else:
+                    break
+
+            x0 = c_start * cell_w
+            y0 = r * cell_h
+            x1 = (c_end + 1) * cell_w
+            y1 = (r_end + 1) * cell_h
+            regions.append((x0, y0, x1, y1))
+
+    return regions
+
+
+def _uniform_crop_regions(page_width: float, page_height: float,
+                          rows: int = 2, cols: int = 2) -> list[tuple]:
+    """Generate uniform grid crop regions."""
+    cell_w = page_width / cols
+    cell_h = page_height / rows
+    regions = []
+    for r in range(rows):
+        for c in range(cols):
+            regions.append((
+                c * cell_w,
+                r * cell_h,
+                (c + 1) * cell_w,
+                (r + 1) * cell_h,
+            ))
+    return regions
+
+
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -778,6 +1022,12 @@ def main():
                         help="Only check if PDF has annotations (exit code 0=yes, 1=no)")
     parser.add_argument("--summary", action="store_true",
                         help="Print human-readable summary instead of JSON")
+    parser.add_argument("--crop", action="store_true",
+                        help="Also render page as full + cropped PNG images")
+    parser.add_argument("--crop-dir", type=str, default=None,
+                        help="Output directory for cropped PNGs (default: same as --output dir)")
+    parser.add_argument("--dpi", type=int, default=200,
+                        help="DPI for PNG rendering (default: 200)")
 
     args = parser.parse_args()
 
@@ -809,6 +1059,26 @@ def main():
     # Extract
     print(f"Extracting annotations from: {pdf_path.name}")
     result = extract_pdf(str(pdf_path), pages=pages, origin=origin)
+
+    # Crop images if requested
+    if args.crop:
+        crop_dir = args.crop_dir
+        if not crop_dir:
+            if args.output:
+                crop_dir = str(Path(args.output).parent)
+            else:
+                crop_dir = str(Path(pdf_path).parent)
+        target = pages or list(range(1, fitz.open(str(pdf_path)).page_count + 1))
+        for pn in target:
+            print(f"\nCropping page {pn}...")
+            try:
+                paths = crop_page_images(
+                    str(pdf_path), pn, crop_dir,
+                    annotations_json=result, dpi=args.dpi
+                )
+                print(f"  Generated {len(paths)} images for page {pn}")
+            except Exception as e:
+                print(f"  Warning: Failed to crop page {pn}: {e}")
 
     # Output
     if args.summary:
