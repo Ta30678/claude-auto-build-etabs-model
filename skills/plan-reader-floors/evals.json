@@ -1,0 +1,23 @@
+{
+  "skill_name": "plan-reader-floors",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "配置圖上標 3F 的柱子，在 ETABS 應該放在哪層？",
+      "expected_output": "Should trigger plan-reader-floors. Explain +1 rule: plan 3F column = ETABS 4F column, because columns belong to their top story.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "這個區域四面有梁但有打叉叉，要不要建板？",
+      "expected_output": "Should trigger plan-reader-floors. Reference decision matrix: 4-sided beams + X mark = structural opening = do NOT build slab.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "屋突層 R1F 到 PRF 的構件配置要怎麼決定？",
+      "expected_output": "Should trigger plan-reader-floors. Explain: R1F uses top floor config, R2F+ extends core grid area to PRF. Ask user for core grid range.",
+      "files": []
+    }
+  ]
+}

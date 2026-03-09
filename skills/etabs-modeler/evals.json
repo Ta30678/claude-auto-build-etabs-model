@@ -1,0 +1,23 @@
+{
+  "skill_name": "etabs-modeler",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "幫我寫一個 Python 腳本修改所有柱的 modifier",
+      "expected_output": "Should trigger etabs-modeler. Write script using find_etabs, iterate FrameObj, filter columns, apply SetModifiers with [1,1,1,0.0001,0.7,0.7,0.95,0.95].",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "怎麼用 API 查詢某層的層間位移？",
+      "expected_output": "Should trigger etabs-modeler. Show Results.StoryDrifts or DatabaseTables approach with 'Story Drifts' table key.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "幫我把所有 beam 的 rigid zone factor 從 0.5 改成 0.75",
+      "expected_output": "Should trigger etabs-modeler. Write script using SetEndLengthOffset(name, True, 0, 0, 0.75) on all beam frames.",
+      "files": []
+    }
+  ]
+}

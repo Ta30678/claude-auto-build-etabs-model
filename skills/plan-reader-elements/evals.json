@@ -1,0 +1,23 @@
+{
+  "skill_name": "plan-reader-elements",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "B55X80C350 這個斷面名稱代表什麼？",
+      "expected_output": "Should trigger plan-reader-elements. Explain: B=beam, 55=width(cm), 80=depth(cm), C350=concrete grade fc'=350.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "圖上有個斜撐構件要怎麼處理？",
+      "expected_output": "Should trigger plan-reader-elements. Reference Section IV: use BRACE in ETABS, not COLUMN. Need precise start/end coordinates.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "這個案子有三棟共構，下構比上構大，最外邊不在 Grid Line 上，要怎麼處理？",
+      "expected_output": "Should trigger plan-reader-elements. Reference Section V case 2: calculate extension distance proportionally, no columns at outer edge.",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "skill_name": "plan-reader",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "這張結構配置圖有哪些構件？請解讀",
+      "expected_output": "Should trigger plan-reader + plan-reader-elements. Produce structured summary with grid system, columns, beams, walls, slabs identified from the plan image.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "這個案子是 24F/B6，幫我對應ETABS樓層",
+      "expected_output": "Should trigger plan-reader + plan-reader-floors. Explain +1 floor rule, story naming, and produce floor mapping table.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "我有一份 Bluebeam PDF 的結構配置圖，幫我用 pdf_annot_extractor 提取標註後解讀",
+      "expected_output": "Should trigger plan-reader. Execute extraction command, read annotation.json, map annotations to structural components, output structured summary.",
+      "files": []
+    }
+  ]
+}

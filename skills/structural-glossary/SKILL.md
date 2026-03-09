@@ -1,3 +1,8 @@
+---
+name: structural-glossary
+description: "結構工程術語表。提供上構/下構/屋突/共構/分棟等結構術語的標準定義、樓層分類邏輯、構件前綴對照表。觸發條件：需要查詢結構術語（上構、下構、屋突、共構、分棟、合棟）、確認樓層分類邏輯、查詢構件前綴意義（B/SB/WB/FB/C/W/S/FS）、需要結構工程中英文對照。所有 agent 和 skill 都應參考此術語表以確保用詞一致。"
+---
+
 # Structural Glossary (結構術語表)
 
 Canonical definitions for structural terminology used across all agents, skills, and commands.
@@ -86,18 +91,41 @@ is_rooftop_story("5F")        # False
 
 ## Section Prefix Reference
 
-| Prefix | Type | 中文 | Shell Type |
-|--------|------|------|-----------|
-| `B` | Beam | 大梁 | — |
-| `SB` | Small Beam | 小梁 | — |
-| `WB` | Wall Beam | 壁梁 | — |
-| `FB` | Foundation Beam | 基礎梁 | — |
-| `FSB` | Foundation Small Beam | 基礎小梁 | — |
-| `FWB` | Foundation Wall Beam | 基礎壁梁 | — |
-| `C` | Column | 柱 | — |
-| `W` | Wall | 牆 | Membrane |
-| `S` | Slab | 樓板 | Membrane |
-| `FS` | Foundation Slab | 基礎版 | ShellThick |
+| Prefix | Type | 中文 | Shell Type | 相關技能 |
+|--------|------|------|-----------|---------|
+| `B` | Beam | 大梁 | — | plan-reader-elements |
+| `SB` | Small Beam | 小梁 | — | plan-reader-elements |
+| `WB` | Wall Beam | 壁梁 | — | plan-reader-elements |
+| `FB` | Foundation Beam | 基礎梁 | — | plan-reader-elements |
+| `FSB` | Foundation Small Beam | 基礎小梁 | — | plan-reader-elements |
+| `FWB` | Foundation Wall Beam | 基礎壁梁 | — | plan-reader-elements |
+| `C` | Column | 柱 | — | plan-reader-elements |
+| `W` | Wall | 牆 | Membrane | — |
+| `S` | Slab | 樓板 | Membrane | — |
+| `FS` | Foundation Slab | 基礎版 | ShellThick | — |
+
+### Section Naming Format
+
+```
+{PREFIX}{WIDTH}X{DEPTH}C{fc}
+範例：B55X80C350 = 寬55cm, 深80cm, fc'=350
+      C90X90C420 = X向90cm, Y向90cm, fc'=420
+```
+
+詳細命名規則見 `plan-reader-elements` 第一節。
+
+---
+
+## Floor Classification Rules
+
+| 區分 | ETABS 樓層範圍 | 說明 |
+|------|---------------|------|
+| 上構 (Superstructure) | 2F 以上（不含 1F） | 地表以上結構物 |
+| 下構 (Substructure) | 1F 以下（含 1F） | 地表以下結構物，含 1F |
+| 屋突 (Rooftop) | R1F ~ PRF | 頂樓以上樓層 |
+| 基礎層 | BASE 上一層 | BASE 本身無物件 |
+
+詳細樓層對應規則見 `plan-reader-floors` 第一節。
 
 ---
 
@@ -107,3 +135,41 @@ All agents and skills should:
 1. Import classification functions from `golden_scripts.constants`
 2. Never hardcode story lists (use the regex-based functions)
 3. Reference this glossary for terminology consistency
+
+### Cross-References
+
+| 技能 | 用途 |
+|------|------|
+| `plan-reader` | 結構配置圖核心解讀 |
+| `plan-reader-elements` | 構件辨識與命名規則 |
+| `plan-reader-floors` | 樓層對應與樓板判斷 |
+| `etabs-modeler` | ETABS API 參考（ad-hoc 腳本） |
+| `e2k-split` / `e2k-merge` | 分棟/合棟工具 |
+
+---
+
+## Self-Learning Protocol
+
+### 執行前：讀取經驗
+載入本 skill 時，讀取 `learned/` 目錄中所有檔案作為補充知識。
+
+### 執行後：紀錄新發現
+任務完成後，檢查是否有以下新發現需要紀錄：
+
+1. **patterns.md** — 新的結構術語、未見過的樓層命名慣例
+2. **mistakes.md** — 術語誤用及修正
+3. **edge-cases.md** — 術語定義不明確的特殊情況
+
+### 紀錄格式
+每條紀錄包含：
+- **日期**: YYYY-MM-DD
+- **案名**: 專案識別
+- **發現**: 具體描述
+- **處理**: 採取的做法
+- **是否應更新 SKILL.md**: Yes/No（如 Yes，標記待更新的 section）
+
+### 紀錄原則
+- 不重複紀錄已有的內容
+- 先檢查 learned/ 現有內容再寫入
+- 每個檔案保持 <100 行，超過時歸納合併舊條目
+- 確認為通用規律後（>=2 次出現），才建議更新 SKILL.md 本體

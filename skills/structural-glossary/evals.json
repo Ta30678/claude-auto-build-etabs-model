@@ -1,0 +1,17 @@
+{
+  "skill_name": "structural-glossary",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "什麼是上構下構？",
+      "expected_output": "Should trigger structural-glossary. Define: superstructure (2F+) vs substructure (1F and below). Reference constants.py functions.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "屋突層的範圍怎麼判斷？",
+      "expected_output": "Should trigger structural-glossary. Define: R1F~PRF, regex ^R\\d*F$ or PRF. Explain story ordering.",
+      "files": []
+    }
+  ]
+}
