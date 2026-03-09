@@ -32,11 +32,12 @@ def define_load_patterns(SapModel, config):
     count = 0
     for name, lp_type, sw_mult in STANDARD_LOAD_PATTERNS:
         ret = SapModel.LoadPatterns.Add(name, lp_type, sw_mult)
-        if ret == 0:
+        retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+        if retcode == 0:
             count += 1
             print(f"  {name} (type={lp_type}, SW={sw_mult})")
         else:
-            print(f"  {name} may already exist")
+            print(f"  {name} already exists or returned {retcode}")
     return count
 
 
@@ -68,7 +69,9 @@ def configure_seismic(SapModel, config):
                 name, direction, ecc, sign * c_value, k, top, bot)
             print(f"  {name}: dir={direction}, C={sign*c_value}, ecc={ecc}, K={k}")
         except Exception as e:
-            print(f"  WARNING: Failed {name}: {e}")
+            print(f"  WARNING: Auto-seismic config failed for {name}: {e}")
+            print(f"    → Please configure seismic parameters manually in ETABS"
+                  f" (Define > Load Patterns > Modify Lateral Load > User Coefficient)")
 
 
 def assign_slab_loads(SapModel, config, elev_map):
@@ -192,7 +195,8 @@ def import_spectrum(SapModel, config):
     func_name = "SPEC_FUNC"
     try:
         ret = SapModel.Func.FuncRS.SetUser(func_name, len(periods), periods, sa_values, 0.05)
-        if ret == 0:
+        retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+        if retcode == 0:
             print(f"  RS function '{func_name}' created ({len(periods)} points)")
 
             # Modify existing 0SPECX and 0SPECXY

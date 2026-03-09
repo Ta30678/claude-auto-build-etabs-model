@@ -17,7 +17,7 @@ argument-hint: "[樓層說明或附加指示]"
 
 ## 鐵則（ABSOLUTE RULES）
 
-1. **小梁位置禁止猜測！** SB-READER 必須從圖面逐根量測像素位置。
+1. **小梁位置禁止猜測！** SB-READER 必須從 annotation.json 讀取並驗證座標。
 2. **結構配置從圖面讀取，禁止從舊模型複製。**
 3. **建物範圍需交叉比對結構配置圖和建築平面圖。**
 4. **小梁等分座標必須退回重做。**
@@ -29,7 +29,7 @@ argument-hint: "[樓層說明或附加指示]"
 | Agent | 代號 | Agent 定義檔 | 職責 |
 |-------|------|-------------|------|
 | Agent 1 | **READER** | `.claude/agents/reader.md` | 解讀結構配置圖：柱、大梁、壁梁、剪力牆、Grid |
-| Agent 2 | **SB-READER** | `.claude/agents/sb-reader.md` | 小梁像素量測與精確座標計算 |
+| Agent 2 | **SB-READER** | `.claude/agents/sb-reader.md` | 小梁座標驗證與格式化輸出 |
 | Agent 3 | **CONFIG-BUILDER** | `.claude/agents/config-builder.md` | 將 READER/SB-READER 輸出 → model_config.json |
 
 **不再需要**：MODELER-A、MODELER-B（由 Golden Scripts 取代）
@@ -57,6 +57,38 @@ argument-hint: "[樓層說明或附加指示]"
 | 11 | EDB 存檔路徑 | 模型檔路徑 | **無，必問** |
 
 > **LL values are zone-based defaults (see CLAUDE.md). No user input needed.**
+
+### Phase 0.5: Bluebeam 標註提取（必要步驟）
+
+在啟動 Agent 前，Team Lead 提取 Bluebeam 標註：
+
+```python
+# 掃描 Case Folder 中的 PDF 檔案
+from golden_scripts.tools.pdf_annot_extractor import has_annotations, extract_pdf
+
+# 1. 找到結構配置 PDF
+pdf_files = glob("{Case Folder}/結構配置圖/*.pdf") + glob("{Case Folder}/*.pdf")
+
+# 2. 檢查是否有 Bluebeam 標註
+for pdf in pdf_files:
+    if has_annotations(pdf):
+        # 3. 提取標註 → JSON
+        result = extract_pdf(pdf, pages=[目標頁碼])
+        # 4. 存為 JSON 供 READER/SB-READER 使用
+        with open("{Case Folder}/結構配置圖/annotations.json", "w") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        break
+```
+
+或使用 CLI：
+```bash
+python -m golden_scripts.tools.pdf_annot_extractor \
+  --input "{Case Folder}/結構配置圖/結構尺寸配置.pdf" \
+  --pages 5 \
+  --output "{Case Folder}/結構配置圖/annotations.json"
+```
+
+**標註 JSON 已提取**：啟動 Agent 時在 prompt 中附帶 JSON 路徑，Agent 使用精確座標進行讀圖和驗證。
 
 ### Phase 1: 建立 Team + 創建任務
 
@@ -87,9 +119,12 @@ Agent(
 結構配置圖路徑：{Case Folder}/結構配置圖/
 用戶說明：$ARGUMENTS
 樓層資訊：[樓層高度表]
+標註 JSON：[ANNOTATION_JSON_PATH 或 '無']
 
 請先讀取 skills/plan-reader/SKILL.md 了解完整流程。
+如果有標註 JSON，優先使用標註資料的精確座標（見 agent 定義中的「標註優先工作流」）。
 為每個區段分別產出結構摘要。
+如有 R2F 以上屋突樓層，請辨識核心區 Grid 範圍，輸出 core_grid_area。
 
 完成後：
 1. 用 SendMessage 將摘要**直接發給 CONFIG-BUILDER**
@@ -102,13 +137,15 @@ Agent(
   subagent_type="sb-reader",
   team_name="bts-gs-team",
   name="SB-READER",
-  description="小梁精確定位",
+  description="小梁座標驗證",
   prompt="你被指派為 BTS-GS Team 的 SB-READER。請按照你的 agent 定義執行工作。
 
 結構配置圖路徑：{Case Folder}/結構配置圖/
 用戶說明：$ARGUMENTS
+標註 JSON：{Case Folder}/結構配置圖/annotations.json
 
-為每個區段分別量測小梁座標。
+讀取 annotation.json，驗證小梁座標的連接性和合理性。
+為每個區段分別驗證小梁座標。
 
 完成後：
 1. 用 SendMessage 將小梁座標表**直接發給 CONFIG-BUILDER**
@@ -127,6 +164,7 @@ Agent(
 先讀取 golden_scripts/config_schema.json 了解輸出格式。
 
 等待 READER 和 SB-READER 的 SendMessage，然後整合為 model_config.json。
+屋突複製：如有 R2F 以上樓層，根據 READER 的 core_grid_area 將 R1F 核心區構件複製到更高樓層。
 
 用戶提供的參數：
 - 樓層高度表：[樓層高度表]
@@ -157,7 +195,7 @@ CONFIG-BUILDER 完成後，Team Lead 自行執行：
 
 ```bash
 cd golden_scripts
-python run_all.py --config "{Case Folder}/model_config.json"
+python run_all.py --config "{Case Folder}/model_config.json" --steps modeling
 ```
 
 檢查輸出：
@@ -233,7 +271,7 @@ SendMessage(type="shutdown_request", recipient="CONFIG-BUILDER")
 所有舊版 /BTS 的規則仍然有效，特別是：
 1. 小梁座標禁猜測
 2. D/B 不可搞反（Golden Scripts 已處理，但 config 中的 section 命名必須正確）
-3. 基礎樓層不建柱
+3. 基礎樓層要建柱（+1 rule 建在基礎樓層→上一層之間）
 4. 連續壁用 C280
 5. 不使用 SDL
 6. 每案獨立，禁從記憶推斷

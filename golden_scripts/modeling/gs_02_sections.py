@@ -77,7 +77,8 @@ def create_frame_sections(SapModel, sections_list):
     count = 0
     for name, mat, depth_m, width_m in sections_list:
         ret = SapModel.PropFrame.SetRectangle(name, mat, depth_m, width_m)
-        if ret == 0:
+        retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+        if retcode == 0:
             count += 1
     return count
 
@@ -92,14 +93,15 @@ def create_area_sections(SapModel, sections_list):
             ret = SapModel.PropArea.SetWall(name, 0, shell_type, mat, t_m)
         else:
             ret = SapModel.PropArea.SetSlab(name, 0, shell_type, mat, t_m)
-        if ret == 0:
+        retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+        if retcode == 0:
             count += 1
     return count
 
 
 def assign_all_rebar(SapModel, frame_sections):
     """Assign rebar configuration to all created frame sections."""
-    beam_count, col_count = 0, 0
+    beam_count, col_count, fail_count = 0, 0, 0
 
     for name, mat, depth_m, width_m in frame_sections:
         prefix, w_cm, d_cm, fc = parse_frame_section(name)
@@ -123,8 +125,11 @@ def assign_all_rebar(SapModel, frame_sections):
                 COL_NUM_3DIR_TIE,
                 True                  # ToBeDesigned
             )
-            if ret == 0:
+            retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+            if retcode == 0:
                 col_count += 1
+            else:
+                fail_count += 1
         else:
             is_fb = is_foundation_beam(prefix)
             cover_top = FB_COVER_TOP if is_fb else BEAM_COVER_TOP
@@ -132,13 +137,17 @@ def assign_all_rebar(SapModel, frame_sections):
             ret = SapModel.PropFrame.SetRebarBeam(
                 name, "SD420", "SD420",
                 cover_top, cover_bot,
-                0, 0, 0, 0,          # Area values (0 = design mode)
-                True                  # ToBeDesigned
+                0, 0, 0, 0            # Area values (0 = design mode)
             )
-            if ret == 0:
+            retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+            if retcode == 0:
                 beam_count += 1
+            else:
+                fail_count += 1
 
     print(f"  Rebar assigned: {beam_count} beams, {col_count} columns")
+    if fail_count > 0:
+        print(f"  WARNING: {fail_count} rebar assignments failed (section may not be concrete)")
     return beam_count, col_count
 
 
@@ -151,7 +160,8 @@ def assign_area_modifiers(SapModel, area_sections):
             continue
         mods = RAFT_MODIFIERS if prefix == "FS" else SLAB_WALL_MODIFIERS
         ret = SapModel.PropArea.SetModifiers(name, mods)
-        if ret == 0:
+        retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+        if retcode == 0:
             count += 1
     print(f"  Area modifiers assigned: {count}")
     return count

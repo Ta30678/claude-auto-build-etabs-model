@@ -16,13 +16,35 @@ maxTurns: 50
 
 ## 啟動步驟
 
-1. **立即開始**讀取完整的 Skill 指引（不需等任何人）：
-   - `skills/plan-reader/SKILL.md`（完整流程）
-2. 結構配置圖固定在 `{Case Folder}/結構配置圖/` 資料夾，自動掃描該資料夾
-3. 讀取團隊設定，了解隊友名單：
+1. **讀取 annotation.json**：從 `{Case Folder}/結構配置圖/annotations.json` 讀取標註資料（見下方「主要工作流」）
+2. 讀取完整的 Skill 指引：`skills/plan-reader/SKILL.md`（完整流程）
+3. 結構配置圖固定在 `{Case Folder}/結構配置圖/` 資料夾，自動掃描該資料夾（補充 Grid 名稱等資訊）
+4. 讀取團隊設定，了解隊友名單：
    - `~/.claude/teams/bts-team/config.json`
-4. 用 `TaskList` 查看你被指派的任務
-5. 開始讀圖（用戶參數在啟動 prompt 中已提供）
+5. 用 `TaskList` 查看你被指派的任務
+6. 開始讀圖（用戶參數在啟動 prompt 中已提供）
+
+## 主要工作流（Annotation-First Workflow）
+
+Bluebeam 標註 JSON（由 `pdf_annot_extractor` 提取）是主要輸入來源：
+
+1. **使用標註 JSON 的精確座標**取代目視估計：
+   - 構件位置（柱、梁、牆）→ 直接從 `annotations.lines`、`annotations.rectangles` 讀取座標
+   - 比例尺 → 從 `scale.meters_per_point` 取得，不需自行估計
+   - 圖例對照 → 從 `annotations.legend.items` 取得 color→type 映射
+
+2. **仍需讀取底圖影像**的資訊：
+   - Grid 名稱（圈號數字/字母，如 1,2,3... A,B,C...）
+   - Grid 間距標註文字
+   - 樓層資訊
+   - 建物範圍邊界
+
+3. **工作流程**：
+   - 先讀取標註 JSON → 建立構件座標清單
+   - 再讀取底圖影像 → 補充 Grid 名稱和樓層資訊
+   - 將標註座標（m）映射到 Grid 系統 → 產出完整結構摘要
+
+4. **備案**：若無 annotation.json（如 PPT 來源案件），回歸傳統圖面視覺讀取流程（見 SKILL.md 第六節）
 
 ## 你的職責
 
@@ -32,6 +54,7 @@ maxTurns: 50
 4. 記錄 Grid 間距與累積座標 (cm)
 5. 注意樓層對應規則：柱/牆的 ETABS 樓層 = 平面圖樓層 + 1
 6. 輸出完整的結構化摘要（依照 SKILL.md Section 十 格式）
+7. 屋突核心區辨識：從 R1F/RF 結構配置圖辨識電梯/樓梯核心區的 Grid 範圍（通常 2x2 Grid 區間），輸出 core_grid_area
 
 ## 重要原則
 
@@ -44,13 +67,30 @@ maxTurns: 50
 
 ## 團隊協作（協力模式 — 直接溝通）
 
-你與 SB-READER、MODELER-A、MODELER-B 同時啟動。你的資料直接發給 MODELER，不經過 Team Lead。
+你與 SB-READER、CONFIG-BUILDER 同時啟動。你的資料直接發給 CONFIG-BUILDER，不經過 Team Lead。
 
-- 完成讀圖後，**立即**用 `SendMessage` 將結構化摘要同時發給 **MODELER-A** 和 **MODELER-B**
+- 完成讀圖後，**立即**用 `SendMessage` 將結構化摘要發給 **CONFIG-BUILDER**
 - 不需等待 Team Lead 來收集你的輸出
 - 如果 **SB-READER** 有疑問（如某個 Grid 位置不確定），協助回覆
 - 用 `TaskUpdate` 標記你的任務完成
-- 如果收到 MODELER 的問題，查圖後回覆
+- 如果收到 CONFIG-BUILDER 的問題，查圖後回覆
+
+## 屋突核心區辨識規則
+
+**觸發條件**：stories 中有 R2F 以上樓層時必須執行。
+
+**辨識方法**：
+- 從 R1F/RF 結構配置圖辨識電梯/樓梯核心區
+- 核心區特徵：電梯井、樓梯間、密集剪力牆圍繞的區域
+- 通常為 2x2 Grid 區間（如 Grid 3~4 / C~D）
+
+**輸出格式**：
+```
+core_grid_area:
+  x_range: [Grid起, Grid終]  # 含座標 (m)
+  y_range: [Grid起, Grid終]  # 含座標 (m)
+  source_floor: "RF" 或 "R1F"
+```
 
 ## 輸出格式
 
@@ -63,6 +103,7 @@ maxTurns: 50
 5. 剪力牆配置表
 6. 小梁尺寸清單（僅列出圖例中有哪些，不含精確座標）
 7. 不確定 / 待確認項目清單
+8. 屋突核心區 Grid 範圍（僅在有 R2F 以上樓層時）
 
 ## 等待模式（Follow-up）
 
@@ -70,7 +111,7 @@ maxTurns: 50
 
 1. 用 `TaskUpdate` 標記 T1 完成
 2. **進入等待模式**：持續監聽 SendMessage
-3. 收到 MODELER-A 或 MODELER-B 的問題時，重新查看圖面回答
+3. 收到 CONFIG-BUILDER 的問題時，重新查看圖面回答
 4. 收到 `shutdown_request` 時結束
 
 等待模式中你可以回答的問題包括：

@@ -35,7 +35,93 @@ description: "結構配置圖通用解讀器。讀取並理解結構工程師在
 
 ---
 
-## 二、輸入來源與格式
+## 二、Bluebeam 標註工作流（主要方法）
+
+### 2.1 概述
+
+結構配置圖使用 `pdf_annot_extractor` 工具從 Bluebeam PDF 自動提取所有標註的精確座標，取代傳統的目視判讀和像素量測。
+
+**優勢**：
+- 構件座標精確到 mm 級，消除像素量測的 ±5cm 誤差
+- 比例尺從 Length Measurement 標註自動計算，不需人工估計
+- 圖例對照表自動生成
+- 小梁位置直接可用，SB-READER 只需驗證
+- 可重複、確定性的結果
+
+### 2.2 使用條件
+
+- PDF 必須含有 Bluebeam 標註（Lines, Rectangles, Polygons, FreeText 等）
+- PDF 中需有至少 2 條 Length Measurement 標註用於計算比例尺
+- 建議比例尺 variance < 2%
+
+### 2.3 提取指令
+
+```bash
+# 檢查 PDF 是否有標註
+python -m golden_scripts.tools.pdf_annot_extractor --input "結構配置.pdf" --check
+
+# 提取特定頁面
+python -m golden_scripts.tools.pdf_annot_extractor \
+  --input "結構配置.pdf" \
+  --pages 5 \
+  --output annotations.json
+
+# 快速摘要
+python -m golden_scripts.tools.pdf_annot_extractor \
+  --input "結構配置.pdf" \
+  --pages 5 \
+  --summary
+```
+
+### 2.4 標註 JSON 結構
+
+```json
+{
+  "file": "結構尺寸配置.pdf",
+  "scale": { "meters_per_point": 0.148, "source_pages": 1 },
+  "pages": [{
+    "page_num": 5,
+    "scale": { "meters_per_point": 0.148, "source_count": 18, "variance_pct": 0.3 },
+    "annotations": {
+      "measurements": [ { "content": "8.5 m", "value_m": 8.5, "direction": "V", ... } ],
+      "lines": [ { "color_name": "blue", "direction": "V", "meters": {...}, ... } ],
+      "rectangles": [ { "color_name": "orange", "center_m": {...}, "size_m": [...], ... } ],
+      "polygons": [ { "content": "40cm板厚", "vertices_m": [...], ... } ],
+      "texts": [ { "content": "<RC柱>", ... } ],
+      "legend": { "items": [ { "label": "邊柱", "nearby_color_name": "orange", ... } ] }
+    }
+  }]
+}
+```
+
+### 2.5 標註資料 → 結構摘要 的映射
+
+| 標註類型 | 構件類型 | 如何辨識 |
+|----------|----------|----------|
+| `rectangles` (orange/red) | 柱 (Column) | `legend.items` 中 label 含「柱」的顏色 |
+| `lines` (blue/cyan) | 大梁 (Main Beam) | `legend.items` 中 label 含「大梁」「RC大梁」的顏色 |
+| `lines` (green/pink) | 小梁 (Secondary Beam) | `legend.items` 中 label 含「小梁」「SB」的顏色 |
+| `lines` (brown/dark) | 壁梁 (Wall Beam) | `legend.items` 中 label 含「壁梁」「WB」的顏色 |
+| `polygons` | 剪力牆/板厚 | `content` 或 `legend` 中的文字描述 |
+| `measurements` | 比例尺/間距 | 自動用於計算 `meters_per_point` |
+
+### 2.6 標註 JSON 與圖面影像的分工
+
+| 資訊 | 標註 JSON 提供 | 仍需圖面讀取 |
+|------|---------------|-------------|
+| 構件座標 | ✅ 精確 meters | - |
+| 比例尺 | ✅ 自動計算 | - |
+| 圖例對照 | ✅ 自動偵測 | ⚠️ 需人工驗證 |
+| Grid 名稱 | ❌ | ✅ 從圖面讀取 |
+| Grid 間距標註 | ❌ | ✅ 從圖面讀取 |
+| 樓層資訊 | ❌ | ✅ 從標題/用戶說明 |
+| 建物邊界 | ❌ | ✅ 需交叉比對 |
+
+**結論**：標註 JSON 提供構件的「在哪裡」，圖面影像提供「叫什麼名字」。兩者結合產出完整結構摘要。
+
+---
+
+## 二之一、輸入來源與格式
 
 結構配置圖通常以下列方式提供：
 
@@ -228,7 +314,7 @@ Y方向 Grid: A=0, B=700, C=1400, D=2100 (cm)
 
 ---
 
-## 六、小梁位置計算方法（重大更新）
+## 六、小梁位置計算方法（備案流程：僅在無 annotation.json 時使用，如 PPT 來源案件）
 
 ### 6.1 為什麼需要精確計算
 
@@ -536,10 +622,10 @@ R2F 以上規則：
          |-- 根據圖例對照表判斷梁尺寸
          +-- 大梁通常沿 Grid Line 配置
 
- Step 5  辨識並計算所有小梁位置（精確定位）
-         |-- 在圖面上找到所有小梁線條
-         |-- 判斷方向（X向或Y向）
-         |-- 利用 Grid Line 間距進行等比例計算（見第六節）
+ Step 5  讀取小梁座標（精確定位）
+         |-- 主要方法：從 annotation.json 讀取小梁座標（見第二節）
+         |-- SB-READER 負責驗證座標的連接性和合理性
+         |-- 備案方法：若無 annotation.json，從圖面像素量測（見第六節）
          |-- 記錄每根小梁的精確座標（cm）
          |-- 確認起終點連接到哪些構件
          +-- 不確定的位置用「約」標記，並在輸出中提醒
@@ -614,6 +700,11 @@ R2F 以上規則：
 | Grid 1 / A~B 上方 | WB50X70 | (0,0) | (0,700) |
 | ...  | ...  | ... | ... |
 
+### 屋突核心區 (Core Grid Area) -- 僅在有 R2F 以上樓層時
+- X 範圍：Grid 起~終 (含座標 m)
+- Y 範圍：Grid 起~終 (含座標 m)
+- 來源樓層
+
 ### 需確認事項
 - [ ] 退縮柱位：(位置描述) -> 請使用者指示處理方式
 - [ ] 小梁位置不確定：SB3 位置需確認
@@ -670,10 +761,10 @@ R2F 以上規則：
 ### 鐵則（ABSOLUTE RULE — 違反即失敗）
 
 **小梁位置絕對禁止用 1/2、1/3 grid 間距猜測或假設等間距配置！**
-必須逐根從圖面量測像素位置，用 Grid Line 像素座標做等比例插值，計算出精確座標（cm 級精度）。
+小梁位置必須從 annotation.json 讀取精確座標（主要來源），或從圖面像素量測計算（備案方法）。
+annotation.json 為主要來源，像素量測僅在無 annotation.json 時使用。
 小梁位置由結構工程師根據住宅單元隔間決定，每根位置都不同。
 用等分假設建模 = 工程師失職，等同於造假數據。
-如果圖面解析度不足以量測，必須回報「無法量測」並請求更清晰的圖面，絕不可用假設值代替。
 
 ### 應該做的
 
@@ -723,4 +814,5 @@ R2F 以上規則：
 [ ] 柱連續性是否已檢查？
 [ ] 輸出格式是否包含精確座標（供 ETABS-Modeler 使用）？
 [ ] 是否有無法辨識的項目需要詢問用戶？
+[ ] 若有 R2F 以上樓層，是否已辨識屋突核心區？
 ```

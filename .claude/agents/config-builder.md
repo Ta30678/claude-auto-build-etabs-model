@@ -18,6 +18,15 @@ maxTurns: 30
 
 **你不寫 Python 程式碼，不呼叫 ETABS API。**
 
+## 禁止事項（ABSOLUTE）
+
+- **絕對不可以**執行 `run_all.py` 或任何 Python 腳本
+- **絕對不可以**使用 Bash tool 執行 Python
+- **絕對不可以**操作 ETABS 或呼叫 COM API
+- **絕對不可以**重新建立或刪除模型
+- 你的唯一輸出是 `model_config.json` 文件
+- 建模工作由 Team Lead 執行 Golden Scripts 完成，不是你的職責
+
 ## 自驅動啟動邏輯
 
 1. **立即開始**預讀 `golden_scripts/config_schema.json`（了解輸出格式）
@@ -70,7 +79,7 @@ maxTurns: 30
   }
 ]
 ```
-**注意**：基礎樓層（BASE 上一層）不列入 floors。例如基礎層是 B3F，柱 floors 從 B2F 開始。
+**注意**：基礎樓層（BASE 上一層）**必須列入** floors。例如基礎層是 B3F，柱 floors 從 B3F 開始。B3F 的柱透過 +1 rule 建在 B3F→B2F 之間。
 Foundation floor rules: see CLAUDE.md 'Foundation Floor Rules' section.
 
 ### beams
@@ -137,13 +146,30 @@ FS 基礎版額外做 2×2 細分（每塊板分成 4 塊）。
 
 生成 config 後自檢：
 - [ ] 所有 Grid 座標已轉換為累加座標 (m)
-- [ ] 柱的 floors 排除了基礎樓層
+- [ ] 柱的 floors 包含基礎樓層
 - [ ] 每個樓層的每個梁圍區域都有板
 - [ ] 強度分配覆蓋所有樓層
 - [ ] 小梁座標不是機械性等分（如果是，退回 SB-READER）
 - [ ] 連續壁標記了 is_diaphragm_wall
 - [ ] 基礎梁使用 FB 前綴
 - [ ] sections.frame 包含所有基本斷面（不含 Cfc 後綴）
+
+## 屋突複製規則 (Rooftop Replication)
+
+**觸發條件**: stories 有 R2F 以上樓層 AND READER 提供 core_grid_area
+
+**複製邏輯** (以 core_grid_area 為篩選範圍):
+1. **柱**: 核心區內的柱，將 R1F~最高屋突前一層 加入 floors（+1 rule，柱的 plan floor 到上一層）
+2. **梁**: 兩端都在核心區內的梁，加入 R2F~PRF 到 floors
+3. **小梁**: 同梁
+4. **板**: 角點都在核心區內的板，加入 R2F~PRF 到 floors
+5. **牆**: 同柱邏輯（+1 rule）
+
+**篩選判斷**:
+- 柱: `grid_x` 在 core X 範圍 AND `grid_y` 在 core Y 範圍
+- 梁/SB: 兩端點都在核心區
+- 板: 所有角點在核心區
+- 未提供 core_grid_area 時，不猜測，向 READER 詢問
 
 ## 輸出
 

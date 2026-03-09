@@ -65,8 +65,8 @@ def place_slabs(SapModel, config, elev_map, strength_lookup):
                 for sub_x, sub_y in sub_corners_list:
                     sub_z = [z] * 4
                     ret = SapModel.AreaObj.AddByCoord(4, sub_x, sub_y, sub_z, "", sec_name)
-                    if ret[0] == 0:
-                        created.append(ret[1])
+                    if ret[-1] == 0:
+                        created.append(ret[0])
                     else:
                         print(f"  WARN: Failed FS sub-slab {sec_name} at {plan_floor}")
                         failed += 1
@@ -74,8 +74,8 @@ def place_slabs(SapModel, config, elev_map, strength_lookup):
                 Z = [z] * n_pts
                 name = ""
                 ret = SapModel.AreaObj.AddByCoord(n_pts, X, Y, Z, name, sec_name)
-                if ret[0] == 0:
-                    created.append(ret[1])
+                if ret[-1] == 0:
+                    created.append(ret[0])
                 else:
                     print(f"  WARN: Failed slab {sec_name} at {plan_floor}")
                     failed += 1

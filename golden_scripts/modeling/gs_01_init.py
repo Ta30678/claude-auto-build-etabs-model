@@ -18,26 +18,58 @@ from constants import (
 
 
 def connect_etabs(config):
-    """Connect to ETABS using find_etabs (etabs_api package)."""
-    from find_etabs import find_etabs
-    etabs, filename = find_etabs(run=False, backup=False)
-    SapModel = etabs.SapModel
+    """Connect to ETABS via COM."""
+    try:
+        from find_etabs import find_etabs
+        etabs, filename = find_etabs(run=False, backup=False)
+        SapModel = etabs.SapModel
+    except (ImportError, ModuleNotFoundError):
+        import comtypes.client
+        etabs = comtypes.client.GetActiveObject("CSI.ETABS.API.ETABSObject")
+        SapModel = etabs.SapModel
+        filename = SapModel.GetModelFilename()
     print(f"Connected to ETABS. File: {filename}")
     return SapModel
 
 
+def _reacquire_SapModel():
+    """Re-acquire SapModel from COM after InitializeNewModel."""
+    import comtypes.client
+    etabs = comtypes.client.GetActiveObject("CSI.ETABS.API.ETABSObject")
+    return etabs.SapModel
+
+
 def init_model(SapModel, config):
-    """Initialize model: set units, optionally create new blank model."""
+    """Initialize model: set units, optionally create new blank model.
+    Returns (possibly new) SapModel reference.
+    """
     project = config.get("project", {})
 
     if project.get("new_model", False):
+        # If no model is open, open backup or any EDB first
+        # (ETABS COM requires an open model for File operations)
+        current = SapModel.GetModelFilename()
+        if not current or current == "None":
+            # Look for backup in same MODEL directory
+            save_path = project.get("save_path", "")
+            if save_path:
+                import glob as glob_mod
+                model_dir = os.path.dirname(save_path.replace("/", os.sep))
+                edbs = glob_mod.glob(os.path.join(model_dir, "*.EDB"))
+                if edbs:
+                    SapModel.File.OpenFile(edbs[0])
+                    print(f"  Opened existing model for init: {edbs[0]}")
+
         SapModel.InitializeNewModel(UNITS_TON_M)
+        # COM reference becomes stale after InitializeNewModel; re-acquire
+        SapModel = _reacquire_SapModel()
         SapModel.File.NewBlank()
         print("Created new blank model")
 
     SapModel.SetPresentUnits(UNITS_TON_M)
     SapModel.SetModelIsLocked(False)
     print(f"Units set to TON/M ({UNITS_TON_M})")
+    return SapModel
 
 
 def define_materials(SapModel, config=None):
@@ -48,7 +80,11 @@ def define_materials(SapModel, config=None):
         props = CONCRETE_PROPS[fc]
         mat_name = f"C{fc}"
         try:
-            SapModel.PropMaterial.AddMaterial(mat_name, 2, "", "", "")
+            ret = SapModel.PropMaterial.AddMaterial(mat_name, 2, "", "", "")
+            # ETABS may auto-rename; use ChangeName to set desired name
+            actual = ret[0] if isinstance(ret, (list, tuple)) else mat_name
+            if actual != mat_name:
+                SapModel.PropMaterial.ChangeName(actual, mat_name)
         except:
             pass  # may already exist
 
@@ -61,7 +97,10 @@ def define_materials(SapModel, config=None):
 
     for rb_name, rb_props in REBAR_PROPS.items():
         try:
-            SapModel.PropMaterial.AddMaterial(rb_name, 5, "", "", "")
+            ret = SapModel.PropMaterial.AddMaterial(rb_name, 5, "", "", "")
+            actual = ret[0] if isinstance(ret, (list, tuple)) else rb_name
+            if actual != rb_name:
+                SapModel.PropMaterial.ChangeName(actual, rb_name)
         except:
             pass
 
@@ -69,7 +108,7 @@ def define_materials(SapModel, config=None):
         SapModel.PropMaterial.SetORebar_1(
             rb_name, rb_props["Fy"], rb_props["Fu"],
             rb_props["Fy"], rb_props["Fu"],
-            1, 1, 0.01, 0.09, False)
+            1, 1, 0.01, 0.09, False, False)
         count += 1
         print(f"  Material: {rb_name} (Fy={rb_props['Fy']} ton/m2)")
 
@@ -83,10 +122,11 @@ def run(SapModel, config):
     print("STEP 01: Model Initialization + Materials")
     print("=" * 60)
 
-    init_model(SapModel, config)
+    SapModel = init_model(SapModel, config)
     define_materials(SapModel, config)
     SapModel.View.RefreshView(0, False)
     print("Step 01 complete.\n")
+    return SapModel
 
 
 if __name__ == "__main__":

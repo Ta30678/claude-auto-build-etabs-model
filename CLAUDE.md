@@ -56,6 +56,7 @@ claude-auto-build-etabs-model/
 │       ├── e2k_parser.py                  # General e2k parser (E2KModel class)
 │       ├── e2k_writer.py                  # E2k output (section ordering, formatting)
 │       ├── unit_converter.py              # Unit detection & conversion
+│       ├── pdf_annot_extractor.py          # Extract Bluebeam annotations → annotations.json
 │       ├── gs_split.py                    # Split multi-building → single-building e2k
 │       └── gs_merge.py                    # Merge single-building e2k files → unified model
 ├── tests/                                 # pytest verification suite (requires running ETABS)
@@ -81,7 +82,7 @@ claude-auto-build-etabs-model/
 ├── .claude/
 │   ├── agents/                            # BTS agent definitions
 │   │   ├── reader.md                      # READER: reads structural plan images
-│   │   ├── sb-reader.md                   # SB-READER: small beam pixel measurement
+│   │   ├── sb-reader.md                   # SB-READER: small beam coordinate validation (from annotation.json)
 │   │   ├── config-builder.md              # CONFIG-BUILDER: generates model_config.json (bts-gs)
 │   │   ├── modeler-a.md                   # MODELER-A: materials/sections/columns/walls (legacy bts)
 │   │   ├── modeler-b.md                   # MODELER-B: beams/slabs/loads/properties (legacy bts)
@@ -212,7 +213,7 @@ Foundation floor = BASE 上一層 (e.g. B3F). BASE has NO objects.
 
 | Rule | Detail |
 |------|--------|
-| Columns skip foundation floor | Column `floors` start from floor ABOVE foundation (e.g. B2F) |
+| Columns INCLUDE foundation floor | Column `floors` start from foundation floor (e.g. B3F). Column at B3F spans B3F→B2F via +1 rule. |
 | Beams OK at foundation floor | FB/FWB/FSB beams are placed at foundation floor |
 | FS slab at foundation floor | ShellThick, RAFT_MODIFIERS, DL=0.63, LL=0 |
 | Restraints at foundation floor | UX/UY only (no UZ, no rotations) |
@@ -232,7 +233,7 @@ Foundation floor = BASE 上一層 (e.g. B3F). BASE has NO objects.
 
 ## BTS Agent Team Rules (ABSOLUTE)
 
-1. **Small beam positions must never be guessed.** SB-READER must measure pixel positions from plan images.
+1. **Small beam positions must never be guessed.** SB-READER reads coordinates from annotation.json (primary) or measures pixel positions (fallback for PPT input).
 2. **Structural layout comes from plan images, never copied from old models.**
 3. **Building extents must be cross-referenced between structural and architectural plans.**
 4. **Mechanically equal-spaced small beam coordinates must be rejected and re-measured.**

@@ -174,10 +174,23 @@ def calc_column_bar_distribution(width_cm, depth_cm):
     return num_r2, num_r3
 
 
-def next_story(floor_label):
+def next_story(floor_label, all_stories=None):
     """Get the story name above a given floor.
     B3F->B2F, B1F->1F, 1F->2F, RF->PRF
+
+    If all_stories is provided (ordered bottom-to-top), use positional lookup.
+    Otherwise fall back to pattern-based logic.
     """
+    # If story list provided, use positional lookup
+    if all_stories:
+        try:
+            idx = all_stories.index(floor_label)
+            if idx + 1 < len(all_stories):
+                return all_stories[idx + 1]
+        except ValueError:
+            pass  # fall through to pattern matching
+
+    # Legacy pattern-based fallback
     m = re.match(r'^B(\d+)F$', floor_label)
     if m:
         n = int(m.group(1))

@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import next_story, build_strength_lookup
 
 
-def place_walls(SapModel, config, elev_map, strength_lookup):
+def place_walls(SapModel, config, elev_map, strength_lookup, all_stories=None):
     """Place all walls from config.
 
     +1 rule: wall on plan NF spans from NF elevation to (N+1)F elevation.
@@ -38,7 +38,7 @@ def place_walls(SapModel, config, elev_map, strength_lookup):
 
         for plan_floor in wall["floors"]:
             z_bot = elev_map.get(plan_floor, None)
-            target_story = next_story(plan_floor)
+            target_story = next_story(plan_floor, all_stories)
             z_top = elev_map.get(target_story, None)
 
             if z_bot is None or z_top is None:
@@ -61,8 +61,8 @@ def place_walls(SapModel, config, elev_map, strength_lookup):
 
             name = ""
             ret = SapModel.AreaObj.AddByCoord(4, X, Y, Z, name, sec_name)
-            if ret[0] == 0:
-                created.append(ret[1])
+            if ret[-1] == 0:
+                created.append(ret[0])
             else:
                 print(f"  WARN: Failed wall {sec_name} at {plan_floor}")
                 failed += 1
@@ -81,12 +81,13 @@ def run(SapModel, config, elev_map=None, strength_lookup=None):
         from gs_03_grid_stories import define_stories
         elev_map = define_stories(SapModel, config)
 
+    all_stories = [s["name"] for s in config.get("stories", [])]
+
     if strength_lookup is None:
-        all_stories = [s["name"] for s in config.get("stories", [])]
         strength_lookup = build_strength_lookup(
             config.get("strength_map", {}), all_stories)
 
-    created = place_walls(SapModel, config, elev_map, strength_lookup)
+    created = place_walls(SapModel, config, elev_map, strength_lookup, all_stories)
 
     SapModel.View.RefreshView(0, False)
     print("Step 05 complete.\n")

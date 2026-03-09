@@ -45,8 +45,8 @@ def place_beams(SapModel, config, elev_map, strength_lookup):
 
             name = ""
             ret = SapModel.FrameObj.AddByCoord(x1, y1, z, x2, y2, z, name, sec_name)
-            if ret[0] == 0:
-                created.append(ret[1])
+            if ret[-1] == 0:
+                created.append(ret[0])
             else:
                 print(f"  WARN: Failed beam {sec_name} at {plan_floor}")
                 failed += 1

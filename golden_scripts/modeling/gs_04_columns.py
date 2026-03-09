@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import next_story, build_strength_lookup
 
 
-def place_columns(SapModel, config, elev_map, strength_lookup):
+def place_columns(SapModel, config, elev_map, strength_lookup, all_stories=None):
     """Place all columns from config.
 
     +1 rule: a column on plan floor NF is placed from elevation(NF) to elevation(next_story(NF)).
@@ -37,7 +37,7 @@ def place_columns(SapModel, config, elev_map, strength_lookup):
         for plan_floor in col["floors"]:
             # +1 rule: column bottom at plan_floor, top at next story
             z_bot = elev_map.get(plan_floor, None)
-            target_story = next_story(plan_floor)
+            target_story = next_story(plan_floor, all_stories)
             z_top = elev_map.get(target_story, None)
 
             if z_bot is None or z_top is None:
@@ -51,8 +51,8 @@ def place_columns(SapModel, config, elev_map, strength_lookup):
 
             name = ""
             ret = SapModel.FrameObj.AddByCoord(x, y, z_bot, x, y, z_top, name, sec_name)
-            if ret[0] == 0:
-                created.append(ret[1])
+            if ret[-1] == 0:
+                created.append(ret[0])
             else:
                 print(f"  WARN: Failed column {sec_name} at ({x},{y}) {plan_floor}")
                 failed += 1
@@ -71,12 +71,13 @@ def run(SapModel, config, elev_map=None, strength_lookup=None):
         from gs_03_grid_stories import define_stories
         elev_map = define_stories(SapModel, config)
 
+    all_stories = [s["name"] for s in config.get("stories", [])]
+
     if strength_lookup is None:
-        all_stories = [s["name"] for s in config.get("stories", [])]
         strength_lookup = build_strength_lookup(
             config.get("strength_map", {}), all_stories)
 
-    created = place_columns(SapModel, config, elev_map, strength_lookup)
+    created = place_columns(SapModel, config, elev_map, strength_lookup, all_stories)
 
     SapModel.View.RefreshView(0, False)
     print("Step 04 complete.\n")

@@ -60,13 +60,15 @@ def run_all(config, steps_to_run=None, dry_run=False):
     print("=" * 70)
     print("  GOLDEN SCRIPTS - ETABS Model Builder")
     print(f"  Project: {project_name}")
-    print(f"  Steps: {steps_to_run if steps_to_run else 'ALL'}")
+    steps_label = steps_to_run if steps_to_run else 'MODELING (1-11)'
+    print(f"  Steps: {steps_label}")
     print("=" * 70)
 
     if dry_run:
+        dry_steps = steps_to_run if steps_to_run is not None else set(MODELING_STEPS.keys())
         print("\n[DRY RUN] Would execute the following steps:")
         for num, (name, _) in sorted(STEPS.items()):
-            if steps_to_run is None or num in steps_to_run:
+            if num in dry_steps:
                 print(f"  Step {num:02d}: {name}")
         return
 
@@ -85,8 +87,10 @@ def run_all(config, steps_to_run=None, dry_run=False):
     elev_map = None
     results = {}
 
+    # Default to modeling steps only (design steps require explicit --steps)
+    default_steps = steps_to_run if steps_to_run is not None else set(MODELING_STEPS.keys())
     for num in sorted(STEPS.keys()):
-        if steps_to_run is not None and num not in steps_to_run:
+        if num not in default_steps:
             continue
 
         name, module = STEPS[num]
@@ -94,7 +98,9 @@ def run_all(config, steps_to_run=None, dry_run=False):
 
         try:
             if num == 1:
-                module.run(SapModel, config)
+                ret = module.run(SapModel, config)
+                if ret is not None:
+                    SapModel = ret  # init_model may return fresh COM reference
             elif num == 2:
                 module.run(SapModel, config)
             elif num == 3:
@@ -127,6 +133,7 @@ def run_all(config, steps_to_run=None, dry_run=False):
     # Save model
     save_path = config.get("project", {}).get("save_path") if config else None
     if save_path:
+        save_path = os.path.normpath(save_path)
         ret = SapModel.File.Save(save_path)
         if ret == 0:
             print(f"\nModel saved to: {save_path}")
@@ -165,7 +172,7 @@ def main():
             steps = set(int(s.strip()) for s in args.steps.split(","))
 
     if args.config:
-        with open(args.config) as f:
+        with open(args.config, encoding="utf-8") as f:
             config = json.load(f)
     else:
         # Config only optional when running step 12 alone
