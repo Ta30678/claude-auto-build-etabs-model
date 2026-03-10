@@ -267,21 +267,30 @@ def assign_foundation(SapModel, config):
         except Exception as e:
             print(f"  WARNING: Foundation assignment failed: {e}")
 
-    # Edge beam line springs
+    # Edge beam line springs — auto-detect FWB (基礎壁梁) beams
     if kw:
-        edge_beams = foundation.get("edge_beams", [])
-        if edge_beams:
-            try:
-                spring_prop = "EdgeSpring"
-                SapModel.PropLineSpring.SetLineSpringProp(spring_prop, 0, kw, 0, 0, 0, 0)
-                s_count = 0
-                for beam in edge_beams:
-                    r = SapModel.FrameObj.SetSpringAssignment(beam, spring_prop)
-                    if r == 0:
-                        s_count += 1
-                print(f"  Edge beam springs (Kw={kw}): {s_count}/{len(edge_beams)}")
-            except Exception as e:
-                print(f"  WARNING: Edge beam springs failed: {e}")
+        try:
+            ret = SapModel.FrameObj.GetAllFrames(
+                0, [], [], [], [], [], [], [], [], [], [], [],
+                [], [], [], [], [], [], [], [])
+            if isinstance(ret[0], int) and ret[0] > 0:
+                num = ret[0]
+                names = ret[1]
+                props = ret[2]
+                fwb_names = [names[i] for i in range(num) if props[i].startswith("FWB")]
+                if fwb_names:
+                    spring_prop = "EdgeSpring"
+                    SapModel.PropLineSpring.SetLineSpringProp(spring_prop, 0, kw, 0, 0, 0, 0)
+                    s_count = 0
+                    for name in fwb_names:
+                        r = SapModel.FrameObj.SetSpringAssignment(name, spring_prop)
+                        if r == 0:
+                            s_count += 1
+                    print(f"  Edge beam springs (Kw={kw}): {s_count}/{len(fwb_names)} FWB beams")
+                else:
+                    print("  No FWB beams found for Kw springs.")
+        except Exception as e:
+            print(f"  WARNING: Edge beam springs failed: {e}")
 
 
 def run(SapModel, config, elev_map=None):

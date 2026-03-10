@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "etabs": {
+      "command": "python",
+      "args": [
+        "C:/Users/User/Desktop/workflow dev/V22 AGENTIC MODEL/scripts/structural-mcp-servers/servers/etabs_mcp/current_working/server.py"
+      ]
+    }
+  }
+}

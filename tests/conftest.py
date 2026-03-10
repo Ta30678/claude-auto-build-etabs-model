@@ -27,6 +27,15 @@ def SapModel():
         SapModel.SetPresentUnits(12)  # TON/M
         print(f"\nConnected to ETABS: {filename}")
         return SapModel
+    except Exception:
+        pass
+    try:
+        import comtypes.client
+        etabs = comtypes.client.GetActiveObject('CSI.ETABS.API.ETABSObject')
+        SapModel = etabs.SapModel
+        SapModel.SetPresentUnits(12)  # TON/M
+        print(f"\nConnected to ETABS via comtypes: {SapModel.GetModelFilename()}")
+        return SapModel
     except Exception as e:
         pytest.skip(f"Cannot connect to ETABS: {e}")
 

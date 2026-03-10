@@ -4,11 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This project uses Claude Code to control ETABS 22 via its COM API (Python + comtypes). There are two primary workflows:
+This project uses Claude Code to control ETABS 22 via its COM API (Python + comtypes). There are four workflows:
 
-1. **Golden Scripts (`/bts-gs`)** — Preferred. AI reads structural plans → generates `model_config.json` → deterministic Python scripts build the ETABS model. Fast, near-zero error rate.
-2. **Legacy BTS (`/bts`)** — 4-agent team where AI generates and executes Python code directly. Slower, higher token usage.
-3. **Ad-hoc scripting** — Claude writes one-off Python scripts for model modification, analysis, or data extraction.
+1. **Phased BTS (`/bts-structure` + `/bts-sb` + `/bts-props`)** — **Preferred.** Split into 3 phases. Reduces token bloat and improves AI quality.
+   - Phase 1 `/bts-structure`: Grid + Story + Columns + Walls + Major Beams → `model_config.json`
+   - Phase 2 `/bts-sb`: Small Beams + Slabs → `sb_slabs_patch.json` → merge → add to model
+   - Phase 3 `/bts-props`: Properties + Loads + Diaphragms (no agent team, deterministic)
+2. **Single-pass Golden Scripts (`/bts-gs`)** — All-in-one 3-agent team. May consume excessive tokens on complex projects.
+3. **Legacy BTS (`/bts`)** — 4-agent team where AI generates and executes Python code directly. Slower, higher token usage.
+4. **Ad-hoc scripting** — Claude writes one-off Python scripts for model modification, analysis, or data extraction.
 
 ---
 
@@ -51,12 +55,13 @@ claude-auto-build-etabs-model/
 │   ├── design/                            # Analysis-design iteration
 │   │   ├── __init__.py
 │   │   └── gs_12_iterate.py
-│   └── tools/                             # E2K split/merge utilities
+│   └── tools/                             # E2K split/merge utilities + config tools
 │       ├── __init__.py
 │       ├── e2k_parser.py                  # General e2k parser (E2KModel class)
 │       ├── e2k_writer.py                  # E2k output (section ordering, formatting)
 │       ├── unit_converter.py              # Unit detection & conversion
-│       ├── pdf_annot_extractor.py          # Extract Bluebeam annotations → annotations.json
+│       ├── pdf_annot_extractor.py          # Extract Bluebeam annotations → annotations.json + crop PNGs
+│       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
 │       ├── gs_split.py                    # Split multi-building → single-building e2k
 │       └── gs_merge.py                    # Merge single-building e2k files → unified model
 ├── tests/                                 # pytest verification suite (requires running ETABS)
@@ -81,15 +86,22 @@ claude-auto-build-etabs-model/
 │   └── etabs-api-lookup.md                # How to look up API docs
 ├── .claude/
 │   ├── agents/                            # BTS agent definitions
-│   │   ├── reader.md                      # READER: reads structural plan images
-│   │   ├── sb-reader.md                   # SB-READER: small beam coordinate validation (from annotation.json)
+│   │   ├── phase1-reader.md               # Phase 1 READER: grid+columns+beams+walls → folders
+│   │   ├── phase1-config-builder.md       # Phase 1 CONFIG-BUILDER: folders → model_config.json (no SB/slabs)
+│   │   ├── phase2-sb-reader.md            # Phase 2 SB-READER: small beam coords → SB-BEAM/ folder
+│   │   ├── phase2-config-builder.md       # Phase 2 CONFIG-BUILDER: SB-BEAM/ → sb_slabs_patch.json
+│   │   ├── reader.md                      # READER: reads structural plan images (bts-gs)
+│   │   ├── sb-reader.md                   # SB-READER: small beam coordinate validation (bts-gs)
 │   │   ├── config-builder.md              # CONFIG-BUILDER: generates model_config.json (bts-gs)
 │   │   ├── modeler-a.md                   # MODELER-A: materials/sections/columns/walls (legacy bts)
 │   │   ├── modeler-b.md                   # MODELER-B: beams/slabs/loads/properties (legacy bts)
 │   │   ├── e2k-splitter.md               # E2K-SPLITTER: split multi-building e2k
 │   │   └── e2k-merger.md                 # E2K-MERGER: merge building e2k files
 │   └── commands/
-│       ├── bts-gs.md                      # /bts-gs slash command (Golden Scripts flow)
+│       ├── bts-structure.md               # /bts-structure slash command (Phase 1: main structure)
+│       ├── bts-sb.md                      # /bts-sb slash command (Phase 2: small beams + slabs)
+│       ├── bts-props.md                   # /bts-props slash command (Phase 3: properties + loads + diaphragms)
+│       ├── bts-gs.md                      # /bts-gs slash command (single-pass Golden Scripts)
 │       ├── bts.md                         # /bts slash command (legacy 4-agent flow)
 │       ├── split.md                       # /split slash command (e2k split)
 │       └── merge.md                       # /merge slash command (e2k merge)
@@ -131,9 +143,29 @@ pytest -v --config path/to/model_config.json    # with config comparison
 pytest -v -k test_sections                        # run single test
 ```
 
-### Slash commands (BTS Agent Teams)
+### Slash commands (BTS Agent Teams — Phased, preferred)
+- `/bts-structure [description]` — Phase 1: 2 Readers + 1 Config-Builder → Grid+Story+柱+牆+大梁
+- `/bts-sb [floor ranges]` — Phase 2: 2 SB-Readers + 1 Config-Builder → 小梁+版
+- `/bts-props` — Phase 3: Properties + Loads + Diaphragms (no agent team, runs gs_09~gs_11)
+
+### Slash commands (BTS Agent Teams — Single-pass)
 - `/bts-gs [description]` — 3-agent team + Golden Scripts (READER + SB-READER + CONFIG-BUILDER)
 - `/bts [description]` — Legacy 4-agent team (READER + SB-READER + MODELER-A + MODELER-B)
+
+### Config Merge Tool (Phase 2)
+```bash
+# Merge Phase 1 base config with Phase 2 SB/slab patch
+python -m golden_scripts.tools.config_merge --base model_config.json --patch sb_slabs_patch.json --output merged_config.json
+```
+
+### PDF Annotation Extraction + Page Cropping
+```bash
+# Extract Bluebeam annotations to JSON
+python -m golden_scripts.tools.pdf_annot_extractor --input "plan.pdf" --pages 5 --output annotations.json
+
+# Extract + crop page images (full + zoomed regions for agent reading)
+python -m golden_scripts.tools.pdf_annot_extractor --input "plan.pdf" --pages 5 --output annotations.json --crop --crop-dir "./結構配置圖/"
+```
 
 ### E2K Split/Merge Tools
 ```bash
@@ -168,7 +200,7 @@ python -m golden_scripts.tools.gs_merge --base sub.e2k --buildings A=A.e2k B=B.e
 The golden scripts are split into three sub-packages under `golden_scripts/`:
 - **`modeling/`** (gs_01–gs_11): Deterministic model construction — reads `model_config.json` and executes ETABS API calls with no AI reasoning.
 - **`design/`** (gs_12+): Analysis-design iteration and optimization.
-- **`tools/`**: E2K split/merge utilities — e2k parser, writer, unit converter, split, merge.
+- **`tools/`**: E2K split/merge utilities, config merge — e2k parser, writer, unit converter, split, merge, config_merge.
 
 All structural engineering rules are hardcoded in `golden_scripts/constants.py`.
 
@@ -231,6 +263,48 @@ Foundation floor = BASE 上一層 (e.g. B3F). BASE has NO objects.
 
 ---
 
+## Phased BTS Workflow (`/bts-structure` + `/bts-sb` + `/bts-props`)
+
+Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumption and improve AI quality.
+
+### Phase 1: `/bts-structure`
+- **Team**: 2 Readers (split by floor range) + 1 Config-Builder
+- **Builds**: Grid, Story, Columns, Walls, Major Beams (B/WB/FB/FWB)
+- **Data flow**: Readers → files in `結構配置圖/BEAM/`, `COLUMN/`, `WALL/` → Config-Builder reads folders → `model_config.json`
+- **Execution**: `run_all.py --steps 1,2,3,4,5,6`
+- **Output**: `model_config.json` (small_beams=[], slabs=[])
+
+### Phase 2: `/bts-sb`
+- **Team**: 2 SB-Readers (split by floor range) + 1 Config-Builder
+- **Builds**: Small Beams (SB/FSB) + Slabs (S/FS)
+- **Data flow**: SB-Readers → files in `結構配置圖/SB-BEAM/` → Config-Builder reads SB-BEAM/ + model_config.json → `sb_slabs_patch.json`
+- **Merge**: `config_merge.py --base model_config.json --patch sb_slabs_patch.json --output merged_config.json`
+- **Execution**: `run_all.py --config merged_config.json --steps 2,7,8`
+- **Output**: `merged_config.json` (complete config)
+
+### Phase 3: `/bts-props`
+- **Team**: None (Team Lead direct execution)
+- **Builds**: Frame modifiers, rigid zones, end releases, load patterns, slab loads, seismic, spectrum, Kv/Kw springs, diaphragms
+- **Execution**: `run_all.py --config merged_config.json --steps 9,10,11`
+- **Kw auto-detection**: All FWB (基礎壁梁) beams automatically receive Kw line springs
+- **Load defaults**: Uses `constants.py DEFAULT_LOADS` unless overridden in config `loads.zone_defaults`
+
+### Intermediate File Structure
+```
+{Case Folder}/
+├── 結構配置圖/
+│   ├── annotations.json
+│   ├── BEAM/          # Phase 1: major beam data by floor range
+│   ├── COLUMN/        # Phase 1: column data by floor range
+│   ├── WALL/          # Phase 1: wall data by floor range
+│   └── SB-BEAM/       # Phase 2: small beam data by floor range
+├── model_config.json       # Phase 1 output (no SB/slabs)
+├── sb_slabs_patch.json     # Phase 2 output (SB + slabs only)
+└── merged_config.json      # Merged for Phase 2 execution
+```
+
+---
+
 ## BTS Agent Team Rules (ABSOLUTE)
 
 1. **Small beam positions must never be guessed.** SB-READER reads coordinates from annotation.json (primary) or measures pixel positions (fallback for PPT input).
@@ -239,6 +313,10 @@ Foundation floor = BASE 上一層 (e.g. B3F). BASE has NO objects.
 4. **Mechanically equal-spaced small beam coordinates must be rejected and re-measured.**
 5. **No SDL load pattern.** NEVER create SDL. All additional dead loads go under DL.
 6. **Each project is independent** — never infer from memory of other projects.
+7. **Grid line names, direction, and order must be read from the structural plan.** Do not assume X=numbers, Y=letters, or that grids increase left-to-right / bottom-to-top.
+8. **Diaphragm walls (連續壁) are walls, not beams.** They use existing grid coordinates — never add extra grid lines for them.
+9. **Slabs must be cut along every beam including small beams.** Every SB fixed-axis coordinate is a slab cutting line.
+10. **L-shaped / non-rectangular buildings must define a building_outline polygon.** No columns, beams, or slabs outside the outline.
 
 ---
 

@@ -262,13 +262,8 @@
       "type": "object",
       "properties": {
         "kv": { "type": "number", "description": "Vertical spring stiffness (ton/m per point)" },
-        "kw": { "type": "number", "description": "Lateral spring stiffness for edge beams (ton/m/m)" },
-        "restraint_floor": { "type": "string", "description": "Floor where UX/UY restraints are applied (FS level)" },
-        "edge_beams": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Edge foundation beam identifiers for Kw springs"
-        }
+        "kw": { "type": "number", "description": "Lateral spring stiffness for edge beams (ton/m/m). Auto-applied to all FWB beams." },
+        "restraint_floor": { "type": "string", "description": "Floor where UX/UY restraints are applied (FS level)" }
       }
     },
     "building_outline": {

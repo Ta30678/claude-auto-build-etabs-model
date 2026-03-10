@@ -84,7 +84,19 @@ def run_all(config, steps_to_run=None, dry_run=False):
         all_stories = []
         strength_lookup = {}
 
+    # Pre-build elev_map from config (no ETABS side effects).
+    # This allows steps 7,8 to work without step 3 running first.
     elev_map = None
+    if config is not None:
+        stories = config.get("stories", [])
+        base_elev = config.get("base_elevation", 0)
+        if stories:
+            elev_map = {}
+            current_elev = base_elev
+            for s in stories:
+                elev_map[s["name"]] = current_elev
+                current_elev += s["height"]
+
     results = {}
 
     # Default to modeling steps only (design steps require explicit --steps)

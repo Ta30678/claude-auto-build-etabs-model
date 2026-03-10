@@ -49,11 +49,13 @@ def assign_frame_modifiers(SapModel):
 
         if is_col:
             r = SapModel.FrameObj.SetModifiers(names[i], COL_MODIFIERS)
-            if r == 0:
+            retcode = r[-1] if isinstance(r, (list, tuple)) else r
+            if retcode == 0:
                 col_count += 1
         else:
             r = SapModel.FrameObj.SetModifiers(names[i], BEAM_MODIFIERS)
-            if r == 0:
+            retcode = r[-1] if isinstance(r, (list, tuple)) else r
+            if retcode == 0:
                 beam_count += 1
 
     print(f"  Frame modifiers: {beam_count} beams, {col_count} columns")
@@ -74,7 +76,7 @@ def assign_rigid_zones(SapModel):
     count = 0
 
     for name in names:
-        r = SapModel.FrameObj.SetEndLengthOffset(name, True, 0, 0, RIGID_ZONE_FACTOR)
+        r = SapModel.FrameObj.SetEndLengthOffset(name, False, 0.0, 0.0, RIGID_ZONE_FACTOR)
         if r == 0:
             count += 1
 
