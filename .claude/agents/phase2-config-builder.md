@@ -29,13 +29,25 @@ maxTurns: 30
 - **絕對不可以**操作 ETABS 或呼叫 COM API
 - 你的唯一輸出是 `sb_slabs_patch.json` 文件
 
-## 啟動步驟
+## 啟動步驟（延遲啟動 — 兩階段處理）
 
+你是在至少一個 SB-READER 完成後才被啟動的。
+
+### 第一階段：預備 + 部分處理
 1. **預讀 Phase 1 的 model_config.json**（取得 grids, beams, building_outline）
 2. 預讀 `golden_scripts/config_schema.json`（了解格式）
 3. 用 `TaskList` 查看你被指派的任務
-4. **等待 SB-READER 的通知**（SendMessage 告知檔案已就緒）
-5. 收到通知後，讀取 `結構配置圖/SB-BEAM/*.md` 所有檔案
+4. 用 Glob 掃描 `結構配置圖/SB-BEAM/*.md`
+5. 讀取所有已存在的 .md 檔案
+6. 開始建構初步 small_beams 清單和板切割結構
+7. 記錄已處理的檔案清單
+
+### 第二階段：等待完整資料
+8. 等待 Team Lead 的 **"ALL_DATA_READY"** SendMessage
+9. 再次 Glob 掃描 `結構配置圖/SB-BEAM/*.md`
+10. 讀取第一階段未處理的新增檔案
+11. 合併為完整 sb_slabs_patch.json（重新執行完整板切割）
+12. 執行驗證 Checklist
 
 ## 輸入來源
 
@@ -113,6 +125,25 @@ Phase 2 有兩個 SB-READER，各負責不同樓層範圍。你需要：
 - FS 版的切割同樣依照所有梁（含 FSB）
 - FS 2x2 細分由 Golden Scripts gs_08 自動處理，不需在 config 中細分
 
+## JSON 輸出格式規則（MANDATORY）
+
+以下規則確保 AI 產生的 JSON 可被 Golden Scripts 正確解析。違反任一規則都會導致 ETABS API 呼叫失敗。
+
+| 欄位 | 正確格式 | 錯誤格式 | 說明 |
+|------|---------|---------|------|
+| section (frame) | `"SB30X50"`, `"FSB40X80"` | `"sb30x50"`, `"SB030X050"` | 大寫 X，數字無前導零 |
+| section (area) | `"S15"`, `"FS100"` | `"s15"`, `"S015"` | 大寫前綴，數字無前導零 |
+| 座標 (x1/y1/x2/y2) | `"x1": 8.4` | `"x1": "8.4"` | JSON number，不是字串 |
+| floors | `["2F", "3F", "4F"]` | `"2F~4F"` | 字串陣列，不可用範圍字串 |
+| corners | `[[0,0], [8.4,0], [8.4,6.0], [0,6.0]]` | `[0,0,8.4,0,8.4,6.0,0,6.0]` | 巢狀 `[x,y]` 對，不可展平 |
+| section name regex (frame) | `^(B\|SB\|WB\|FB\|FSB\|FWB\|C)\d+X\d+$` | — | 不含 Cfc 後綴 |
+| section name regex (area) | `^(S\|W\|FS)\d+$` | — | 不含 Cfc 後綴 |
+
+**額外驗證**：
+- 所有 `floors` 中的樓層名稱必須存在於 `model_config.json` 的 `stories`
+- 所有 SB 斷面必須列在 `sections.frame` 中
+- 不可有零長度梁（`x1==x2` 且 `y1==y2`）
+
 ## 輸出格式：`sb_slabs_patch.json`
 
 ```json
@@ -180,6 +211,7 @@ Phase 2 有兩個 SB-READER，各負責不同樓層範圍。你需要：
 
 - 從 `結構配置圖/SB-BEAM/` 資料夾讀取 SB-READER 資料
 - 從 `model_config.json` 讀取 Phase 1 的大梁和 Grid 資訊
-- 如果 SB-READER 的資料有問題，直接用 SendMessage 詢問
+- **兩階段處理**：啟動時先處理已有檔案，收到 ALL_DATA_READY 後處理剩餘
+- 如果 SB-READER 的資料有問題，直接用 SendMessage 詢問對應 SB-READER
 - 如果缺少用戶參數，SendMessage 問 Team Lead
 - 收到 `shutdown_request` 時結束

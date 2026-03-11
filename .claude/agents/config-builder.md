@@ -27,6 +27,27 @@ maxTurns: 30
 - 你的唯一輸出是 `model_config.json` 文件
 - 建模工作由 Team Lead 執行 Golden Scripts 完成，不是你的職責
 
+## floors 欄位語意規則（+1 Rule — 務必遵守）
+
+| 構件 | floors 語意 | Golden Scripts 處理 | 記憶口訣 |
+|------|------------|-------------------|---------|
+| **柱/牆** | 構件「站立的樓層」 | floor N → 建構件從 N 到 next_story(N) | 從這層「站起來」 |
+| **梁/版/小梁** | 構件「坐落的樓層」 | floor N → 建構件在 N 標高 | 「坐在」這層 |
+
+### 完整對應表（Stories: B3F→...→14F→R1F→R2F→R3F→PRF）
+
+| 情境 | floors 正確寫法 | 構件頂端 | 常見錯誤 |
+|------|----------------|---------|---------|
+| 一般柱 B3F~14F 圖面 | `["B3F",...,"14F"]` | 14F +1 = R1F | ~~`[...,"R1F"]`~~ 多一層 |
+| 核心柱 B3F~R2F 圖面 | `["B3F",...,"R2F"]` | R2F +1 = R3F | ~~`[...,"R3F"]`~~ 多一層 |
+| 連續壁 B3F~B1F 圖面 | `["B3F","B2F","B1F"]` | B1F +1 = 1F | ~~`[...,"1F"]`~~ 多一層 |
+| R1F 的梁 | `[...,"R1F"]` | 在 R1F 標高 | ~~`[...,"14F"]`~~ 少梁 |
+
+### 驗證邏輯
+
+- 柱/牆：`floors` 最後一層的 next_story = 構件預期頂端層
+- 梁/版：`floors` 直接包含構件所在樓層
+
 ## 自驅動啟動邏輯
 
 1. **立即開始**預讀 `golden_scripts/config_schema.json`（了解輸出格式）
@@ -56,17 +77,19 @@ maxTurns: 30
 {
   "x": [
     {"label": "1", "coordinate": 0},
-    {"label": "2", "coordinate": 8.4},
+    {"label": "2", "coordinate": 8.45},
     ...
   ],
   "y": [
     {"label": "A", "coordinate": 0},
     {"label": "B", "coordinate": 6.0},
     ...
-  ]
+  ],
+  "x_bubble": "End",
+  "y_bubble": "Start"
 }
 ```
-座標單位：**公尺 (m)**。READER 提供的間距需要累加為座標。
+座標單位：**公尺 (m)**，精度 0.01m（1cm）。READER 提供的間距需要累加為座標。
 
 ⚠️ **Grid 順序和名稱完全依照 READER 提供的資料。**
 - 不可參考 example_config.json 的格式假設順序
@@ -223,13 +246,17 @@ FS 基礎版額外做 2×2 細分（每塊板分成 4 塊）。
 - [ ] L型/U型建築缺角區域沒有被自動補板
 - [ ] 非矩形建築的凹口區域沒有柱、梁、板
 - [ ] building_outline polygon 外的區域沒有任何構件
+- [ ] 下構樓層（B*F + 1F）的構件座標全部落在基地範圍內
+- [ ] Grid 座標精度到 0.01m（1cm），無不合理四捨五入
+- [ ] 柱/牆 floors 最後一層 +1 = 構件預期頂端層（不可自己 +1）
+- [ ] 梁/版 floors 直接包含構件所在樓層（無 +1）
 
 ## 屋突複製規則 (Rooftop Replication)
 
 **觸發條件**: stories 有 R2F 以上樓層 AND READER 提供 core_grid_area
 
 **複製邏輯** (以 core_grid_area 為篩選範圍):
-1. **柱**: 核心區內的柱，將 R1F~最高屋突前一層 加入 floors（+1 rule，柱的 plan floor 到上一層）
+1. **柱**: 核心區內的柱，將 R1F~最高屋突前一層 加入 floors（柱 floors = 站立起始層，+1 rule 自動延伸到頂端上一層）
 2. **梁**: 兩端都在核心區內的梁，加入 R2F~PRF 到 floors
 3. **小梁**: 同梁
 4. **板**: 角點都在核心區內的板，加入 R2F~PRF 到 floors

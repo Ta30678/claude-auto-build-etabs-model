@@ -19,7 +19,9 @@
       {"label": "C", "coordinate": 14.0},
       {"label": "D", "coordinate": 20.0},
       {"label": "E", "coordinate": 28.0}
-    ]
+    ],
+    "x_bubble": "End",
+    "y_bubble": "Start"
   },
   "stories": [
     {"name": "B3F", "height": 3.6},

@@ -16,9 +16,12 @@
       "mcp__etabs__get_frame_sections",
       "mcp__etabs__get_materials",
       "mcp__etabs__set_units",
-      "mcp__etabs__unlock_model"
+      "mcp__etabs__unlock_model",
+      "mcp__etabs__get_etabs_model_info",
+      "mcp__etabs__connect_etabs",
+      "mcp__etabs__test_connection"
     ]
   },
-  "skipDangerousModePermissionPrompt": true,
-  "effortLevel": "high"
+  "effortLevel": "high",
+  "skipDangerousModePermissionPrompt": true
 }

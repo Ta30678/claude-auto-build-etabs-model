@@ -30,8 +30,12 @@ maxTurns: 50
 
 ### 步驟 1：讀取標註 JSON
 - 讀取 `{Case Folder}/結構配置圖/annotations.json`
-- 從 `annotations.legend.items` 辨識小梁類型（label 含「小梁」「SB」的項目）
-- 記錄每種小梁對應的顏色
+- **如果 Team Lead 已提供圖例色彩對應（SB_LEGEND_MAPPING），直接使用，跳過重新辨識**
+- 否則從 `annotations.legend.items` 辨識小梁類型：
+  - 搜尋 label 含「小梁」「SB」「次梁」的項目
+  - 記錄每種小梁對應的顏色（color / hex）
+  - 注意：同一 legend 項可能包含多種 SB 尺寸（如「小梁 SB30X50, SB25X50」）
+- **如果 Team Lead 已提供各頁面的樓層範圍標註（PAGE_FLOOR_LABELS），直接使用作為分段依據**
 
 ### 步驟 2：篩選小梁線段
 - 從 `annotations.lines` 中篩選對應顏色的線段
@@ -42,9 +46,12 @@ maxTurns: 50
 - 方向從 `direction` 欄位讀取（H → X向，V → Y向）
 - 辨識固定軸座標和所在 Grid 區間
 
-### 步驟 4：逐區段整理
+### 步驟 4：按圖面標註的樓層範圍分段
 - **只整理你被分配的樓層範圍**
-- 不同區段的小梁配置可能不同，必須逐一確認
+- 從結構配置圖的圖面標註讀取樓層範圍（如「2F~12F 小梁配置」）
+- 以圖面標註的樓層範圍作為分組依據
+- **禁止**根據斷面尺寸變化自行拆分樓層
+- 如果同一頁面有多個樓層範圍標註，按各自標註分別整理
 
 ### 步驟 5：執行驗證
 
@@ -105,20 +112,34 @@ maxTurns: 50
 2. **只讀最低樓層，直接套用到所有樓層** — 必須逐區段確認
 3. **假設等間距配置** — 即使看起來像等間距，也要驗證確認
 4. **用「大約」「估計」代替精確座標** — annotation.json 提供的座標已是精確值
+5. **依照斷面變化分層** — 禁止因小梁斷面不同而拆分樓層區段。樓層分段只能依據圖面上標註的樓層範圍。
 
 ## 完成後動作
 
 1. 確認所有檔案已寫入 `結構配置圖/SB-BEAM/` folder
-2. 用 `SendMessage` 通知 **CONFIG-BUILDER**：「SB 讀取完成，請讀取 結構配置圖/SB-BEAM/ 資料夾」
+2. 用 `SendMessage` 通知 **Team Lead**：「SB-READER-{A/B} 讀取完成。已輸出檔案：{列出所有 .md 檔名}」
 3. 用 `TaskUpdate` 標記你的任務完成
 4. 進入等待模式
 
 ## 等待模式（Follow-up）
 
-1. 標記任務完成
-2. 持續監聽 SendMessage
+完成初始讀圖後：
+1. 用 `TaskUpdate` 標記任務完成
+2. **進入等待模式**：持續監聽 SendMessage
 3. 收到 CONFIG-BUILDER 的確認要求時，重新查看該區段標註資料後回覆
-4. 收到 `shutdown_request` 時結束
+4. 收到 Team Lead 的 **RESUME** 指令時，執行恢復模式
+5. 收到 `shutdown_request` 時結束
+
+## 恢復模式（Resume Protocol）
+
+收到含 "RESUME" 關鍵字的 SendMessage 時：
+
+1. **解析指令**：讀取 Team Lead 指定的額外頁面和樓層範圍
+2. **利用既有上下文**：annotations.json、SKILL.md、Grid 系統已載入，不需重讀
+3. **處理新頁面**：按照主要工作流處理，讀取小梁座標 → 驗證
+4. **輸出到相同資料夾**：SB-BEAM/，使用對應的 floor_range 檔名
+5. **完成後**：SendMessage 通知 **Team Lead**「額外頁面處理完成」
+6. 回到等待模式
 
 ## 附錄：像素量測流程（備案）
 

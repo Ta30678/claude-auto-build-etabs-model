@@ -27,13 +27,46 @@ maxTurns: 30
 - **絕對不可以**操作 ETABS 或呼叫 COM API
 - 你的唯一輸出是 `model_config.json` 文件
 
-## 啟動步驟
+## floors 欄位語意規則（+1 Rule — 務必遵守）
 
-1. **立即開始**預讀 `golden_scripts/config_schema.json`（了解輸出格式）
+| 構件 | floors 語意 | Golden Scripts 處理 | 記憶口訣 |
+|------|------------|-------------------|---------|
+| **柱/牆** | 構件「站立的樓層」 | floor N → 建構件從 N 到 next_story(N) | 從這層「站起來」 |
+| **梁/版/小梁** | 構件「坐落的樓層」 | floor N → 建構件在 N 標高 | 「坐在」這層 |
+
+### 完整對應表（Stories: B3F→...→14F→R1F→R2F→R3F→PRF）
+
+| 情境 | floors 正確寫法 | 構件頂端 | 常見錯誤 |
+|------|----------------|---------|---------|
+| 一般柱 B3F~14F 圖面 | `["B3F",...,"14F"]` | 14F +1 = R1F | ~~`[...,"R1F"]`~~ 多一層 |
+| 核心柱 B3F~R2F 圖面 | `["B3F",...,"R2F"]` | R2F +1 = R3F | ~~`[...,"R3F"]`~~ 多一層 |
+| 連續壁 B3F~B1F 圖面 | `["B3F","B2F","B1F"]` | B1F +1 = 1F | ~~`[...,"1F"]`~~ 多一層 |
+| R1F 的梁 | `[...,"R1F"]` | 在 R1F 標高 | ~~`[...,"14F"]`~~ 少梁 |
+
+### 驗證邏輯
+
+- 柱/牆：`floors` 最後一層的 next_story = 構件預期頂端層
+- 梁/版：`floors` 直接包含構件所在樓層
+
+## 啟動步驟（延遲啟動 — 兩階段處理）
+
+你是在至少一個 READER 完成後才被啟動的。
+
+### 第一階段：預備 + 部分處理
+1. 立即預讀 `golden_scripts/config_schema.json`（了解輸出格式）
 2. 讀取 `golden_scripts/example_config.json`（參考範例，但不要複製其值）
 3. 用 `TaskList` 查看你被指派的任務
-4. **等待 READER 的通知**（SendMessage 告知檔案已就緒）
-5. 收到通知後，從資料夾讀取所有 `.md` 檔案
+4. 用 Glob 掃描 `結構配置圖/BEAM/*.md`、`COLUMN/*.md`、`WALL/*.md`
+5. 讀取所有已存在的 .md 檔案
+6. 開始建構初步 config（Grid 座標、已知的柱/梁/牆結構）
+7. 記錄已處理的檔案清單
+
+### 第二階段：等待完整資料
+8. 等待 Team Lead 的 **"ALL_DATA_READY"** SendMessage
+9. 再次 Glob 掃描所有 .md 檔案
+10. 讀取第一階段未處理的新增檔案
+11. 合併為完整 model_config.json
+12. 執行驗證 Checklist
 
 ## 輸入來源
 
@@ -56,11 +89,13 @@ maxTurns: 30
 ### grids
 ```json
 {
-  "x": [{"label": "1", "coordinate": 0}, {"label": "2", "coordinate": 8.4}],
-  "y": [{"label": "A", "coordinate": 0}, {"label": "B", "coordinate": 6.0}]
+  "x": [{"label": "1", "coordinate": 0}, {"label": "2", "coordinate": 8.45}],
+  "y": [{"label": "A", "coordinate": 0}, {"label": "B", "coordinate": 6.0}],
+  "x_bubble": "End",
+  "y_bubble": "Start"
 }
 ```
-座標單位：**公尺 (m)**。Grid 順序和名稱完全依照 READER 提供的資料。
+座標單位：**公尺 (m)**，精度 0.01m（1cm）。Grid 順序和名稱完全依照 READER 提供的資料。
 
 ### columns
 ```json
@@ -109,10 +144,15 @@ maxTurns: 30
 Phase 1 有兩個 READER，各負責不同樓層範圍。你需要：
 
 1. **Grid 系統**：兩個 READER 可能都輸出 Grid。取其中一個（通常上構配置較完整），若有差異則向 READER 確認。
-2. **柱**：合併兩個 READER 的柱表，確保同一 Grid 位置的柱 floors 範圍合併（不重複）。
+2. **柱**：合併兩個 READER 的柱表：
+   - **同位置 + 同斷面** → 合併 floors（去重）
+   - **同位置 + 不同斷面** → 保留為兩筆 entry，各自的 floors 不合併
+   - 例如：READER-A 報 C1@(0,0) C90X90 2F~12F, READER-B 報 C1@(0,0) C80X80 13F~23F → 保留兩筆
 3. **梁**：合併兩個 READER 的梁表，同一座標的梁 floors 合併。
-4. **牆**：同上。
+4. **牆**：同柱邏輯——同位置+同斷面合併 floors，不同斷面保留分開的 entry。
 5. **Building Outline**：以含較多資訊的 READER 為主。
+   **下構一致性驗證**：若多個 READER 分別提供了下構樓層的 Building Outline，確認 polygon 一致。
+   若不一致，用 SendMessage 向 READER 確認，以基地範圍為準。
 6. **去重**：相同座標和尺寸的構件，合併 floors 即可。
 
 ## 建築外框篩選（非矩形建築）
@@ -134,7 +174,12 @@ Phase 1 有兩個 READER，各負責不同樓層範圍。你需要：
 - [ ] 強度分配覆蓋所有樓層
 - [ ] 非矩形建築的凹口區域沒有構件
 - [ ] building_outline polygon 外的區域沒有任何構件
+- [ ] 下構樓層（B*F + 1F）的構件座標全部落在基地範圍（Substructure Outline）內
 - [ ] Grid 順序和名稱與 READER 資料一致
+- [ ] Grid 座標精度到 0.01m（1cm），無不合理四捨五入
+- [ ] 柱/牆 floors 最後一層 +1 = 構件預期頂端層（不可自己 +1）
+- [ ] 梁 floors 直接包含構件所在樓層（無 +1）
+- [ ] 同一位置但不同斷面的柱/牆，各自保留獨立 floors（未被錯誤合併）
 
 ## 屋突複製規則 (Rooftop Replication)
 
@@ -154,6 +199,7 @@ Phase 1 有兩個 READER，各負責不同樓層範圍。你需要：
 ## 團隊協作
 
 - 從 `結構配置圖/BEAM/`, `COLUMN/`, `WALL/` 資料夾讀取 READER 資料
-- 如果 READER 的資料有問題，直接用 SendMessage 詢問
+- **兩階段處理**：啟動時先處理已有檔案，收到 ALL_DATA_READY 後處理剩餘
+- 如果 READER 的資料有問題，直接用 SendMessage 詢問對應 READER
 - 如果缺少用戶參數，SendMessage 問 Team Lead
 - 收到 `shutdown_request` 時結束

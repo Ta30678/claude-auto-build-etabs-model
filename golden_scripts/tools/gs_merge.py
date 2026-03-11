@@ -110,7 +110,7 @@ def _convert_section_dimensions(raw_text, length_scale, force_scale):
     result_lines = []
     for line in raw_text.split('\n'):
         # Length dimensions
-        for kw in ['D', 'BF', 'TF', 'TW', 'DIS', 'WIDTH', 'DEPTH',
+        for kw in ['D', 'B', 'BF', 'TF', 'TW', 'DIS', 'WIDTH', 'DEPTH',
                     'COVER', 'BARSPACING']:
             line = re.sub(
                 rf'(\b{kw}\s+)([-\d.E+]+)',

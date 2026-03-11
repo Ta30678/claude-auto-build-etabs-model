@@ -72,8 +72,25 @@ def run_all(config, steps_to_run=None, dry_run=False):
                 print(f"  Step {num:02d}: {name}")
         return
 
+    # Pre-flight validation for steps that use AI-generated JSON (small_beams, slabs)
+    if config and steps_to_run and (7 in steps_to_run or 8 in steps_to_run):
+        from tools.config_merge import validate_config
+        errors, warnings = validate_config(config)
+        if warnings:
+            for w in warnings:
+                print(f"  WARNING: {w}")
+        if errors:
+            print(f"\nPRE-FLIGHT VALIDATION FAILED ({len(errors)} errors):")
+            for e in errors:
+                print(f"  - {e}")
+            print("\nFix the config and rerun. Aborting.")
+            return
+
     # Connect to ETABS
     SapModel = gs_01_init.connect_etabs(config)
+
+    # Always unlock model so element additions work (even when skipping step 1)
+    SapModel.SetModelIsLocked(False)
 
     # Prepare shared data (skip if config=None, step 12 handles it internally)
     if config is not None:
@@ -86,6 +103,7 @@ def run_all(config, steps_to_run=None, dry_run=False):
 
     # Pre-build elev_map from config (no ETABS side effects).
     # This allows steps 7,8 to work without step 3 running first.
+    # Each story name maps to its TOP elevation (= floor slab elevation).
     elev_map = None
     if config is not None:
         stories = config.get("stories", [])
@@ -94,8 +112,8 @@ def run_all(config, steps_to_run=None, dry_run=False):
             elev_map = {}
             current_elev = base_elev
             for s in stories:
-                elev_map[s["name"]] = current_elev
                 current_elev += s["height"]
+                elev_map[s["name"]] = current_elev
 
     results = {}
 
@@ -115,6 +133,13 @@ def run_all(config, steps_to_run=None, dry_run=False):
                     SapModel = ret  # init_model may return fresh COM reference
             elif num == 2:
                 module.run(SapModel, config)
+                # Re-acquire COM reference after heavy section creation.
+                # Step 02 makes thousands of COM calls (SetRectangle + SetRebar)
+                # which can corrupt the COM proxy state in comtypes, causing
+                # subsequent AddByCoord calls to succeed but report failure.
+                SapModel = gs_01_init._reacquire_SapModel()
+                SapModel.SetPresentUnits(12)  # Ton_m
+                SapModel.SetModelIsLocked(False)
             elif num == 3:
                 elev_map = module.run(SapModel, config)
             elif num in (4, 5):

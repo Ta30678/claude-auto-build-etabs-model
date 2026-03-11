@@ -72,8 +72,11 @@ def init_model(SapModel, config):
     return SapModel
 
 
-def define_materials(SapModel, config=None):
+def define_materials(SapModel, config=None, skip_materials=True):
     """Define all concrete grades and rebar materials."""
+    if skip_materials:
+        print("  Skipping material creation (using existing materials in model)")
+        return 0
     count = 0
 
     for fc in CONCRETE_GRADES:
@@ -123,7 +126,8 @@ def run(SapModel, config):
     print("=" * 60)
 
     SapModel = init_model(SapModel, config)
-    define_materials(SapModel, config)
+    skip_mat = config.get("project", {}).get("skip_materials", True)
+    define_materials(SapModel, config, skip_materials=skip_mat)
     SapModel.View.RefreshView(0, False)
     print("Step 01 complete.\n")
     return SapModel

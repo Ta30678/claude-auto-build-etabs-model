@@ -40,6 +40,18 @@
               "coordinate": { "type": "number", "description": "Y coordinate in meters" }
             }
           }
+        },
+        "x_bubble": {
+          "type": "string",
+          "enum": ["Start", "End"],
+          "default": "End",
+          "description": "BubbleLoc for X-direction grid lines"
+        },
+        "y_bubble": {
+          "type": "string",
+          "enum": ["Start", "End"],
+          "default": "Start",
+          "description": "BubbleLoc for Y-direction grid lines"
         }
       }
     },

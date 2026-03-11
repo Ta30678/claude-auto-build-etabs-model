@@ -11,10 +11,18 @@ Usage:
         --base model_config.json \
         --patch sb_slabs_patch.json \
         --output merged_config.json
+
+    # Validate only (no output written on errors):
+    python -m golden_scripts.tools.config_merge \
+        --base model_config.json \
+        --patch sb_slabs_patch.json \
+        --output merged_config.json \
+        --validate
 """
 import json
 import argparse
 import os
+import re
 import sys
 
 
@@ -104,6 +112,157 @@ def validate_merged(merged: dict) -> list:
     return warnings
 
 
+# --- Comprehensive validation ---
+
+_FRAME_RE = re.compile(r'^(B|SB|WB|FB|FSB|FWB|C)\d+X\d+(?:C\d+)?$')
+_AREA_RE = re.compile(r'^(S|W|FS)\d+(?:C\d+)?$')
+
+
+def validate_config(config: dict) -> tuple:
+    """Validate config for common AI-generated JSON errors.
+
+    Returns (errors: list[str], warnings: list[str]).
+    Errors are fatal (will cause ETABS API failures).
+    Warnings are informational.
+    """
+    errors = []
+    warnings = []
+
+    # Build story name set
+    story_names = set()
+    for s in config.get("stories", []):
+        if isinstance(s, dict) and "name" in s:
+            story_names.add(s["name"])
+
+    # Build section sets from config
+    frame_sections = set(config.get("sections", {}).get("frame", []))
+    slab_sections = set()
+    for t in config.get("sections", {}).get("slab", []):
+        slab_sections.add(f"S{t}")
+    raft_sections = set()
+    for t in config.get("sections", {}).get("raft", []):
+        raft_sections.add(f"FS{t}")
+    wall_sections = set()
+    for t in config.get("sections", {}).get("wall", []):
+        wall_sections.add(f"W{t}")
+
+    # --- Validate beams (including small_beams) ---
+    for key in ("beams", "small_beams"):
+        for i, beam in enumerate(config.get(key, [])):
+            loc = f"{key}[{i}]"
+
+            # Coordinate types
+            for coord in ("x1", "y1", "x2", "y2"):
+                val = beam.get(coord)
+                if val is not None and not isinstance(val, (int, float)):
+                    errors.append(f"{loc}.{coord}: expected number, got {type(val).__name__} ({val!r})")
+
+            # Section name format
+            sec = beam.get("section", "")
+            base_sec = re.sub(r'C\d+$', '', sec)  # strip Cfc suffix for lookup
+            if sec and not _FRAME_RE.match(sec):
+                errors.append(f"{loc}.section: invalid frame section name {sec!r}")
+            elif sec and base_sec not in frame_sections and sec not in frame_sections:
+                warnings.append(f"{loc}.section: {sec!r} not in sections.frame")
+
+            # Floors must be array of strings
+            floors = beam.get("floors")
+            if floors is not None:
+                if not isinstance(floors, list):
+                    errors.append(f"{loc}.floors: expected array, got {type(floors).__name__} ({floors!r})")
+                else:
+                    for j, fl in enumerate(floors):
+                        if not isinstance(fl, str):
+                            errors.append(f"{loc}.floors[{j}]: expected string, got {type(fl).__name__} ({fl!r})")
+                        elif fl not in story_names:
+                            errors.append(f"{loc}.floors[{j}]: floor {fl!r} not in stories")
+
+            # Zero-length beam check
+            x1, y1 = beam.get("x1"), beam.get("y1")
+            x2, y2 = beam.get("x2"), beam.get("y2")
+            if (isinstance(x1, (int, float)) and isinstance(y1, (int, float)) and
+                    isinstance(x2, (int, float)) and isinstance(y2, (int, float))):
+                if x1 == x2 and y1 == y2:
+                    errors.append(f"{loc}: zero-length beam at ({x1}, {y1})")
+
+    # --- Validate columns ---
+    for i, col in enumerate(config.get("columns", [])):
+        loc = f"columns[{i}]"
+        sec = col.get("section", "")
+        if sec and not _FRAME_RE.match(sec):
+            errors.append(f"{loc}.section: invalid frame section name {sec!r}")
+        floors = col.get("floors")
+        if floors is not None:
+            if not isinstance(floors, list):
+                errors.append(f"{loc}.floors: expected array, got {type(floors).__name__}")
+            else:
+                for j, fl in enumerate(floors):
+                    if not isinstance(fl, str):
+                        errors.append(f"{loc}.floors[{j}]: expected string, got {type(fl).__name__}")
+                    elif fl not in story_names:
+                        errors.append(f"{loc}.floors[{j}]: floor {fl!r} not in stories")
+
+    # --- Validate walls ---
+    for i, wall in enumerate(config.get("walls", [])):
+        loc = f"walls[{i}]"
+        floors = wall.get("floors")
+        if floors is not None:
+            if not isinstance(floors, list):
+                errors.append(f"{loc}.floors: expected array, got {type(floors).__name__}")
+            else:
+                for j, fl in enumerate(floors):
+                    if not isinstance(fl, str):
+                        errors.append(f"{loc}.floors[{j}]: expected string, got {type(fl).__name__}")
+                    elif fl not in story_names:
+                        errors.append(f"{loc}.floors[{j}]: floor {fl!r} not in stories")
+
+    # --- Validate slabs ---
+    for i, slab in enumerate(config.get("slabs", [])):
+        loc = f"slabs[{i}]"
+
+        # Section name format
+        sec = slab.get("section", "")
+        base_sec = re.sub(r'C\d+$', '', sec)  # strip Cfc suffix
+        if sec and not _AREA_RE.match(sec):
+            errors.append(f"{loc}.section: invalid area section name {sec!r}")
+        elif sec:
+            prefix = re.match(r'^(S|W|FS)', sec)
+            if prefix and prefix.group(1) == "FS":
+                if base_sec not in raft_sections and sec not in raft_sections:
+                    warnings.append(f"{loc}.section: {sec!r} not in sections.raft")
+            elif prefix and prefix.group(1) == "S":
+                if base_sec not in slab_sections and sec not in slab_sections:
+                    warnings.append(f"{loc}.section: {sec!r} not in sections.slab")
+
+        # Floors must be array of strings
+        floors = slab.get("floors")
+        if floors is not None:
+            if not isinstance(floors, list):
+                errors.append(f"{loc}.floors: expected array, got {type(floors).__name__} ({floors!r})")
+            else:
+                for j, fl in enumerate(floors):
+                    if not isinstance(fl, str):
+                        errors.append(f"{loc}.floors[{j}]: expected string, got {type(fl).__name__}")
+                    elif fl not in story_names:
+                        errors.append(f"{loc}.floors[{j}]: floor {fl!r} not in stories")
+
+        # Corners validation
+        corners = slab.get("corners")
+        if corners is not None:
+            if not isinstance(corners, list):
+                errors.append(f"{loc}.corners: expected array, got {type(corners).__name__}")
+            else:
+                for j, pt in enumerate(corners):
+                    if not isinstance(pt, list) or len(pt) != 2:
+                        errors.append(f"{loc}.corners[{j}]: expected [x, y] pair, got {pt!r}")
+                    else:
+                        for k, v in enumerate(pt):
+                            if not isinstance(v, (int, float)):
+                                errors.append(f"{loc}.corners[{j}][{k}]: expected number, got {type(v).__name__} ({v!r})")
+
+    return errors, warnings
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Merge base model_config.json with sb_slabs_patch.json")
@@ -113,6 +272,8 @@ def main():
                         help="Path to sb_slabs_patch.json (Phase 2 output)")
     parser.add_argument("--output", required=True,
                         help="Path for merged output config")
+    parser.add_argument("--validate", action="store_true",
+                        help="Run comprehensive validation; exit non-zero on errors")
     args = parser.parse_args()
 
     # Load base config
@@ -133,22 +294,39 @@ def main():
     # Merge
     merged = merge_configs(base, patch)
 
-    # Validate
-    warnings = validate_merged(merged)
-    if warnings:
-        for w in warnings:
+    # Basic validation
+    basic_warnings = validate_merged(merged)
+    if basic_warnings:
+        for w in basic_warnings:
             print(f"  WARNING: {w}")
 
-    # Write output
-    with open(args.output, "w", encoding="utf-8") as f:
-        json.dump(merged, f, ensure_ascii=False, indent=2)
-    print(f"\nMerged config written to: {args.output}")
-    print(f"  columns: {len(merged.get('columns', []))}")
-    print(f"  beams: {len(merged.get('beams', []))}")
-    print(f"  walls: {len(merged.get('walls', []))}")
-    print(f"  small_beams: {len(merged.get('small_beams', []))}")
-    print(f"  slabs: {len(merged.get('slabs', []))}")
-    print(f"  frame sections: {merged.get('sections', {}).get('frame', [])}")
+    # Comprehensive validation
+    errors, val_warnings = validate_config(merged)
+    if val_warnings:
+        for w in val_warnings:
+            print(f"  WARNING: {w}")
+    if errors:
+        print(f"\nVALIDATION FAILED ({len(errors)} errors):")
+        for e in errors:
+            print(f"  ERROR: {e}")
+        if args.validate:
+            sys.exit(1)
+    elif args.validate:
+        print("\nValidation passed.")
+
+    # Write output (skip if --validate and errors)
+    if errors and args.validate:
+        print("\nOutput NOT written due to validation errors.")
+    else:
+        with open(args.output, "w", encoding="utf-8") as f:
+            json.dump(merged, f, ensure_ascii=False, indent=2)
+        print(f"\nMerged config written to: {args.output}")
+        print(f"  columns: {len(merged.get('columns', []))}")
+        print(f"  beams: {len(merged.get('beams', []))}")
+        print(f"  walls: {len(merged.get('walls', []))}")
+        print(f"  small_beams: {len(merged.get('small_beams', []))}")
+        print(f"  slabs: {len(merged.get('slabs', []))}")
+        print(f"  frame sections: {merged.get('sections', {}).get('frame', [])}")
 
 
 if __name__ == "__main__":

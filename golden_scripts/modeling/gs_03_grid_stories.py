@@ -41,15 +41,21 @@ def define_grids(SapModel, config):
     except Exception as e:
         print(f"  Grid system creation skipped ({e}), continuing with grid lines...")
 
+    # Read bubble location settings from config (optional, with defaults)
+    x_bubble = grids.get("x_bubble", "End")
+    y_bubble = grids.get("y_bubble", "Start")
+
     # Step 2: Define grid lines via DatabaseTables
-    _define_grids_via_database(SapModel, x_grids, y_grids, grid_sys_name)
+    _define_grids_via_database(SapModel, x_grids, y_grids, grid_sys_name,
+                               x_bubble=x_bubble, y_bubble=y_bubble)
 
     # Print grid summary
     print("  X grids:", ", ".join(f"{g['label']}={g['coordinate']}m" for g in x_grids))
     print("  Y grids:", ", ".join(f"{g['label']}={g['coordinate']}m" for g in y_grids))
 
 
-def _define_grids_via_database(SapModel, x_grids, y_grids, grid_sys_name="G1"):
+def _define_grids_via_database(SapModel, x_grids, y_grids, grid_sys_name="G1",
+                               x_bubble="End", y_bubble="Start"):
     """Define grid lines using DatabaseTables API.
 
     SetTableForEditingArray signature (from API docs):
@@ -63,10 +69,10 @@ def _define_grids_via_database(SapModel, x_grids, y_grids, grid_sys_name="G1"):
         data = []
         for g in x_grids:
             data.extend([grid_sys_name, "X (Cartesian)", g["label"],
-                         str(g["coordinate"]), "Yes", "End"])
+                         str(g["coordinate"]), "Yes", x_bubble])
         for g in y_grids:
             data.extend([grid_sys_name, "Y (Cartesian)", g["label"],
-                         str(g["coordinate"]), "Yes", "Start"])
+                         str(g["coordinate"]), "Yes", y_bubble])
 
         num_records = len(x_grids) + len(y_grids)
         table_version = 1

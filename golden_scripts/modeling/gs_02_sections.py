@@ -29,6 +29,18 @@ from constants import (
 )
 
 
+def get_existing_materials(SapModel):
+    """Query ETABS for all defined material names. Returns a set."""
+    ret = SapModel.PropMaterial.GetNameList(0, [])
+    names = set()
+    for item in ret:
+        if isinstance(item, (list, tuple)):
+            for s in item:
+                if isinstance(s, str):
+                    names.add(s)
+    return names
+
+
 def expand_frame_sections(prefix, base_w, base_d):
     """Expand one base section into all size+grade combinations.
     Returns list of (name, mat_name, depth_m, width_m).
@@ -70,25 +82,35 @@ def expand_area_sections(prefix, thickness_cm):
     return results
 
 
-def create_frame_sections(SapModel, sections_list):
+def create_frame_sections(SapModel, sections_list, existing_materials=None):
     """Create frame sections in ETABS.
     sections_list: list of (name, mat_name, depth_m, width_m)
     """
     count = 0
+    skipped = 0
     for name, mat, depth_m, width_m in sections_list:
+        if existing_materials is not None and mat not in existing_materials:
+            skipped += 1
+            continue
         ret = SapModel.PropFrame.SetRectangle(name, mat, depth_m, width_m)
         retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
         if retcode == 0:
             count += 1
+    if skipped:
+        print(f"  Skipped {skipped} frame sections (material not in model)")
     return count
 
 
-def create_area_sections(SapModel, sections_list):
+def create_area_sections(SapModel, sections_list, existing_materials=None):
     """Create area sections in ETABS.
     sections_list: list of (name, mat_name, thickness_m, shell_type)
     """
     count = 0
+    skipped = 0
     for name, mat, t_m, shell_type in sections_list:
+        if existing_materials is not None and mat not in existing_materials:
+            skipped += 1
+            continue
         if name.startswith("W") and not name.startswith("WB"):
             ret = SapModel.PropArea.SetWall(name, 0, shell_type, mat, t_m)
         else:
@@ -96,14 +118,18 @@ def create_area_sections(SapModel, sections_list):
         retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
         if retcode == 0:
             count += 1
+    if skipped:
+        print(f"  Skipped {skipped} area sections (material not in model)")
     return count
 
 
-def assign_all_rebar(SapModel, frame_sections):
+def assign_all_rebar(SapModel, frame_sections, existing_materials=None):
     """Assign rebar configuration to all created frame sections."""
     beam_count, col_count, fail_count = 0, 0, 0
 
     for name, mat, depth_m, width_m in frame_sections:
+        if existing_materials is not None and mat not in existing_materials:
+            continue
         prefix, w_cm, d_cm, fc = parse_frame_section(name)
         if not prefix:
             continue
@@ -151,10 +177,12 @@ def assign_all_rebar(SapModel, frame_sections):
     return beam_count, col_count
 
 
-def assign_area_modifiers(SapModel, area_sections):
+def assign_area_modifiers(SapModel, area_sections, existing_materials=None):
     """Set stiffness modifiers on area section properties."""
     count = 0
     for name, mat, t_m, shell_type in area_sections:
+        if existing_materials is not None and mat not in existing_materials:
+            continue
         prefix, _, _ = parse_area_section(name)
         if not prefix:
             continue
@@ -208,22 +236,26 @@ def run(SapModel, config):
     print(f"\nTotal unique frame sections: {len(frame_unique)}")
     print(f"Total unique area sections: {len(area_unique)}")
 
+    # Query existing materials
+    existing_materials = get_existing_materials(SapModel)
+    print(f"\nExisting materials in model: {sorted(existing_materials)}")
+
     # Create in ETABS
     print("\n--- Creating frame sections ---")
-    n_frame = create_frame_sections(SapModel, frame_unique)
+    n_frame = create_frame_sections(SapModel, frame_unique, existing_materials)
     print(f"  Created {n_frame} frame sections")
 
     print("\n--- Creating area sections ---")
-    n_area = create_area_sections(SapModel, area_unique)
+    n_area = create_area_sections(SapModel, area_unique, existing_materials)
     print(f"  Created {n_area} area sections")
 
     # Assign rebar to all frame sections
     print("\n--- Assigning rebar ---")
-    assign_all_rebar(SapModel, frame_unique)
+    assign_all_rebar(SapModel, frame_unique, existing_materials)
 
     # Assign area modifiers
     print("\n--- Assigning area modifiers ---")
-    assign_area_modifiers(SapModel, area_unique)
+    assign_area_modifiers(SapModel, area_unique, existing_materials)
 
     SapModel.View.RefreshView(0, False)
     print("Step 02 complete.\n")

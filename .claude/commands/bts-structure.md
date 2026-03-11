@@ -19,6 +19,7 @@ argument-hint: "[樓層說明或附加指示]"
 3. **Grid 名稱/方向/順序必須從圖面讀取，禁止假設。**
 4. **連續壁是牆，不是梁。使用現有 Grid 座標。**
 5. **每案獨立**——禁止從記憶推斷。
+6. **下構樓層（B*F + 1F）共用同一個 building_outline（基地範圍）。** 1F 的建物外框 = B*F 的建物外框。
 
 ---
 
@@ -65,16 +66,27 @@ python -m golden_scripts.tools.pdf_annot_extractor \
 ### Phase 0.7: 分析樓層分佈 & 建立資料夾
 
 1. **讀取 annotations.json**，分析各頁的樓層標註
-2. **建立子資料夾**（如尚未存在）：
+2. **讀取結構配置圖 PNG，辨識各頁面的樓層範圍標註**：
+   - 讀取 `*_full.png` 圖檔
+   - 找出圖面上標註的樓層範圍文字（如「2F~12F 柱/梁配置」「B3F~1F 柱/梁配置」）
+   - 記錄每個頁面的樓層範圍標註
+   - 儲存為 `PAGE_FLOOR_LABELS` 變數，後續傳給 READER
+3. **建立子資料夾**（如尚未存在）：
    ```bash
    mkdir -p "{Case Folder}/結構配置圖/BEAM"
    mkdir -p "{Case Folder}/結構配置圖/COLUMN"
    mkdir -p "{Case Folder}/結構配置圖/WALL"
    ```
-3. **決定樓層分工**：
+4. **決定樓層分工**：
    - 根據 annotations 中各頁的樓層標註，將頁面分為兩組
    - 原則：工作量大致相等
    - 例如：READER-A 負責 2F~23F（典型樓層），READER-B 負責 B3F~1F + RF~PRF
+5. **記錄各 READER 的預期輸出檔案**：
+   ```
+   READER_A_EXPECTED = [{floor_range}.md for each page in GROUP_1]
+   READER_B_EXPECTED = [{floor_range}.md for each page in GROUP_2]
+   ```
+   用於 Phase 2.5 的 file-based detection。
 
 ### Phase 1: 建立 Team + 創建任務
 
@@ -86,15 +98,15 @@ TeamCreate(team_name="bts-structure-team", description="BTS Phase 1 主結構建
 |------|------|-------|-----------|
 | T1 | READER-A 讀圖 | READER-A | (無) |
 | T2 | READER-B 讀圖 | READER-B | (無) |
-| T3 | CONFIG-BUILDER 生成 config | CONFIG-BUILDER | T1, T2 |
+| T3 | CONFIG-BUILDER 生成 config | CONFIG-BUILDER | (無) |
 | T4 | 執行 Golden Scripts | (Team Lead) | T3 |
 
-### Phase 2: 啟動 3 個 Agent
+### Phase 2A: 啟動 Readers Only
 
-**同時**啟動 READER-A、READER-B、CONFIG-BUILDER，全部 `run_in_background=true`。
+**只啟動** READER-A 和 READER-B，`run_in_background=true`。CONFIG-BUILDER 在 Phase 2.5 才啟動。
 
 ```
-Task(
+Agent(
   subagent_type="phase1-reader",
   team_name="bts-structure-team",
   name="READER-A",
@@ -106,6 +118,10 @@ Task(
 對應的 PDF 頁面/裁切圖：{GROUP_1_PAGES}
 標註 JSON：{Case Folder}/結構配置圖/annotations.json
 
+各頁面的樓層範圍標註：{PAGE_FLOOR_LABELS}
+規則：柱/牆/梁的樓層範圍必須依據圖面標註，禁止將完整分配區間套用到所有構件。
+規則：下構樓層（B*F + 1F）的 building_outline 必須一致，1F 建物外框 = 基地範圍。
+
 請按照 .claude/agents/phase1-reader.md 的指示執行。
 先讀取 skills/plan-reader/SKILL.md 了解完整流程。
 優先使用 annotation.json 的精確座標。
@@ -116,13 +132,13 @@ Task(
 - 結構配置圖/WALL/{floor_range}.md
 
 完成後：
-1. SendMessage 通知 CONFIG-BUILDER
+1. SendMessage 通知 Team Lead
 2. TaskUpdate 標記完成
-3. 進入等待模式",
+3. 進入等待模式（監聽 RESUME 指令和 CONFIG-BUILDER 問題）",
   run_in_background=true
 )
 
-Task(
+Agent(
   subagent_type="phase1-reader",
   team_name="bts-structure-team",
   name="READER-B",
@@ -134,6 +150,10 @@ Task(
 對應的 PDF 頁面/裁切圖：{GROUP_2_PAGES}
 標註 JSON：{Case Folder}/結構配置圖/annotations.json
 
+各頁面的樓層範圍標註：{PAGE_FLOOR_LABELS}
+規則：柱/牆/梁的樓層範圍必須依據圖面標註，禁止將完整分配區間套用到所有構件。
+規則：下構樓層（B*F + 1F）的 building_outline 必須一致，1F 建物外框 = 基地範圍。
+
 請按照 .claude/agents/phase1-reader.md 的指示執行。
 先讀取 skills/plan-reader/SKILL.md 了解完整流程。
 優先使用 annotation.json 的精確座標。
@@ -144,21 +164,42 @@ Task(
 - 結構配置圖/WALL/{floor_range}.md
 
 完成後：
-1. SendMessage 通知 CONFIG-BUILDER
+1. SendMessage 通知 Team Lead
 2. TaskUpdate 標記完成
-3. 進入等待模式",
+3. 進入等待模式（監聽 RESUME 指令和 CONFIG-BUILDER 問題）",
   run_in_background=true
 )
+```
 
-Task(
+### Phase 2.5: 主動監控 + 動態調度
+
+啟動 Readers 後，Team Lead 使用 TaskList 監控 T1/T2 狀態。
+
+#### Step A: 等待第一個 Reader 完成
+
+反覆執行 TaskList，直到 T1 或 T2 狀態為 "completed"。
+
+#### Step B: 啟動 CONFIG-BUILDER（延遲啟動）
+
+第一個 Reader 完成後，**立即啟動** CONFIG-BUILDER：
+
+```
+Agent(
   subagent_type="phase1-config-builder",
   team_name="bts-structure-team",
   name="CONFIG-BUILDER",
   description="生成 model_config.json",
   prompt="你被指派為 BTS-STRUCTURE Team 的 CONFIG-BUILDER。
+你被延遲啟動。至少一個 READER 已完成輸出。
 
-先讀取 golden_scripts/config_schema.json 了解輸出格式。
-等待 READER-A 和 READER-B 的 SendMessage 通知，然後從資料夾讀取資料：
+1. 立即預讀 golden_scripts/config_schema.json + example_config.json
+2. 用 Glob 掃描 BEAM/COLUMN/WALL 資料夾，讀取所有已存在的 .md 檔案
+3. 開始建構初步 config 結構
+4. 等待 Team Lead 的 'ALL_DATA_READY' SendMessage
+5. 收到後，再次 Glob 掃描，讀取新增的 .md 檔案
+6. 合併為完整 model_config.json
+
+資料夾路徑：
 - 結構配置圖/BEAM/*.md
 - 結構配置圖/COLUMN/*.md
 - 結構配置圖/WALL/*.md
@@ -184,9 +225,45 @@ Task(
 )
 ```
 
-### Phase 3: 監控 → 等待 CONFIG-BUILDER 完成
+#### Step C: 負載平衡（File-Based Detection）
 
-Team Lead 進入監控模式，等 T3 完成。
+1. 用 Glob 掃描 BEAM/COLUMN/WALL 資料夾中已產生的 .md 檔案
+2. 比對 READER_B_EXPECTED（或 READER_A_EXPECTED，視誰較慢）
+3. 計算慢速 Reader 尚未產出的檔案數量
+
+**如果剩餘 ≥ 2 頁**：
+  - 從慢速 Reader 分配清單的「尾端」取出未處理的頁面
+  - SendMessage 給已完成的 Reader：
+    "RESUME: 請額外處理以下頁面：{pages_list}
+     樓層範圍：{floor_ranges}
+     輸出至相同的 BEAM/COLUMN/WALL 資料夾。
+     完成後 SendMessage 通知 Team Lead。"
+
+**如果剩餘 < 2 頁**：
+  - 不重新分配，讓慢速 Reader 自然完成
+
+#### Step D: 等待所有讀圖完成
+
+監控 TaskList，直到所有讀圖工作完成：
+- T1 和 T2 都為 "completed"
+- 已分配給快速 Reader 的額外工作也已完成（收到 SendMessage 確認）
+
+#### Step E: 通知 CONFIG-BUILDER
+
+SendMessage 給 CONFIG-BUILDER：
+"ALL_DATA_READY — BEAM/COLUMN/WALL 所有 .md 檔案已完成。請處理全部資料。"
+
+#### Step F: 等待 CONFIG-BUILDER 完成
+
+監控 T3 狀態為 "completed"。
+
+#### 邊界情況處理
+
+| Case | Handling |
+|------|----------|
+| 兩個 Reader 同時完成 | 跳過重分配，啟動 CB + 直接發送 ALL_DATA_READY |
+| 剩餘頁面 < 2 | 不重新分配，不值得額外開銷 |
+| READER-B 先完成 | 對稱處理 — 將 READER-A 尾端工作分給 READER-B |
 
 ### Phase 4: 執行 Golden Scripts（Team Lead 直接操作）
 

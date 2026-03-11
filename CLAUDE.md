@@ -62,6 +62,7 @@ claude-auto-build-etabs-model/
 │       ├── unit_converter.py              # Unit detection & conversion
 │       ├── pdf_annot_extractor.py          # Extract Bluebeam annotations → annotations.json + crop PNGs
 │       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
+│       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls
 │       ├── gs_split.py                    # Split multi-building → single-building e2k
 │       └── gs_merge.py                    # Merge single-building e2k files → unified model
 ├── tests/                                 # pytest verification suite (requires running ETABS)
@@ -156,6 +157,15 @@ pytest -v -k test_sections                        # run single test
 ```bash
 # Merge Phase 1 base config with Phase 2 SB/slab patch
 python -m golden_scripts.tools.config_merge --base model_config.json --patch sb_slabs_patch.json --output merged_config.json
+```
+
+### Config Snap Tool (Phase 2)
+```bash
+# Snap SB coordinates to nearest structural elements
+python -m golden_scripts.tools.config_snap --input merged_config.json --output snapped_config.json
+
+# Preview changes without writing
+python -m golden_scripts.tools.config_snap --input merged_config.json --output snapped_config.json --dry-run
 ```
 
 ### PDF Annotation Extraction + Page Cropping
@@ -279,13 +289,14 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 - **Builds**: Small Beams (SB/FSB) + Slabs (S/FS)
 - **Data flow**: SB-Readers → files in `結構配置圖/SB-BEAM/` → Config-Builder reads SB-BEAM/ + model_config.json → `sb_slabs_patch.json`
 - **Merge**: `config_merge.py --base model_config.json --patch sb_slabs_patch.json --output merged_config.json`
-- **Execution**: `run_all.py --config merged_config.json --steps 2,7,8`
-- **Output**: `merged_config.json` (complete config)
+- **Snap**: `config_snap.py --input merged_config.json --output snapped_config.json` (corrects SB endpoints)
+- **Execution**: `run_all.py --config snapped_config.json --steps 2,7,8`
+- **Output**: `snapped_config.json` (complete config with corrected SB coordinates)
 
 ### Phase 3: `/bts-props`
 - **Team**: None (Team Lead direct execution)
 - **Builds**: Frame modifiers, rigid zones, end releases, load patterns, slab loads, seismic, spectrum, Kv/Kw springs, diaphragms
-- **Execution**: `run_all.py --config merged_config.json --steps 9,10,11`
+- **Execution**: `run_all.py --config snapped_config.json --steps 9,10,11`
 - **Kw auto-detection**: All FWB (基礎壁梁) beams automatically receive Kw line springs
 - **Load defaults**: Uses `constants.py DEFAULT_LOADS` unless overridden in config `loads.zone_defaults`
 
@@ -300,7 +311,8 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 │   └── SB-BEAM/       # Phase 2: small beam data by floor range
 ├── model_config.json       # Phase 1 output (no SB/slabs)
 ├── sb_slabs_patch.json     # Phase 2 output (SB + slabs only)
-└── merged_config.json      # Merged for Phase 2 execution
+├── merged_config.json      # Merged (base + patch)
+└── snapped_config.json     # Final config with corrected SB coordinates
 ```
 
 ---
