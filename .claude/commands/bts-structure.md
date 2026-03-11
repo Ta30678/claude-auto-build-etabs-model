@@ -63,7 +63,7 @@ python -m golden_scripts.tools.pdf_annot_extractor \
   --crop --crop-dir "{Case Folder}/結構配置圖/"
 ```
 
-### Phase 0.7: 分析樓層分佈 & 建立資料夾
+### Phase 0.7: 分析樓層分佈 & 執行確定性腳本
 
 1. **讀取 annotations.json**，分析各頁的樓層標註
 2. **讀取結構配置圖 PNG，辨識各頁面的樓層範圍標註**：
@@ -71,22 +71,29 @@ python -m golden_scripts.tools.pdf_annot_extractor \
    - 找出圖面上標註的樓層範圍文字（如「2F~12F 柱/梁配置」「B3F~1F 柱/梁配置」）
    - 記錄每個頁面的樓層範圍標註
    - 儲存為 `PAGE_FLOOR_LABELS` 變數，後續傳給 READER
-3. **建立子資料夾**（如尚未存在）：
+3. **執行確定性構件提取腳本**（⭐ 新增步驟）：
+   ```bash
+   python -m golden_scripts.tools.annot_to_elements \
+     --input "{Case Folder}/結構配置圖/annotations.json" \
+     --output "{Case Folder}/elements.json" \
+     --page-floors "{PAGE_FLOOR_MAPPING}" \
+     --phase phase1
+   ```
+   其中 `PAGE_FLOOR_MAPPING` 格式如 `"1=B3F, 3=1F~2F, 4=3F~14F, 5=R1F~R3F"`，
+   根據步驟 2 辨識的各頁面樓層範圍組成。
+
+   **驗證**：檢查輸出 summary 的構件數量是否合理。如果某頁 0 個構件，檢查 legend 是否正確。
+
+4. **建立子資料夾**（如尚未存在）：
    ```bash
    mkdir -p "{Case Folder}/結構配置圖/BEAM"
    mkdir -p "{Case Folder}/結構配置圖/COLUMN"
    mkdir -p "{Case Folder}/結構配置圖/WALL"
    ```
-4. **決定樓層分工**：
+5. **決定樓層分工**（READER 現在只讀 Grid/outline/stories）：
    - 根據 annotations 中各頁的樓層標註，將頁面分為兩組
    - 原則：工作量大致相等
-   - 例如：READER-A 負責 2F~23F（典型樓層），READER-B 負責 B3F~1F + RF~PRF
-5. **記錄各 READER 的預期輸出檔案**：
-   ```
-   READER_A_EXPECTED = [{floor_range}.md for each page in GROUP_1]
-   READER_B_EXPECTED = [{floor_range}.md for each page in GROUP_2]
-   ```
-   用於 Phase 2.5 的 file-based detection。
+   - 例如：READER-A 負責上構典型樓層，READER-B 負責下構+屋突
 
 ### Phase 1: 建立 Team + 創建任務
 
@@ -110,31 +117,36 @@ Agent(
   subagent_type="phase1-reader",
   team_name="bts-structure-team",
   name="READER-A",
-  description="讀取結構配置圖（樓層組 1）",
+  description="讀取 Grid/建物外框/板區域（樓層組 1）",
   prompt="你被指派為 BTS-STRUCTURE Team 的 READER-A。
+
+【重要】構件(柱/梁/牆)的座標已由 annot_to_elements.py 自動提取到 elements.json。
+你不需要分類或計數構件。你只負責讀取 AI 視覺才能取得的資訊。
 
 結構配置圖路徑：{Case Folder}/結構配置圖/
 你負責的樓層範圍：{GROUP_1_FLOORS}
 對應的 PDF 頁面/裁切圖：{GROUP_1_PAGES}
-標註 JSON：{Case Folder}/結構配置圖/annotations.json
+elements.json 路徑：{Case Folder}/elements.json（供交叉比對）
+
+你的職責（Reduced）：
+1. Grid 名稱、間距、累積座標、方向、Bubble 位置
+2. 建物外框 (building_outline) polygon
+3. 板區域判斷 (slab_region_matrix)
+4. 強度分配 (strength_map) — 如圖面有標註
 
 各頁面的樓層範圍標註：{PAGE_FLOOR_LABELS}
-規則：柱/牆/梁的樓層範圍必須依據圖面標註，禁止將完整分配區間套用到所有構件。
 規則：下構樓層（B*F + 1F）的 building_outline 必須一致，1F 建物外框 = 基地範圍。
 
 請按照 .claude/agents/phase1-reader.md 的指示執行。
 先讀取 skills/plan-reader/SKILL.md 了解完整流程。
-優先使用 annotation.json 的精確座標。
 
-輸出檔案至：
-- 結構配置圖/BEAM/{floor_range}.md
-- 結構配置圖/COLUMN/{floor_range}.md
-- 結構配置圖/WALL/{floor_range}.md
+輸出 JSON 至：
+- 結構配置圖/grid_info.json
 
 完成後：
 1. SendMessage 通知 Team Lead
 2. TaskUpdate 標記完成
-3. 進入等待模式（監聽 RESUME 指令和 CONFIG-BUILDER 問題）",
+3. 進入等待模式（監聽 CONFIG-BUILDER 問題）",
   run_in_background=true
 )
 
@@ -142,31 +154,37 @@ Agent(
   subagent_type="phase1-reader",
   team_name="bts-structure-team",
   name="READER-B",
-  description="讀取結構配置圖（樓層組 2）",
+  description="讀取 Grid/建物外框/板區域（樓層組 2）",
   prompt="你被指派為 BTS-STRUCTURE Team 的 READER-B。
+
+【重要】構件(柱/梁/牆)的座標已由 annot_to_elements.py 自動提取到 elements.json。
+你不需要分類或計數構件。你只負責讀取 AI 視覺才能取得的資訊。
 
 結構配置圖路徑：{Case Folder}/結構配置圖/
 你負責的樓層範圍：{GROUP_2_FLOORS}
 對應的 PDF 頁面/裁切圖：{GROUP_2_PAGES}
-標註 JSON：{Case Folder}/結構配置圖/annotations.json
+elements.json 路徑：{Case Folder}/elements.json（供交叉比對）
+
+你的職責（Reduced）：
+1. Grid 名稱、間距、累積座標、方向、Bubble 位置（如 READER-A 未涵蓋）
+2. 建物外框 (building_outline) polygon（如與 READER-A 不同範圍）
+3. 板區域判斷 (slab_region_matrix) — 你的樓層範圍
+4. 強度分配 (strength_map) — 如圖面有標註
+5. 屋突核心區 (core_grid_area) — 如你負責屋突樓層
 
 各頁面的樓層範圍標註：{PAGE_FLOOR_LABELS}
-規則：柱/牆/梁的樓層範圍必須依據圖面標註，禁止將完整分配區間套用到所有構件。
 規則：下構樓層（B*F + 1F）的 building_outline 必須一致，1F 建物外框 = 基地範圍。
 
 請按照 .claude/agents/phase1-reader.md 的指示執行。
 先讀取 skills/plan-reader/SKILL.md 了解完整流程。
-優先使用 annotation.json 的精確座標。
 
-輸出檔案至：
-- 結構配置圖/BEAM/{floor_range}.md
-- 結構配置圖/COLUMN/{floor_range}.md
-- 結構配置圖/WALL/{floor_range}.md
+輸出 JSON 至：
+- 結構配置圖/grid_info.json（合併或補充 READER-A 的資料）
 
 完成後：
 1. SendMessage 通知 Team Lead
 2. TaskUpdate 標記完成
-3. 進入等待模式（監聽 RESUME 指令和 CONFIG-BUILDER 問題）",
+3. 進入等待模式（監聯 CONFIG-BUILDER 問題）",
   run_in_background=true
 )
 ```
@@ -188,23 +206,21 @@ Agent(
   subagent_type="phase1-config-builder",
   team_name="bts-structure-team",
   name="CONFIG-BUILDER",
-  description="生成 model_config.json",
+  description="合併 elements.json + grid_info.json → model_config.json",
   prompt="你被指派為 BTS-STRUCTURE Team 的 CONFIG-BUILDER。
-你被延遲啟動。至少一個 READER 已完成輸出。
+你被延遲啟動。elements.json 已生成，至少一個 READER 已完成 grid_info.json。
 
-1. 立即預讀 golden_scripts/config_schema.json + example_config.json
-2. 用 Glob 掃描 BEAM/COLUMN/WALL 資料夾，讀取所有已存在的 .md 檔案
-3. 開始建構初步 config 結構
-4. 等待 Team Lead 的 'ALL_DATA_READY' SendMessage
-5. 收到後，再次 Glob 掃描，讀取新增的 .md 檔案
-6. 合併為完整 model_config.json
+你的輸入來源：
+1. {Case Folder}/elements.json — 構件座標（腳本確定性輸出，直接使用）
+2. {Case Folder}/結構配置圖/grid_info.json — Grid/outline/stories（READER AI 輸出）
+3. Team Lead 提供的工程參數
 
-資料夾路徑：
-- 結構配置圖/BEAM/*.md
-- 結構配置圖/COLUMN/*.md
-- 結構配置圖/WALL/*.md
-
-整合為 model_config.json（small_beams 和 slabs 留空）。
+步驟：
+1. 預讀 golden_scripts/config_schema.json + example_config.json
+2. 讀取 elements.json（columns, beams, walls, sections）
+3. 讀取 grid_info.json（grids, stories, building_outline, slab_region_matrix, strength_map）
+4. 等待 Team Lead 的 'ALL_DATA_READY' SendMessage（如 READER 尚未全部完成）
+5. 合併為完整 model_config.json（small_beams 和 slabs 留空）
 
 用戶提供的參數：
 - 樓層高度表：{STORY_TABLE}

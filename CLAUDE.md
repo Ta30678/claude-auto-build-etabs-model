@@ -61,10 +61,13 @@ claude-auto-build-etabs-model/
 │       ├── e2k_writer.py                  # E2k output (section ordering, formatting)
 │       ├── unit_converter.py              # Unit detection & conversion
 │       ├── pdf_annot_extractor.py          # Extract Bluebeam annotations → annotations.json + crop PNGs
+│       ├── annot_to_elements.py           # Deterministic annotation → elements JSON (columns/beams/walls/SB)
 │       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
 │       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls
 │       ├── gs_split.py                    # Split multi-building → single-building e2k
 │       └── gs_merge.py                    # Merge single-building e2k files → unified model
+├── golden_scripts/qc/                     # QC verification scripts
+│   └── qc_phase1.py                      # Phase 1 QC: config vs ETABS model comparison
 ├── tests/                                 # pytest verification suite (requires running ETABS)
 │   ├── conftest.py                        # SapModel fixture, --config option, all_frames cache
 │   ├── test_units.py                      # Units = TON/M (12)
@@ -102,6 +105,7 @@ claude-auto-build-etabs-model/
 │       ├── bts-structure.md               # /bts-structure slash command (Phase 1: main structure)
 │       ├── bts-sb.md                      # /bts-sb slash command (Phase 2: small beams + slabs)
 │       ├── bts-props.md                   # /bts-props slash command (Phase 3: properties + loads + diaphragms)
+│       ├── bts-qc1.md                     # /bts-qc1 slash command (Phase 1 QC verification)
 │       ├── bts-gs.md                      # /bts-gs slash command (single-pass Golden Scripts)
 │       ├── bts.md                         # /bts slash command (legacy 4-agent flow)
 │       ├── split.md                       # /split slash command (e2k split)
@@ -144,8 +148,34 @@ pytest -v --config path/to/model_config.json    # with config comparison
 pytest -v -k test_sections                        # run single test
 ```
 
+### QC Phase 1 (after /bts-structure)
+```bash
+python -m golden_scripts.qc.qc_phase1 --config path/to/model_config.json
+```
+
+### Deterministic Annotation → Elements (used by /bts-structure and /bts-sb)
+```bash
+# Phase 1: major beams + columns + walls
+python -m golden_scripts.tools.annot_to_elements \
+    --input 結構配置圖/annotations.json \
+    --output elements.json \
+    --page-floors "1=B3F, 3=1F~2F, 4=3F~14F, 5=R1F~R3F" \
+    --phase phase1
+
+# Phase 2: small beams only
+python -m golden_scripts.tools.annot_to_elements \
+    --input 結構配置圖/annotations.json \
+    --output sb_elements.json \
+    --page-floors "3=1F~2F, 4=3F~14F" \
+    --phase phase2
+
+# Preview without writing
+python -m golden_scripts.tools.annot_to_elements ... --dry-run
+```
+
 ### Slash commands (BTS Agent Teams — Phased, preferred)
 - `/bts-structure [description]` — Phase 1: 2 Readers + 1 Config-Builder → Grid+Story+柱+牆+大梁
+- `/bts-qc1 <config>` — Phase 1 QC: 比對 ETABS 模型 vs model_config.json（8 項檢查）
 - `/bts-sb [floor ranges]` — Phase 2: 2 SB-Readers + 1 Config-Builder → 小梁+版
 - `/bts-props` — Phase 3: Properties + Loads + Diaphragms (no agent team, runs gs_09~gs_11)
 
@@ -280,14 +310,16 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 ### Phase 1: `/bts-structure`
 - **Team**: 2 Readers (split by floor range) + 1 Config-Builder
 - **Builds**: Grid, Story, Columns, Walls, Major Beams (B/WB/FB/FWB)
-- **Data flow**: Readers → files in `結構配置圖/BEAM/`, `COLUMN/`, `WALL/` → Config-Builder reads folders → `model_config.json`
+- **Pre-step**: `annot_to_elements.py --phase phase1` → `elements.json` (deterministic element extraction)
+- **Data flow**: `elements.json` (columns/beams/walls) + Readers → `grid_info.json` (grid/outline/stories) → Config-Builder merges → `model_config.json`
 - **Execution**: `run_all.py --steps 1,2,3,4,5,6`
 - **Output**: `model_config.json` (small_beams=[], slabs=[])
 
 ### Phase 2: `/bts-sb`
-- **Team**: 2 SB-Readers (split by floor range) + 1 Config-Builder
+- **Team**: 2 SB-Readers (validation only) + 1 Config-Builder
 - **Builds**: Small Beams (SB/FSB) + Slabs (S/FS)
-- **Data flow**: SB-Readers → files in `結構配置圖/SB-BEAM/` → Config-Builder reads SB-BEAM/ + model_config.json → `sb_slabs_patch.json`
+- **Pre-step**: `annot_to_elements.py --phase phase2` → `sb_elements.json` (deterministic SB extraction)
+- **Data flow**: SB-Readers validate `sb_elements.json` → Config-Builder reads `sb_elements.json` + `model_config.json` → `sb_slabs_patch.json`
 - **Merge**: `config_merge.py --base model_config.json --patch sb_slabs_patch.json --output merged_config.json`
 - **Snap**: `config_snap.py --input merged_config.json --output snapped_config.json` (corrects SB endpoints)
 - **Execution**: `run_all.py --config snapped_config.json --steps 2,7,8`
@@ -305,10 +337,13 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 {Case Folder}/
 ├── 結構配置圖/
 │   ├── annotations.json
-│   ├── BEAM/          # Phase 1: major beam data by floor range
-│   ├── COLUMN/        # Phase 1: column data by floor range
-│   ├── WALL/          # Phase 1: wall data by floor range
-│   └── SB-BEAM/       # Phase 2: small beam data by floor range
+│   ├── BEAM/          # Phase 1: READER grid/outline data
+│   ├── COLUMN/        # Phase 1: READER grid/outline data
+│   ├── WALL/          # Phase 1: READER grid/outline data
+│   └── SB-BEAM/       # Phase 2: SB-READER validation results
+├── elements.json           # Phase 1 script output (columns/beams/walls — deterministic)
+├── grid_info.json          # Phase 1 READER output (grids/outline/stories — AI)
+├── sb_elements.json        # Phase 2 script output (small beams — deterministic)
 ├── model_config.json       # Phase 1 output (no SB/slabs)
 ├── sb_slabs_patch.json     # Phase 2 output (SB + slabs only)
 ├── merged_config.json      # Merged (base + patch)
@@ -319,7 +354,7 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 
 ## BTS Agent Team Rules (ABSOLUTE)
 
-1. **Small beam positions must never be guessed.** SB-READER reads coordinates from annotation.json (primary) or measures pixel positions (fallback for PPT input).
+1. **Small beam positions must never be guessed.** `annot_to_elements.py` extracts coordinates deterministically from annotation.json. SB-READER validates (not extracts).
 2. **Structural layout comes from plan images, never copied from old models.**
 3. **Building extents must be cross-referenced between structural and architectural plans.**
 4. **Mechanically equal-spaced small beam coordinates must be rejected and re-measured.**

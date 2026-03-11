@@ -16,7 +16,7 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
 
 ## 鐵則（ABSOLUTE RULES）
 
-1. **小梁位置禁止猜測！** 必須從 annotation.json 讀取並驗證座標。
+1. **小梁位置禁止猜測！** 由 `annot_to_elements.py` 確定性提取座標，SB-READER 驗證連接性。
 2. **小梁等分座標必須退回重做。**
 3. **每條小梁都是版的切割線** —— 版不可跨過任何梁（含小梁）。
 4. **每案獨立**——禁止從記憶推斷。
@@ -28,9 +28,9 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
 
 | Agent | 代號 | Agent 定義檔 | 職責 |
 |-------|------|-------------|------|
-| Agent 1 | **SB-READER-A** | `.claude/agents/phase2-sb-reader.md` | 讀取分配的樓層區間 SB 座標 |
-| Agent 2 | **SB-READER-B** | `.claude/agents/phase2-sb-reader.md` | 讀取分配的樓層區間 SB 座標 |
-| Agent 3 | **CONFIG-BUILDER** | `.claude/agents/phase2-config-builder.md` | 從 SB-BEAM/ 讀取 + 切版 → sb_slabs_patch.json |
+| Agent 1 | **SB-READER-A** | `.claude/agents/phase2-sb-reader.md` | 驗證分配的樓層區間 SB 座標連接性 |
+| Agent 2 | **SB-READER-B** | `.claude/agents/phase2-sb-reader.md` | 驗證分配的樓層區間 SB 座標連接性 |
+| Agent 3 | **CONFIG-BUILDER** | `.claude/agents/phase2-config-builder.md` | 從 sb_elements.json + model_config.json 切版 → sb_slabs_patch.json |
 
 ---
 
@@ -61,32 +61,33 @@ python -m golden_scripts.tools.pdf_annot_extractor \
   --crop --crop-dir "{Case Folder}/結構配置圖/"
 ```
 
-### Phase 0.7: 提取上下文 & 建立資料夾 & 分配工作
+### Phase 0.7: 執行確定性腳本 & 建立資料夾 & 分配驗證工作
 
-1. **讀取 annotations.json，提取 SB 圖例色彩對應**：
-   - 讀取 `{Case Folder}/結構配置圖/annotations.json`
-   - 從 `annotations.legend.items` 中找出 label 含「小梁」「SB」「次梁」的項目
-   - 記錄色彩對應，格式如：`SB30X50 → #FF0000, SB25X50 → #00FF00`
-   - 儲存為 `SB_LEGEND_MAPPING` 變數，後續傳給 SB-READER
-2. **讀取結構配置圖 PNG，辨識各頁面的樓層範圍標註**：
+1. **讀取結構配置圖 PNG，辨識各頁面的樓層範圍標註**：
    - 讀取 `*_full.png` 圖檔
    - 找出圖面上標註的樓層範圍文字（如「2F~12F 小梁配置」「1F 小梁配置」）
    - 記錄每個頁面的樓層範圍標註
-   - 儲存為 `PAGE_FLOOR_LABELS` 變數，後續傳給 SB-READER
+   - 儲存為 `PAGE_FLOOR_LABELS` 變數
+2. **執行確定性小梁提取腳本**（⭐ 新增步驟）：
+   ```bash
+   python -m golden_scripts.tools.annot_to_elements \
+     --input "{Case Folder}/結構配置圖/annotations.json" \
+     --output "{Case Folder}/sb_elements.json" \
+     --page-floors "{PAGE_FLOOR_MAPPING}" \
+     --phase phase2
+   ```
+   其中 `PAGE_FLOOR_MAPPING` 格式如 `"3=1F~2F, 4=3F~14F"`，
+   根據步驟 1 辨識的各頁面樓層範圍組成。
+
+   **驗證**：檢查輸出 summary 的小梁數量是否合理。
 3. **建立子資料夾**（如尚未存在）：
    ```bash
    mkdir -p "{Case Folder}/結構配置圖/SB-BEAM"
    ```
-4. **決定樓層區間分工**：
+4. **決定驗證工作分工**（SB-READER 現在只做驗證，不做提取）：
    - 根據用戶標註的樓層區間分配給兩個 SB-READER
    - 原則：工作量大致相等
-   - 例如：SB-READER-A 負責 2F~23F, SB-READER-B 負責 1F + B1F~B3F
-5. **記錄各 SB-READER 的預期輸出檔案**：
-   ```
-   SB_READER_A_EXPECTED = [{floor_range}.md for each page in SB_GROUP_1]
-   SB_READER_B_EXPECTED = [{floor_range}.md for each page in SB_GROUP_2]
-   ```
-   用於 Phase 2.5 的 file-based detection。
+   - 例如：SB-READER-A 驗證 2F~23F, SB-READER-B 驗證 1F + B1F~B3F
 
 ### Phase 1: 建立 Team + 創建任務
 
@@ -96,8 +97,8 @@ TeamCreate(team_name="bts-sb-team", description="BTS Phase 2 小梁+版建模")
 
 | Task | 主題 | Owner | blockedBy |
 |------|------|-------|-----------|
-| T1 | SB-READER-A 讀取小梁 | SB-READER-A | (無) |
-| T2 | SB-READER-B 讀取小梁 | SB-READER-B | (無) |
+| T1 | SB-READER-A 驗證小梁座標 | SB-READER-A | (無) |
+| T2 | SB-READER-B 驗證小梁座標 | SB-READER-B | (無) |
 | T3 | CONFIG-BUILDER 生成 patch | CONFIG-BUILDER | (無) |
 | T4 | Merge + 執行 Golden Scripts | (Team Lead) | T3 |
 
@@ -110,32 +111,37 @@ Agent(
   subagent_type="phase2-sb-reader",
   team_name="bts-sb-team",
   name="SB-READER-A",
-  description="讀取小梁座標（樓層區間 1）",
+  description="驗證小梁座標（樓層區間 1）",
   prompt="你被指派為 BTS-SB Team 的 SB-READER-A。
 
-結構配置圖路徑：{Case Folder}/結構配置圖/
-你負責的樓層區間：{SB_GROUP_1_FLOORS}
-對應的 PDF 頁面/裁切圖：{SB_GROUP_1_PAGES}
-標註 JSON：{Case Folder}/結構配置圖/annotations.json
+⭐ 小梁座標已由 annot_to_elements.py 腳本確定性提取完成。
+你的職責是**驗證**座標的連接性和合理性，不需要從 annotation.json 提取。
 
-圖例色彩對應（小梁相關）：{SB_LEGEND_MAPPING}
-各頁面的樓層範圍標註：{PAGE_FLOOR_LABELS}
-規則：以圖面標註的樓層範圍為小梁分段依據，禁止用斷面變化分層。
+sb_elements.json 路徑：{Case Folder}/sb_elements.json
+model_config.json 路徑：{Case Folder}/model_config.json
+結構配置圖路徑：{Case Folder}/結構配置圖/
+你負責驗證的樓層區間：{SB_GROUP_1_FLOORS}
+對應的裁切圖（供視覺交叉比對）：{SB_GROUP_1_PAGES}
 
 請按照 .claude/agents/phase2-sb-reader.md 的指示執行。
-先讀取 skills/plan-reader/SKILL.md 了解完整流程。
 
-驗證小梁連接性時，可參照：
-- 結構配置圖/BEAM/*.md 中的大梁座標
-- 或 model_config.json 中的 beams 欄位
+驗證項目：
+1. 連接性：每根小梁兩端是否接觸大梁/牆/柱/其他小梁（容差 0.3m）
+2. 等分模式：是否有小梁恰好落在 1/2、1/3 等分點（標記 WARNING）
+3. Grid 邊界：所有小梁座標是否在 Grid 系統範圍內
+4. 視覺交叉比對：抽查對照圖面 PNG
 
-輸出檔案至：
-- 結構配置圖/SB-BEAM/{floor_range}.md
+驗證資料來源：
+- sb_elements.json 的 small_beams 陣列
+- model_config.json 的 beams/walls/columns 欄位
+
+輸出驗證結果至：
+- 結構配置圖/SB-BEAM/validation_{floor_range}.json
 
 完成後：
-1. SendMessage 通知 Team Lead
+1. SendMessage 通知 Team Lead：驗證結果 OK/WARN/REJECT
 2. TaskUpdate 標記完成
-3. 進入等待模式（監聽 RESUME 指令和 CONFIG-BUILDER 問題）",
+3. 進入等待模式（監聽 CONFIG-BUILDER 確認要求和 shutdown_request）",
   run_in_background=true
 )
 
@@ -143,32 +149,37 @@ Agent(
   subagent_type="phase2-sb-reader",
   team_name="bts-sb-team",
   name="SB-READER-B",
-  description="讀取小梁座標（樓層區間 2）",
+  description="驗證小梁座標（樓層區間 2）",
   prompt="你被指派為 BTS-SB Team 的 SB-READER-B。
 
-結構配置圖路徑：{Case Folder}/結構配置圖/
-你負責的樓層區間：{SB_GROUP_2_FLOORS}
-對應的 PDF 頁面/裁切圖：{SB_GROUP_2_PAGES}
-標註 JSON：{Case Folder}/結構配置圖/annotations.json
+⭐ 小梁座標已由 annot_to_elements.py 腳本確定性提取完成。
+你的職責是**驗證**座標的連接性和合理性，不需要從 annotation.json 提取。
 
-圖例色彩對應（小梁相關）：{SB_LEGEND_MAPPING}
-各頁面的樓層範圍標註：{PAGE_FLOOR_LABELS}
-規則：以圖面標註的樓層範圍為小梁分段依據，禁止用斷面變化分層。
+sb_elements.json 路徑：{Case Folder}/sb_elements.json
+model_config.json 路徑：{Case Folder}/model_config.json
+結構配置圖路徑：{Case Folder}/結構配置圖/
+你負責驗證的樓層區間：{SB_GROUP_2_FLOORS}
+對應的裁切圖（供視覺交叉比對）：{SB_GROUP_2_PAGES}
 
 請按照 .claude/agents/phase2-sb-reader.md 的指示執行。
-先讀取 skills/plan-reader/SKILL.md 了解完整流程。
 
-驗證小梁連接性時，可參照：
-- 結構配置圖/BEAM/*.md 中的大梁座標
-- 或 model_config.json 中的 beams 欄位
+驗證項目：
+1. 連接性：每根小梁兩端是否接觸大梁/牆/柱/其他小梁（容差 0.3m）
+2. 等分模式：是否有小梁恰好落在 1/2、1/3 等分點（標記 WARNING）
+3. Grid 邊界：所有小梁座標是否在 Grid 系統範圍內
+4. 視覺交叉比對：抽查對照圖面 PNG
 
-輸出檔案至：
-- 結構配置圖/SB-BEAM/{floor_range}.md
+驗證資料來源：
+- sb_elements.json 的 small_beams 陣列
+- model_config.json 的 beams/walls/columns 欄位
+
+輸出驗證結果至：
+- 結構配置圖/SB-BEAM/validation_{floor_range}.json
 
 完成後：
-1. SendMessage 通知 Team Lead
+1. SendMessage 通知 Team Lead：驗證結果 OK/WARN/REJECT
 2. TaskUpdate 標記完成
-3. 進入等待模式（監聽 RESUME 指令和 CONFIG-BUILDER 問題）",
+3. 進入等待模式（監聽 CONFIG-BUILDER 確認要求和 shutdown_request）",
   run_in_background=true
 )
 ```
@@ -192,25 +203,26 @@ Agent(
   name="CONFIG-BUILDER",
   description="生成 sb_slabs_patch.json",
   prompt="你被指派為 BTS-SB Team 的 CONFIG-BUILDER。
-你被延遲啟動。至少一個 SB-READER 已完成輸出。
+你被延遲啟動。至少一個 SB-READER 已完成驗證。
 
-1. 立即預讀 golden_scripts/config_schema.json + model_config.json
-2. 用 Glob 掃描 SB-BEAM 資料夾，讀取所有已存在的 .md 檔案
-3. 開始建構初步 small_beams 清單
-4. 等待 Team Lead 的 'ALL_DATA_READY' SendMessage
-5. 收到後，再次 Glob 掃描，讀取新增的 .md 檔案
-6. 合併為完整 sb_slabs_patch.json
+⭐ 小梁座標已由 annot_to_elements.py 腳本確定性提取至 sb_elements.json。
+你直接從 sb_elements.json 讀取小梁座標（不從 SB-BEAM/*.md 讀取）。
 
-先讀取以下檔案：
-1. golden_scripts/config_schema.json（了解格式）
-2. {Case Folder}/model_config.json（取得大梁座標、Grid 系統、building_outline）
-3. 結構配置圖/BEAM/*.md 中的 Slab Region Matrix（樓板區域判斷）
+1. 立即預讀 golden_scripts/config_schema.json
+2. 讀取 {Case Folder}/sb_elements.json（小梁座標 — 確定性資料）
+3. 讀取 {Case Folder}/model_config.json（大梁座標、Grid 系統、building_outline）
+4. 讀取 SB-READER 驗證結果 結構配置圖/SB-BEAM/validation_*.json（如有問題需處理）
+5. 等待 Team Lead 的 'ALL_DATA_READY' SendMessage（確認所有驗證完成）
+6. 合併小梁 + 大梁座標 → 執行板切割 → sb_slabs_patch.json
 
-資料夾路徑：
-- 結構配置圖/SB-BEAM/*.md
+請按照 .claude/agents/phase2-config-builder.md 的指示執行。
+
+資料來源：
+- sb_elements.json 的 small_beams 陣列（小梁座標+斷面+樓層）
+- model_config.json 的 beams（大梁座標）、grids、building_outline、slab_region_matrix
 
 整合為 sb_slabs_patch.json：
-1. 合併所有小梁座標（去重、合併 floors）
+1. 從 sb_elements.json 取得小梁座標（去重、合併 floors）
 2. 以所有梁（大梁+小梁）的座標執行板切割
 3. 輸出 small_beams + slabs + sections
 
@@ -226,33 +238,20 @@ Agent(
 )
 ```
 
-#### Step C: 負載平衡（File-Based Detection）
+#### Step C: 等待所有驗證完成
 
-1. 用 Glob 掃描 `結構配置圖/SB-BEAM/` 資料夾中已產生的 .md 檔案
-2. 比對 SB_READER_B_EXPECTED（或 SB_READER_A_EXPECTED，視誰較慢）
-3. 計算慢速 SB-Reader 尚未產出的檔案數量
+監控 TaskList，直到 T1 和 T2 都為 "completed"。
+SB-READER 驗證工作較輕量，通常不需要負載平衡。
 
-**如果剩餘 ≥ 2 頁**：
-  - 從慢速 SB-Reader 分配清單的「尾端」取出未處理的頁面
-  - SendMessage 給已完成的 SB-Reader：
-    "RESUME: 請額外處理以下頁面：{pages_list}
-     樓層範圍：{floor_ranges}
-     輸出至相同的 SB-BEAM 資料夾。
-     完成後 SendMessage 通知 Team Lead。"
+如果任一 SB-READER 回報 `REJECT`：
+- 檢視 `validation_*.json` 中的 issues
+- 判斷是否需要重新執行 annot_to_elements.py 或手動修正 sb_elements.json
+- 問題解決後才可繼續
 
-**如果剩餘 < 2 頁**：
-  - 不重新分配，讓慢速 SB-Reader 自然完成
-
-#### Step D: 等待所有讀圖完成
-
-監控 TaskList，直到所有讀圖工作完成：
-- T1 和 T2 都為 "completed"
-- 已分配給快速 SB-Reader 的額外工作也已完成（收到 SendMessage 確認）
-
-#### Step E: 通知 CONFIG-BUILDER
+#### Step D: 通知 CONFIG-BUILDER
 
 SendMessage 給 CONFIG-BUILDER：
-"ALL_DATA_READY — SB-BEAM 所有 .md 檔案已完成。請處理全部資料。"
+"ALL_DATA_READY — 所有 SB-READER 驗證完成。驗證結果：{A_result}, {B_result}。請處理 sb_elements.json 生成 patch。"
 
 #### Step F: 等待 CONFIG-BUILDER 完成
 
@@ -264,9 +263,9 @@ SendMessage 給 CONFIG-BUILDER：
 
 | Case | Handling |
 |------|----------|
-| 兩個 SB-Reader 同時完成 | 跳過重分配，啟動 CB + 直接發送 ALL_DATA_READY |
-| 剩餘頁面 < 2 | 不重新分配，不值得額外開銷 |
-| SB-READER-B 先完成 | 對稱處理 — 將 SB-READER-A 尾端工作分給 SB-READER-B |
+| 兩個 SB-Reader 同時完成 | 啟動 CB + 直接發送 ALL_DATA_READY |
+| SB-READER 回報 REJECT | 檢視 issues，修正 sb_elements.json 後重新驗證 |
+| SB-READER 回報 WARN | 記錄警告，繼續（CONFIG-BUILDER 可處理） |
 
 ### Phase 3.5: Pre-flight Validation
 
