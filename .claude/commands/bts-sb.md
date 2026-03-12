@@ -20,7 +20,7 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
 2. **小梁等分座標必須退回重做。**
 3. **每條小梁都是版的切割線** —— 版不可跨過任何梁（含小梁）。
 4. **每案獨立**——禁止從記憶推斷。
-5. **Phase 4 (run_all.py) 必須在 Phase 6 報告前執行完畢。** 禁止在 run_all.py 執行完畢前向用戶回報「Phase 2 建模完成」。CONFIG-BUILDER 完成 ≠ Phase 2 完成。
+5. **CONFIG-BUILDER 必須執行完 run_all.py 才算完成任務。** 禁止在 run_all.py 執行完畢前向用戶回報「Phase 2 建模完成」。
 
 ---
 
@@ -49,7 +49,25 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
    - 如果 Phase 1 已記錄，直接使用
    - 否則詢問用戶
 
-### Phase 0.5: 提取標註（如需要）
+### Phase 0.5: 提取標註（PDF 或 PPT）
+
+判斷 `結構配置圖/` 內的輸入檔案類型：
+
+#### 路徑 A：PPT 檔案（.pptx）
+
+PPT 路徑直接提取小梁座標，跳過 annotations.json，也**跳過 Phase 0.7 的 annot_to_elements 步驟**。
+
+```bash
+python -m golden_scripts.tools.pptx_to_elements \
+  --input "{Case Folder}/結構配置圖/xxx.pptx" \
+  --output "{Case Folder}/sb_elements.json" \
+  --page-floors "{SB_PAGE_FLOOR_MAPPING}" \
+  --phase phase2
+```
+
+**驗證**：檢查輸出 summary 的小梁數量是否合理。完成後**跳至 Phase 0.7 步驟 3**（建立資料夾 + 分工）。
+
+#### 路徑 B：PDF 檔案（.pdf）— 現有流程不變
 
 如果 annotations.json 尚未包含小梁相關頁面的標註：
 
@@ -62,6 +80,8 @@ python -m golden_scripts.tools.pdf_annot_extractor \
 ```
 
 ### Phase 0.7: 執行確定性腳本 & 建立資料夾 & 分配驗證工作
+
+> **注意**：如已使用 PPT 路徑（Phase 0.5 路徑 A），步驟 1~2 已完成，直接跳至步驟 3。
 
 1. **讀取結構配置圖 PNG，辨識各頁面的樓層範圍標註**：
    - 讀取 `*_full.png` 圖檔
@@ -99,8 +119,7 @@ TeamCreate(team_name="bts-sb-team", description="BTS Phase 2 小梁+版建模")
 |------|------|-------|-----------|
 | T1 | SB-READER-A 驗證小梁座標 | SB-READER-A | (無) |
 | T2 | SB-READER-B 驗證小梁座標 | SB-READER-B | (無) |
-| T3 | CONFIG-BUILDER 生成 patch | CONFIG-BUILDER | (無) |
-| T4 | Merge + 執行 Golden Scripts | (Team Lead) | T3 |
+| T3 | CONFIG-BUILDER 生成 patch + merge + snap + 執行 GS | CONFIG-BUILDER | (無) |
 
 ### Phase 2A: 啟動 SB-Readers Only
 
@@ -201,19 +220,29 @@ Agent(
   subagent_type="phase2-config-builder",
   team_name="bts-sb-team",
   name="CONFIG-BUILDER",
-  description="生成 sb_slabs_patch.json",
+  description="生成 patch → merge → snap → 執行 GS steps 2,7,8",
   prompt="你被指派為 BTS-SB Team 的 CONFIG-BUILDER。
 你被延遲啟動。至少一個 SB-READER 已完成驗證。
+
+Case Folder 絕對路徑：{Case Folder}
 
 ⭐ 小梁座標已由 annot_to_elements.py 腳本確定性提取至 sb_elements.json。
 你直接從 sb_elements.json 讀取小梁座標（不從 SB-BEAM/*.md 讀取）。
 
+步驟（Phase 1 — 生成 patch）：
 1. 立即預讀 golden_scripts/config_schema.json
 2. 讀取 {Case Folder}/sb_elements.json（小梁座標 — 確定性資料）
 3. 讀取 {Case Folder}/model_config.json（大梁座標、Grid 系統、building_outline）
 4. 讀取 SB-READER 驗證結果 結構配置圖/SB-BEAM/validation_*.json（如有問題需處理）
 5. 等待 Team Lead 的 'ALL_DATA_READY' SendMessage（確認所有驗證完成）
 6. 合併小梁 + 大梁座標 → 執行板切割 → sb_slabs_patch.json
+
+步驟（Phase 2 — 合併 + 校正 + 執行 GS）：
+7. 生成 sb_slabs_patch.json 後，立即執行：
+   python -m golden_scripts.tools.config_merge --base \"{Case Folder}/model_config.json\" --patch \"{Case Folder}/sb_slabs_patch.json\" --output \"{Case Folder}/merged_config.json\" --validate
+8. python -m golden_scripts.tools.config_snap --input \"{Case Folder}/merged_config.json\" --output \"{Case Folder}/snapped_config.json\"
+9. cd golden_scripts && python run_all.py --config \"{Case Folder}/snapped_config.json\" --steps 2,7,8
+10. 如有 ERROR，檢查 config 並修正後重跑失敗的 step（最多重試 2 次）
 
 請按照 .claude/agents/phase2-config-builder.md 的指示執行。
 
@@ -232,8 +261,9 @@ Agent(
 
 完成後：
 1. 將 sb_slabs_patch.json 寫入 {Case Folder}/
-2. SendMessage 告知 Team Lead patch 路徑
-3. TaskUpdate 標記完成",
+2. 執行 config_merge → config_snap → run_all.py --steps 2,7,8
+3. SendMessage 告知 Team Lead：snapped_config.json 路徑 + GS 執行結果（成功/失敗 + 構件數量）
+4. TaskUpdate 標記完成",
   run_in_background=true
 )
 ```
@@ -255,9 +285,7 @@ SendMessage 給 CONFIG-BUILDER：
 
 #### Step F: 等待 CONFIG-BUILDER 完成
 
-監控 T3 狀態為 "completed"。
-
-> ⚠️ **T3 完成後不可停止！** 必須立即繼續執行 Phase 3.5 + Phase 4（merge + run_all.py），否則小梁和版不會寫入 ETABS 模型。
+監控 T3 狀態為 "completed"。CONFIG-BUILDER 現在負責完整流程：生成 patch → merge → snap → 執行 GS steps 2,7,8。
 
 #### 邊界情況處理
 
@@ -267,54 +295,20 @@ SendMessage 給 CONFIG-BUILDER：
 | SB-READER 回報 REJECT | 檢視 issues，修正 sb_elements.json 後重新驗證 |
 | SB-READER 回報 WARN | 記錄警告，繼續（CONFIG-BUILDER 可處理） |
 
-### Phase 3.5: Pre-flight Validation
+### Phase 5: 驗證 CONFIG-BUILDER 結果
 
-CONFIG-BUILDER 完成後，先合併並驗證配置檔：
+CONFIG-BUILDER 完成後會 SendMessage 回報 GS 執行結果。Team Lead 確認：
+- config_merge 驗證通過
+- config_snap 無嚴重 WARNING
+- GS steps 2,7,8 全部成功
+- 構件數量合理（小梁/版）
 
-```bash
-python -m golden_scripts.tools.config_merge \
-  --base "{Case Folder}/model_config.json" \
-  --patch "{Case Folder}/sb_slabs_patch.json" \
-  --output "{Case Folder}/merged_config.json" \
-  --validate
-```
+如 CB 回報 GS 執行失敗：
+- 檢視錯誤訊息
+- 協助 CB 修正 config/patch 或排除環境問題
+- 必要時手動重跑失敗的 step
 
-如果驗證失敗（exit code ≠ 0）：
-1. 檢視錯誤訊息，辨識問題類型（座標字串、無效樓層名、格式錯誤等）
-2. 修正 `sb_slabs_patch.json` 中的錯誤（或請 CONFIG-BUILDER 重新生成）
-3. 重新執行合併+驗證
-4. **驗證通過後才可繼續 Phase 4**
-
-### Phase 3.7: Snap SB Coordinates
-
-Phase 3.5 驗證通過後，執行座標校正：
-
-```bash
-python -m golden_scripts.tools.config_snap \
-  --input "{Case Folder}/merged_config.json" \
-  --output "{Case Folder}/snapped_config.json"
-```
-
-此步驟自動將 SB 端點吸附到最近的柱/梁/牆，修正 SB-READER 的座標誤差（容差 30cm）。
-同時更新 slab 角點座標以保持拓撲一致。
-
-如果有 WARNING（端點超過容差），檢查是否為 SB-READER 的明顯錯誤，必要時手動修正。
-
-### ⚠️ Phase 4: 執行 Golden Scripts【ETABS 寫入關鍵步驟】
-
-Phase 3.7 完成後，Team Lead **必須立即**執行：
-
-**Step 1: 執行 Golden Scripts**
-```bash
-cd golden_scripts
-python run_all.py --config "{Case Folder}/snapped_config.json" --steps 2,7,8
-```
-
-- Step 2: 建立新的 SB/S/FS 斷面（已存在的不受影響）
-- Step 7: 放置小梁
-- Step 8: 放置版（含 FS 2x2 細分）
-
-### Phase 5: 驗證
+### Phase 5 (continued): ETABS 驗證
 
 在 ETABS 中確認：
 - 小梁數量合理

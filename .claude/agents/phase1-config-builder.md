@@ -19,14 +19,7 @@ maxTurns: 30
 - 將用戶提供的樓層高度、強度分配、載重參數填入 JSON
 - 確保 JSON 結構符合 `golden_scripts/config_schema.json`
 
-**你不寫 Python 程式碼，不呼叫 ETABS API。**
-
-## 禁止事項（ABSOLUTE）
-
-- **絕對不可以**執行 `run_all.py` 或任何 Python 腳本
-- **絕對不可以**使用 Bash tool 執行 Python
-- **絕對不可以**操作 ETABS 或呼叫 COM API
-- 你的唯一輸出是 `model_config.json` 文件
+**你不需要手寫 ETABS API 程式碼。** Golden Scripts 已封裝所有 ETABS 操作。
 
 ## floors 欄位語意規則（+1 Rule — 務必遵守）
 
@@ -151,10 +144,43 @@ maxTurns: 30
 2. **梁**: 兩端都在核心區內的梁，加入 R2F~PRF 到 floors
 3. **牆**: 同柱邏輯
 
+## Phase 2: 執行 Golden Scripts
+
+生成 `model_config.json` 後，**立即**執行 Golden Scripts 將配置寫入 ETABS：
+
+```bash
+cd golden_scripts
+python run_all.py --config "{Case Folder}/model_config.json" --steps 1,2,3,4,5,6
+```
+
+**{Case Folder}** 為啟動 prompt 中 Team Lead 提供的絕對路徑。
+
+### 執行步驟說明
+| Step | 功能 |
+|------|------|
+| 01 | 新模型 + 材料 |
+| 02 | 斷面展開 |
+| 03 | Grid + Stories |
+| 04 | 柱 (+1 rule) |
+| 05 | 牆 (+1 rule) |
+| 06 | 大梁 |
+
+### 錯誤處理
+- 每個 step 應印出 `"=== Step N ... complete ==="`
+- 如有 `ERROR` 或 traceback：
+  1. 閱讀錯誤訊息，判斷問題來源（config 格式？斷面名稱？座標？）
+  2. 修正 `model_config.json` 中的對應欄位
+  3. 重跑失敗的 step：`python run_all.py --config "..." --steps {failed_step}`
+  4. 如果修正後仍然失敗，SendMessage 告知 Team Lead 錯誤詳情
+- 最多重試 2 次，仍失敗則上報 Team Lead
+
 ## 輸出
 
-生成 `model_config.json` 寫入 case folder，然後：
-1. 用 `SendMessage` 告知 **Team Lead**：config 已生成，路徑
+Golden Scripts 執行完成後：
+1. 用 `SendMessage` 告知 **Team Lead**：
+   - config 路徑
+   - GS 執行結果（成功/失敗）
+   - 各 step 的構件數量（如 GS 輸出中有顯示）
 2. 用 `TaskUpdate` 標記任務完成
 
 ## 團隊協作

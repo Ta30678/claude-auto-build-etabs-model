@@ -62,6 +62,7 @@ claude-auto-build-etabs-model/
 │       ├── unit_converter.py              # Unit detection & conversion
 │       ├── pdf_annot_extractor.py          # Extract Bluebeam annotations → annotations.json + crop PNGs
 │       ├── annot_to_elements.py           # Deterministic annotation → elements JSON (columns/beams/walls/SB)
+│       ├── pptx_to_elements.py            # PPT structural plan → elements JSON (direct, no annotations.json)
 │       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
 │       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls
 │       ├── gs_split.py                    # Split multi-building → single-building e2k
@@ -154,6 +155,11 @@ python -m golden_scripts.qc.qc_phase1 --config path/to/model_config.json
 ```
 
 ### Deterministic Annotation → Elements (used by /bts-structure and /bts-sb)
+
+Two input paths are supported: **PDF** (via Bluebeam annotations) and **PPT** (direct FREEFORM shapes).
+Team Lead 在 Phase 0.5 判斷輸入檔類型，選擇對應路徑。
+
+#### Path A: PDF → annotations.json → elements.json
 ```bash
 # Phase 1: major beams + columns + walls
 python -m golden_scripts.tools.annot_to_elements \
@@ -171,6 +177,30 @@ python -m golden_scripts.tools.annot_to_elements \
 
 # Preview without writing
 python -m golden_scripts.tools.annot_to_elements ... --dry-run
+```
+
+#### Path B: PPT → elements.json (direct, no annotations.json)
+```bash
+# Phase 1: major beams + columns + walls + PNG extraction
+python -m golden_scripts.tools.pptx_to_elements \
+    --input 結構配置圖/plan.pptx \
+    --output elements.json \
+    --page-floors "1=B3F, 3=1F~2F, 4=3F~14F, 5=R1F~R3F" \
+    --phase phase1 \
+    --crop --crop-dir "結構配置圖/"
+
+# Phase 2: small beams only
+python -m golden_scripts.tools.pptx_to_elements \
+    --input 結構配置圖/plan.pptx \
+    --output sb_elements.json \
+    --page-floors "3=1F~2F, 4=3F~14F" \
+    --phase phase2
+
+# List slides and shape counts
+python -m golden_scripts.tools.pptx_to_elements --input plan.pptx --list-slides
+
+# Preview without writing
+python -m golden_scripts.tools.pptx_to_elements ... --dry-run
 ```
 
 ### Slash commands (BTS Agent Teams — Phased, preferred)
@@ -311,19 +341,15 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 - **Team**: 2 Readers (split by floor range) + 1 Config-Builder
 - **Builds**: Grid, Story, Columns, Walls, Major Beams (B/WB/FB/FWB)
 - **Pre-step**: `annot_to_elements.py --phase phase1` → `elements.json` (deterministic element extraction)
-- **Data flow**: `elements.json` (columns/beams/walls) + Readers → `grid_info.json` (grid/outline/stories) → Config-Builder merges → `model_config.json`
-- **Execution**: `run_all.py --steps 1,2,3,4,5,6`
-- **Output**: `model_config.json` (small_beams=[], slabs=[])
+- **Data flow**: `elements.json` + Readers → `grid_info.json` → Config-Builder merges → `model_config.json` → **Config-Builder executes** `run_all.py --steps 1,2,3,4,5,6` → ETABS model
+- **Output**: `model_config.json` (small_beams=[], slabs=[]) + ETABS model with Grid+Story+柱+牆+大梁
 
 ### Phase 2: `/bts-sb`
 - **Team**: 2 SB-Readers (validation only) + 1 Config-Builder
 - **Builds**: Small Beams (SB/FSB) + Slabs (S/FS)
 - **Pre-step**: `annot_to_elements.py --phase phase2` → `sb_elements.json` (deterministic SB extraction)
-- **Data flow**: SB-Readers validate `sb_elements.json` → Config-Builder reads `sb_elements.json` + `model_config.json` → `sb_slabs_patch.json`
-- **Merge**: `config_merge.py --base model_config.json --patch sb_slabs_patch.json --output merged_config.json`
-- **Snap**: `config_snap.py --input merged_config.json --output snapped_config.json` (corrects SB endpoints)
-- **Execution**: `run_all.py --config snapped_config.json --steps 2,7,8`
-- **Output**: `snapped_config.json` (complete config with corrected SB coordinates)
+- **Data flow**: SB-Readers validate `sb_elements.json` → Config-Builder reads `sb_elements.json` + `model_config.json` → `sb_slabs_patch.json` → **Config-Builder executes** `config_merge` → `config_snap` → `run_all.py --steps 2,7,8` → ETABS model
+- **Output**: `snapped_config.json` (complete config with corrected SB coordinates) + ETABS model with +小梁+版
 
 ### Phase 3: `/bts-props`
 - **Team**: None (Team Lead direct execution)
@@ -358,6 +384,9 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 2. **Structural layout comes from plan images, never copied from old models.**
 3. **Building extents must be cross-referenced between structural and architectural plans.**
 4. **Mechanically equal-spaced small beam coordinates must be rejected and re-measured.**
+   > **例外**：`/bts-sb-eq` 是刻意使用等分座標的獨立系統，不受本規則約束。
+   > 等分座標由 `eq_sb_generator.py` 從 `model_config.json` 的大梁位置數學計算得出，
+   > 是工程師明確宣告等分設計意圖，不是 AI 猜測。
 5. **No SDL load pattern.** NEVER create SDL. All additional dead loads go under DL.
 6. **Each project is independent** — never infer from memory of other projects.
 7. **Grid line names, direction, and order must be read from the structural plan.** Do not assume X=numbers, Y=letters, or that grids increase left-to-right / bottom-to-top.

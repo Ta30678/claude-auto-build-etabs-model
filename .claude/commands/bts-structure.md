@@ -53,7 +53,37 @@ argument-hint: "[樓層說明或附加指示]"
 | 10 | 基礎樓層 | BASE 上一層 | **無，必問** |
 | 11 | EDB 存檔路徑 | 模型檔路徑 | **無，必問** |
 
-### Phase 0.5: Bluebeam 標註提取
+### Phase 0.5: 標註提取（PDF 或 PPT）
+
+判斷 `結構配置圖/` 內的輸入檔案類型：
+
+#### 路徑 A：PPT 檔案（.pptx）
+
+PPT 路徑直接提取構件座標 + PNG，跳過 annotations.json 中間格式，也**跳過 Phase 0.7 的 annot_to_elements 步驟**。
+
+1. **讀取 PPT 圖檔，辨識各 slide 的樓層範圍標註**：
+   - 先用 `--list-slides` 瀏覽各 slide 的 shape 數量和樓層標籤
+   - 讀取 TEXT_BOX 中的樓層文字（如 "B3F", "1F", "2F"）
+   - 組合為 `PAGE_FLOOR_MAPPING`（如 `"1=B3F, 3=1F~2F, 4=3F~14F, 5=R1F~R3F"`）
+   - 儲存 slide 上的樓層文字為 `PAGE_FLOOR_LABELS` 變數
+
+2. **執行 PPT 構件提取**：
+   ```bash
+   python -m golden_scripts.tools.pptx_to_elements \
+     --input "{Case Folder}/結構配置圖/xxx.pptx" \
+     --output "{Case Folder}/elements.json" \
+     --page-floors "{PAGE_FLOOR_MAPPING}" \
+     --phase phase1 \
+     --crop --crop-dir "{Case Folder}/結構配置圖/"
+   ```
+   此命令同時完成構件提取 + PNG 提取。
+
+   **驗證**：檢查輸出 summary 的構件數量是否合理。如果某頁 0 個構件，檢查 legend 是否正確。
+   如有 WARNING 關於 fallback scale，確認無測量標註的 slide 是否需要補上 "X.X m" 標註。
+
+3. **跳至 Phase 0.7 步驟 4**（建立子資料夾 + 分工）
+
+#### 路徑 B：PDF 檔案（.pdf）— 現有流程不變
 
 ```bash
 python -m golden_scripts.tools.pdf_annot_extractor \
@@ -64,6 +94,8 @@ python -m golden_scripts.tools.pdf_annot_extractor \
 ```
 
 ### Phase 0.7: 分析樓層分佈 & 執行確定性腳本
+
+> **注意**：如已使用 PPT 路徑（Phase 0.5 路徑 A），步驟 1~3 已完成，直接跳至步驟 4。
 
 1. **讀取 annotations.json**，分析各頁的樓層標註
 2. **讀取結構配置圖 PNG，辨識各頁面的樓層範圍標註**：
@@ -105,8 +137,7 @@ TeamCreate(team_name="bts-structure-team", description="BTS Phase 1 主結構建
 |------|------|-------|-----------|
 | T1 | READER-A 讀圖 | READER-A | (無) |
 | T2 | READER-B 讀圖 | READER-B | (無) |
-| T3 | CONFIG-BUILDER 生成 config | CONFIG-BUILDER | (無) |
-| T4 | 執行 Golden Scripts | (Team Lead) | T3 |
+| T3 | CONFIG-BUILDER 生成 config + 執行 GS | CONFIG-BUILDER | (無) |
 
 ### Phase 2A: 啟動 Readers Only
 
@@ -206,21 +237,30 @@ Agent(
   subagent_type="phase1-config-builder",
   team_name="bts-structure-team",
   name="CONFIG-BUILDER",
-  description="合併 elements.json + grid_info.json → model_config.json",
+  description="合併 → model_config.json → 執行 GS steps 1-6",
   prompt="你被指派為 BTS-STRUCTURE Team 的 CONFIG-BUILDER。
 你被延遲啟動。elements.json 已生成，至少一個 READER 已完成 grid_info.json。
+
+Case Folder 絕對路徑：{Case Folder}
 
 你的輸入來源：
 1. {Case Folder}/elements.json — 構件座標（腳本確定性輸出，直接使用）
 2. {Case Folder}/結構配置圖/grid_info.json — Grid/outline/stories（READER AI 輸出）
 3. Team Lead 提供的工程參數
 
-步驟：
+步驟（Phase 1 — 生成 config）：
 1. 預讀 golden_scripts/config_schema.json + example_config.json
 2. 讀取 elements.json（columns, beams, walls, sections）
 3. 讀取 grid_info.json（grids, stories, building_outline, slab_region_matrix, strength_map）
 4. 等待 Team Lead 的 'ALL_DATA_READY' SendMessage（如 READER 尚未全部完成）
 5. 合併為完整 model_config.json（small_beams 和 slabs 留空）
+
+步驟（Phase 2 — 執行 Golden Scripts）：
+6. 生成 model_config.json 後，立即執行：
+   cd golden_scripts
+   python run_all.py --config \"{Case Folder}/model_config.json\" --steps 1,2,3,4,5,6
+7. 每個 step 應印出 complete；如有 ERROR，檢查 config 並修正後重跑失敗的 step
+8. 最多重試 2 次，仍失敗則 SendMessage 告知 Team Lead 錯誤詳情
 
 用戶提供的參數：
 - 樓層高度表：{STORY_TABLE}
@@ -235,8 +275,9 @@ Agent(
 
 完成後：
 1. 將 model_config.json 寫入 {Case Folder}/
-2. SendMessage 告知 Team Lead config 路徑
-3. TaskUpdate 標記完成",
+2. 執行 run_all.py --steps 1,2,3,4,5,6
+3. SendMessage 告知 Team Lead：config 路徑 + GS 執行結果（成功/失敗 + 構件數量）
+4. TaskUpdate 標記完成",
   run_in_background=true
 )
 ```
@@ -281,22 +322,16 @@ SendMessage 給 CONFIG-BUILDER：
 | 剩餘頁面 < 2 | 不重新分配，不值得額外開銷 |
 | READER-B 先完成 | 對稱處理 — 將 READER-A 尾端工作分給 READER-B |
 
-### Phase 4: 執行 Golden Scripts（Team Lead 直接操作）
+### Phase 5: 驗證 CONFIG-BUILDER 結果
 
-CONFIG-BUILDER 完成後，Team Lead 執行：
+CONFIG-BUILDER 完成後會 SendMessage 回報 GS 執行結果。Team Lead 確認：
+- GS steps 1-6 全部成功
+- 構件數量合理（柱/梁/牆）
 
-```bash
-cd golden_scripts
-python run_all.py --config "{Case Folder}/model_config.json" --steps 1,2,3,4,5,6
-```
-
-**注意**：只執行 steps 1-6（不含 7=小梁, 8=版, 9-11=properties/loads/diaphragms）
-
-檢查輸出：
-- 每個 step 應印出 "complete"
-- 如有 ERROR，修正 model_config.json 後重跑失敗的 step
-
-### Phase 5: 基本驗證
+如 CB 回報 GS 執行失敗：
+- 檢視錯誤訊息
+- 協助 CB 修正 config 或排除環境問題
+- 必要時手動重跑失敗的 step
 
 在 ETABS 中確認：
 - Grid 系統正確

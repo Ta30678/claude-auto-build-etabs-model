@@ -21,14 +21,7 @@ maxTurns: 30
 - 執行板切割算法（所有梁含小梁都是切割線）
 - 輸出 patch 格式的 JSON
 
-**你不寫 Python 程式碼，不呼叫 ETABS API。**
-
-## 禁止事項（ABSOLUTE）
-
-- **絕對不可以**執行 `run_all.py` 或任何 Python 腳本
-- **絕對不可以**使用 Bash tool
-- **絕對不可以**操作 ETABS 或呼叫 COM API
-- 你的唯一輸出是 `sb_slabs_patch.json` 文件
+**你不需要手寫 ETABS API 程式碼。** Golden Scripts 已封裝所有 ETABS 操作。
 
 ## 啟動步驟
 
@@ -188,10 +181,60 @@ maxTurns: 30
 - 核心區內的小梁加入 R2F~PRF 到 floors
 - 核心區內的板加入 R2F~PRF 到 floors
 
+## Phase 2: 合併 + 校正 + 執行 Golden Scripts
+
+生成 `sb_slabs_patch.json` 後，**立即**執行以下三步驟：
+
+### Step 1: Merge base + patch
+```bash
+python -m golden_scripts.tools.config_merge \
+  --base "{Case Folder}/model_config.json" \
+  --patch "{Case Folder}/sb_slabs_patch.json" \
+  --output "{Case Folder}/merged_config.json" \
+  --validate
+```
+- 如果驗證失敗（exit code ≠ 0）：檢視錯誤訊息，修正 `sb_slabs_patch.json` 後重試
+- 常見問題：座標格式錯誤、無效樓層名、section 名稱不符規範
+
+### Step 2: Snap SB coordinates
+```bash
+python -m golden_scripts.tools.config_snap \
+  --input "{Case Folder}/merged_config.json" \
+  --output "{Case Folder}/snapped_config.json"
+```
+- 自動將 SB 端點吸附到最近的柱/梁/牆（容差 30cm）
+- 如有 `WARNING`（端點超過容差）：檢查是否為嚴重錯誤，必要時修正 patch 後從 Step 1 重跑
+
+### Step 3: 執行 Golden Scripts
+```bash
+cd golden_scripts
+python run_all.py --config "{Case Folder}/snapped_config.json" --steps 2,7,8
+```
+
+| Step | 功能 |
+|------|------|
+| 02 | 新增 SB/S/FS 斷面（idempotent） |
+| 07 | 放置小梁 |
+| 08 | 放置版（含 FS 2x2 細分） |
+
+**{Case Folder}** 為啟動 prompt 中 Team Lead 提供的絕對路徑。
+
+### 錯誤處理
+- 每個 step 應印出 `"=== Step N ... complete ==="`
+- 如有 `ERROR` 或 traceback：
+  1. 閱讀錯誤訊息，判斷問題來源
+  2. 修正對應的 config/patch 檔案
+  3. 重跑失敗的 step：`python run_all.py --config "..." --steps {failed_step}`
+  4. 如果修正後仍然失敗，SendMessage 告知 Team Lead 錯誤詳情
+- 最多重試 2 次，仍失敗則上報 Team Lead
+
 ## 輸出
 
-生成 `sb_slabs_patch.json` 寫入 case folder，然後：
-1. 用 `SendMessage` 告知 **Team Lead**：patch 已生成，路徑
+Golden Scripts 執行完成後：
+1. 用 `SendMessage` 告知 **Team Lead**：
+   - snapped_config.json 路徑（最終完整配置檔）
+   - GS 執行結果（成功/失敗）
+   - 各 step 的構件數量（小梁/版）
 2. 用 `TaskUpdate` 標記任務完成
 
 ## 團隊協作
