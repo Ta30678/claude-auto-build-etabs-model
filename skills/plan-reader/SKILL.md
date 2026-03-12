@@ -8,12 +8,10 @@ description: "結構配置圖核心解讀器。從結構平面圖讀取柱、梁
 ## 決策流程圖
 
 ```
-輸入：結構配置圖（PDF/PPT/截圖）
+輸入：結構配置圖（PPT/截圖）
            │
            ▼
-  annotation.json 存在？
-     ├── Yes → 第二節 Bluebeam 標註流程（精確座標）
-     └── No  → plan-reader-floors 第二節（像素量測備案）
+  pptx_to_elements.py 提取精確座標
            │
            ▼
   辨識構件 → 參考 plan-reader-elements
@@ -45,64 +43,7 @@ description: "結構配置圖核心解讀器。從結構平面圖讀取柱、梁
 
 ---
 
-## 二、Bluebeam 標註工作流（主要方法）
-
-### 2.1 概述
-
-使用 `pdf_annot_extractor` 從 Bluebeam PDF 自動提取標註精確座標，取代目視判讀和像素量測。
-
-**優勢**：構件座標精確到 mm、比例尺自動計算、圖例自動生成、小梁位置直接可用。
-
-### 2.2 使用條件
-
-- PDF 含有 Bluebeam 標註（Lines, Rectangles, Polygons, FreeText）
-- 至少 2 條 Length Measurement 標註（計算比例尺）
-- 建議比例尺 variance < 2%
-
-### 2.3 提取指令
-
-```bash
-python -m golden_scripts.tools.pdf_annot_extractor --input "結構配置.pdf" --check          # 檢查標註
-python -m golden_scripts.tools.pdf_annot_extractor --input "結構配置.pdf" --pages 5 --output annotations.json  # 提取
-python -m golden_scripts.tools.pdf_annot_extractor --input "結構配置.pdf" --pages 5 --summary                  # 摘要
-```
-
-### 2.4 標註 JSON 結構
-
-JSON 包含 `file`, `scale` (meters_per_point), `pages[]` 每頁含 `annotations`：
-
-- `measurements`: 長度標註（自動計算比例尺）
-- `lines`: 線段（含 color_name, direction, meters）
-- `rectangles`: 矩形（含 color_name, center_m, size_m）
-- `polygons`: 多邊形（含 content, vertices_m）
-- `texts`: 文字標註
-- `legend.items[]`: 圖例項目（label + nearby_color_name）
-
-### 2.5 標註類型 → 構件映射
-
-| 標註類型                  | 構件類型              | 辨識方式                             |
-| ------------------------- | --------------------- | ------------------------------------ |
-| `rectangles` (orange/red) | 柱 (Column)           | legend 中 label 含「柱」的顏色       |
-| `lines` (blue/cyan)       | 大梁 (Main Beam)      | legend 中 label 含「大梁」「RC大梁」 |
-| `lines` (green/pink)      | 小梁 (Secondary Beam) | legend 中 label 含「小梁」「SB」     |
-| `lines` (brown/dark)      | 壁梁 (Wall Beam)      | legend 中 label 含「壁梁」「WB」     |
-| `polygons`                | 剪力牆/板厚           | content 或 legend 文字描述           |
-| `measurements`            | 比例尺/間距           | 自動計算 meters_per_point            |
-
-### 2.6 標註 JSON 與圖面影像分工
-
-| 資訊           | 標註 JSON   | 仍需圖面讀取    |
-| -------------- | ----------- | --------------- |
-| 構件座標       | 精確 meters | —               |
-| 比例尺         | 自動計算    | —               |
-| 圖例對照       | 自動偵測    | 需人工驗證      |
-| Grid 名稱/間距 | —           | 從圖面讀取      |
-| 樓層資訊       | —           | 從標題/用戶說明 |
-| 建物邊界       | —           | 需交叉比對      |
-
----
-
-## 三、輸入來源與格式
+## 二、輸入來源與格式
 
 | 來源          | 格式            | 說明                        |
 | ------------- | --------------- | --------------------------- |
@@ -114,7 +55,7 @@ JSON 包含 `file`, `scale` (meters_per_point), `pages[]` 每頁含 `annotations
 
 ---
 
-## 四、完整解讀流程
+## 三、完整解讀流程
 
 依照以下步驟系統性解讀結構配置圖：
 
@@ -147,7 +88,7 @@ Step 4  辨識所有大梁
         └── 尺寸（從圖例對照）
 
 Step 5  讀取小梁座標
-        ├── 主要：從 annotation.json 讀取精確座標
+        ├── 主要：從 pptx_to_elements.py 提取精確座標
         ├── SB-READER 驗證連接性和合理性
         └── 備案：從圖面像素量測
         → 備案流程見 plan-reader-floors 第二節
@@ -164,7 +105,7 @@ Step 8  輸出結構化摘要（第五節格式）
 
 ---
 
-## 五、輸出格式
+## 四、輸出格式
 
 解讀完成後，以下列格式整理結果（設計為 ETABS 建模的直接輸入）：
 
@@ -241,12 +182,12 @@ Step 8  輸出結構化摘要（第五節格式）
 
 ---
 
-## 六、絕對規則與檢核表
+## 五、絕對規則與檢核表
 
 ### 鐵則（違反即失敗）
 
 **小梁位置絕對禁止用 1/2、1/3 grid 間距猜測或假設等間距配置。**
-小梁位置必須從 annotation.json 讀取精確座標（主要），或從圖面像素量測計算（備案）。
+小梁位置必須從 pptx_to_elements.py 提取精確座標（主要），或從圖面像素量測計算（備案）。
 小梁位置由結構工程師根據住宅單元隔間決定，每根位置都不同。用等分假設建模等同於造假數據。
 
 ### 應該做的

@@ -16,7 +16,7 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
 
 ## 鐵則（ABSOLUTE RULES）
 
-1. **小梁位置禁止猜測！** 由 `annot_to_elements.py` 確定性提取座標，SB-READER 驗證連接性。
+1. **小梁位置禁止猜測！** 由 `pptx_to_elements.py` 確定性提取座標，SB-READER 驗證連接性。
 2. **小梁等分座標必須退回重做。**
 3. **每條小梁都是版的切割線** —— 版不可跨過任何梁（含小梁）。
 4. **每案獨立**——禁止從記憶推斷。
@@ -49,13 +49,9 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
    - 如果 Phase 1 已記錄，直接使用
    - 否則詢問用戶
 
-### Phase 0.5: 提取標註（PDF 或 PPT）
+### Phase 0.5: 提取小梁座標（PPT）
 
-判斷 `結構配置圖/` 內的輸入檔案類型：
-
-#### 路徑 A：PPT 檔案（.pptx）
-
-PPT 路徑直接提取小梁座標，跳過 annotations.json，也**跳過 Phase 0.7 的 annot_to_elements 步驟**。
+掃描 `結構配置圖/` 內的 `.pptx` 檔案：
 
 ```bash
 python -m golden_scripts.tools.pptx_to_elements \
@@ -65,46 +61,15 @@ python -m golden_scripts.tools.pptx_to_elements \
   --phase phase2
 ```
 
-**驗證**：檢查輸出 summary 的小梁數量是否合理。完成後**跳至 Phase 0.7 步驟 3**（建立資料夾 + 分工）。
+**驗證**：檢查輸出 summary 的小梁數量是否合理。
 
-#### 路徑 B：PDF 檔案（.pdf）— 現有流程不變
+### Phase 0.7: 建立資料夾 & 分配驗證工作
 
-如果 annotations.json 尚未包含小梁相關頁面的標註：
-
-```bash
-python -m golden_scripts.tools.pdf_annot_extractor \
-  --input "{Case Folder}/結構配置圖/結構尺寸配置.pdf" \
-  --pages {SB_PAGES} \
-  --output "{Case Folder}/結構配置圖/annotations.json" \
-  --crop --crop-dir "{Case Folder}/結構配置圖/"
-```
-
-### Phase 0.7: 執行確定性腳本 & 建立資料夾 & 分配驗證工作
-
-> **注意**：如已使用 PPT 路徑（Phase 0.5 路徑 A），步驟 1~2 已完成，直接跳至步驟 3。
-
-1. **讀取結構配置圖 PNG，辨識各頁面的樓層範圍標註**：
-   - 讀取 `*_full.png` 圖檔
-   - 找出圖面上標註的樓層範圍文字（如「2F~12F 小梁配置」「1F 小梁配置」）
-   - 記錄每個頁面的樓層範圍標註
-   - 儲存為 `PAGE_FLOOR_LABELS` 變數
-2. **執行確定性小梁提取腳本**（⭐ 新增步驟）：
-   ```bash
-   python -m golden_scripts.tools.annot_to_elements \
-     --input "{Case Folder}/結構配置圖/annotations.json" \
-     --output "{Case Folder}/sb_elements.json" \
-     --page-floors "{PAGE_FLOOR_MAPPING}" \
-     --phase phase2
-   ```
-   其中 `PAGE_FLOOR_MAPPING` 格式如 `"3=1F~2F, 4=3F~14F"`，
-   根據步驟 1 辨識的各頁面樓層範圍組成。
-
-   **驗證**：檢查輸出 summary 的小梁數量是否合理。
-3. **建立子資料夾**（如尚未存在）：
+1. **建立子資料夾**（如尚未存在）：
    ```bash
    mkdir -p "{Case Folder}/結構配置圖/SB-BEAM"
    ```
-4. **決定驗證工作分工**（SB-READER 現在只做驗證，不做提取）：
+2. **決定驗證工作分工**（SB-READER 現在只做驗證，不做提取）：
    - 根據用戶標註的樓層區間分配給兩個 SB-READER
    - 原則：工作量大致相等
    - 例如：SB-READER-A 驗證 2F~23F, SB-READER-B 驗證 1F + B1F~B3F
@@ -133,8 +98,8 @@ Agent(
   description="驗證小梁座標（樓層區間 1）",
   prompt="你被指派為 BTS-SB Team 的 SB-READER-A。
 
-⭐ 小梁座標已由 annot_to_elements.py 腳本確定性提取完成。
-你的職責是**驗證**座標的連接性和合理性，不需要從 annotation.json 提取。
+⭐ 小梁座標已由 pptx_to_elements.py 腳本確定性提取完成。
+你的職責是**驗證**座標的連接性和合理性，不需要從圖面手動提取。
 
 sb_elements.json 路徑：{Case Folder}/sb_elements.json
 model_config.json 路徑：{Case Folder}/model_config.json
@@ -171,8 +136,8 @@ Agent(
   description="驗證小梁座標（樓層區間 2）",
   prompt="你被指派為 BTS-SB Team 的 SB-READER-B。
 
-⭐ 小梁座標已由 annot_to_elements.py 腳本確定性提取完成。
-你的職責是**驗證**座標的連接性和合理性，不需要從 annotation.json 提取。
+⭐ 小梁座標已由 pptx_to_elements.py 腳本確定性提取完成。
+你的職責是**驗證**座標的連接性和合理性，不需要從圖面手動提取。
 
 sb_elements.json 路徑：{Case Folder}/sb_elements.json
 model_config.json 路徑：{Case Folder}/model_config.json
@@ -226,7 +191,7 @@ Agent(
 
 Case Folder 絕對路徑：{Case Folder}
 
-⭐ 小梁座標已由 annot_to_elements.py 腳本確定性提取至 sb_elements.json。
+⭐ 小梁座標已由 pptx_to_elements.py 腳本確定性提取至 sb_elements.json。
 你直接從 sb_elements.json 讀取小梁座標（不從 SB-BEAM/*.md 讀取）。
 
 步驟（Phase 1 — 生成 patch）：
@@ -275,7 +240,7 @@ SB-READER 驗證工作較輕量，通常不需要負載平衡。
 
 如果任一 SB-READER 回報 `REJECT`：
 - 檢視 `validation_*.json` 中的 issues
-- 判斷是否需要重新執行 annot_to_elements.py 或手動修正 sb_elements.json
+- 判斷是否需要重新執行 pptx_to_elements.py 或手動修正 sb_elements.json
 - 問題解決後才可繼續
 
 #### Step D: 通知 CONFIG-BUILDER

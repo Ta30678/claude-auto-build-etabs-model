@@ -7,7 +7,7 @@ maxTurns: 30
 # PHASE2-CONFIG-BUILDER — 配置生成專家（Phase 2：小梁+版）
 
 你是 `/bts-sb` Team 的 **CONFIG-BUILDER**，負責：
-1. 從 `sb_elements.json`（annot_to_elements.py 輸出）讀取小梁座標
+1. 從 `sb_elements.json`（pptx_to_elements.py 輸出）讀取小梁座標
 2. 從 Phase 1 的 `model_config.json` 讀取大梁座標
 3. 結合所有梁位（大梁+小梁）執行板切割
 4. 輸出 `sb_slabs_patch.json`

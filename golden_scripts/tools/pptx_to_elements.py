@@ -5,7 +5,6 @@ Converts PowerPoint (.pptx) structural plan drawings into structural element
 JSON (columns, beams, walls, small beams) with precise coordinates.
 
 PPT format: FREEFORM shapes on top of PNG base images, with color-coded legend.
-This bypasses the Bluebeam PDF annotation pipeline entirely.
 
 Usage:
     # Phase 1: major beams + columns + walls
@@ -19,6 +18,14 @@ Usage:
         --input plan.pptx --output sb_elements.json \
         --page-floors "3=1F~2F, 4=3F~14F" \
         --phase phase2
+
+    # Scan slides for floor labels (auto-detect)
+    python -m golden_scripts.tools.pptx_to_elements --input plan.pptx --scan-floors
+
+    # Auto-detect floors and process (no --page-floors needed)
+    python -m golden_scripts.tools.pptx_to_elements \
+        --input plan.pptx --output elements.json \
+        --auto-floors --phase phase1
 
     # List slides and their shape counts
     python -m golden_scripts.tools.pptx_to_elements --input plan.pptx --list-slides
@@ -38,6 +45,7 @@ import json
 import math
 import re
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -46,21 +54,463 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.util import Emu
 
-# Import shared functions from annot_to_elements
-from golden_scripts.tools.annot_to_elements import (
-    LegendEntry,
-    expand_floor_range,
-    parse_page_floors,
-    parse_legend_label,
-    _direction_of,
-    _round5,
-    _wall_centerline,
-    _elem_key,
-    group_and_dedup,
-    collect_sections,
-    COORD_PRECISION,
-    DIRECTION_RATIO,
+
+# ─── Shared Constants & Helpers ──────────────────────────────────────────────
+# (Previously imported from annot_to_elements.py, now self-contained)
+
+ROUND_5CM = 5                   # Round column dimensions to nearest 5cm
+COORD_PRECISION = 2             # decimal places (0.01m = 1cm)
+DIRECTION_RATIO = 0.1           # dx/dy or dy/dx threshold for axis detection
+
+# Regex for section names like SB30x60, FB100x230, FWB60x230, B55x80
+_SECTION_RE = re.compile(
+    r"(FWB|FSB|FB|WB|SB|B)(\d+)[xX](\d+)", re.IGNORECASE
 )
+
+# Regex for wall thickness like "90CM 連續壁" or "25cm壁"
+_WALL_CM_RE = re.compile(r"(\d+)\s*[cC][mM]\s*(?:連續壁|壁)")
+
+# Floor label patterns for --scan-floors / --auto-floors
+_FLOOR_SINGLE_RE = r"[BR]?\d+F"
+_FLOOR_RANGE_RE = rf"[BR]?\d+F\s*[~\-]\s*[BR]?\d+F"
+FLOOR_LABEL_RE = re.compile(
+    rf"({_FLOOR_RANGE_RE}|{_FLOOR_SINGLE_RE})", re.IGNORECASE
+)
+
+
+@dataclass
+class LegendEntry:
+    """A legend item mapping a color to a structural element type."""
+    element_type: str           # "beam", "small_beam", "column", "wall"
+    section: Optional[str]      # e.g. "B55X80", "SB30X60", or None (generic)
+    color_name: str
+    color_rgb: list
+    specificity: int            # 0=generic, 1=specific
+    is_diaphragm: bool = False
+    prefix: str = ""            # B, SB, WB, FB, FWB, FSB, C, W
+    label: str = ""             # original label text
+
+
+def expand_floor_range(range_str: str) -> list[str]:
+    """Expand floor range like '3F~14F' into ['3F', '4F', ..., '14F'].
+
+    Supported patterns:
+      B3F~B1F   → [B3F, B2F, B1F]      (basement descending)
+      B3F~1F    → [B3F, B2F, B1F, 1F]   (basement to ground)
+      1F~14F    → [1F, 2F, ..., 14F]     (normal ascending)
+      R1F~R3F   → [R1F, R2F, R3F]        (rooftop ascending)
+      RF        → [RF]                    (single floor)
+    """
+    range_str = range_str.strip()
+    if "~" not in range_str:
+        return [range_str]
+
+    start, end = [s.strip() for s in range_str.split("~", 1)]
+
+    # Basement: B3F~B1F
+    ms = re.match(r"^B(\d+)F$", start)
+    me = re.match(r"^B(\d+)F$", end)
+    if ms and me:
+        s, e = int(ms.group(1)), int(me.group(1))
+        step = -1 if s > e else 1
+        return [f"B{i}F" for i in range(s, e + step, step)]
+
+    # Basement to ground: B3F~1F  or  B3F~2F
+    if ms and re.match(r"^(\d+)F$", end):
+        s = int(ms.group(1))
+        e = int(re.match(r"^(\d+)F$", end).group(1))
+        result = [f"B{i}F" for i in range(s, 0, -1)]
+        result.extend(f"{i}F" for i in range(1, e + 1))
+        return result
+
+    # Normal floors: 3F~14F
+    ms = re.match(r"^(\d+)F$", start)
+    me = re.match(r"^(\d+)F$", end)
+    if ms and me:
+        s, e = int(ms.group(1)), int(me.group(1))
+        return [f"{i}F" for i in range(s, e + 1)]
+
+    # Rooftop: R1F~R3F
+    ms = re.match(r"^R(\d+)F$", start)
+    me = re.match(r"^R(\d+)F$", end)
+    if ms and me:
+        s, e = int(ms.group(1)), int(me.group(1))
+        return [f"R{i}F" for i in range(s, e + 1)]
+
+    # Normal floor to RF: 12F~RF (we cannot enumerate without max floor)
+    # Normal floor to R1F:  similar
+    ms_n = re.match(r"^(\d+)F$", start)
+    me_r = re.match(r"^R(\d*)F$", end)
+    if ms_n and me_r:
+        s = int(ms_n.group(1))
+        r_num = me_r.group(1)
+        result = [f"{i}F" for i in range(s, s + 1)]  # start only
+        # We'll append RF / R1F etc. — caller must provide full floor list if needed
+        result.append(end)
+        print(f"  WARNING: Cannot fully enumerate '{range_str}'; returning [{start}, {end}]")
+        return result
+
+    # Fallback
+    print(f"  WARNING: Cannot expand floor range '{range_str}'; returning as-is")
+    return [start, end]
+
+
+def parse_page_floors(page_floors_str: str) -> dict[int, list[str]]:
+    """Parse --page-floors argument.
+
+    Format: "1=B3F, 3=1F~2F, 4=3F~14F, 5=R1F~R3F"
+    Returns: {1: ["B3F"], 3: ["1F","2F"], 4: ["3F",..."14F"], ...}
+    """
+    result = {}
+    for item in page_floors_str.split(","):
+        item = item.strip()
+        if "=" not in item:
+            continue
+        page_str, floor_range = item.split("=", 1)
+        page_num = int(page_str.strip())
+        floors = expand_floor_range(floor_range.strip())
+        result[page_num] = floors
+    return result
+
+
+def _iter_text_shapes(slide):
+    """Yield all shapes with text, including inside GROUPs (recursive)."""
+    for shape in slide.shapes:
+        if hasattr(shape, 'has_text_frame') and shape.has_text_frame:
+            yield shape
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            for child in shape.shapes:
+                if hasattr(child, 'has_text_frame') and child.has_text_frame:
+                    yield child
+
+
+def scan_floors(prs) -> dict[int, list[str]]:
+    """Scan all slides for floor label text.
+
+    Returns {slide_num: [floor_names]} (1-based).
+    """
+    result = {}
+    for i, slide in enumerate(prs.slides):
+        slide_num = i + 1
+        floor_matches = []
+        for shape in _iter_text_shapes(slide):
+            text = shape.text_frame.text.strip()
+            # Search all lines in the text
+            for line in text.split("\n"):
+                for m in FLOOR_LABEL_RE.finditer(line.strip()):
+                    floor_matches.append(m.group(1).strip())
+        if floor_matches:
+            # Deduplicate while preserving order
+            seen = set()
+            deduped = []
+            for fm in floor_matches:
+                if fm not in seen:
+                    seen.add(fm)
+                    deduped.append(fm)
+            result[slide_num] = deduped
+    return result
+
+
+def format_scan_floors_output(detected: dict[int, list[str]]) -> str:
+    """Format detected floor labels for display and suggested --page-floors string."""
+    lines = ["Detected floor labels:"]
+    page_parts = []
+    for sn in sorted(detected.keys()):
+        labels = detected[sn]
+        # Try to condense single floors into ranges for display
+        expanded_all = []
+        for label in labels:
+            expanded = expand_floor_range(label)
+            expanded_all.extend(expanded)
+        # Deduplicate
+        seen = set()
+        deduped = []
+        for f in expanded_all:
+            if f not in seen:
+                seen.add(f)
+                deduped.append(f)
+
+        # Display: show raw labels and expansion
+        raw = ", ".join(labels)
+        if len(deduped) > 1 and len(labels) == 1 and "~" in labels[0]:
+            lines.append(f"  Slide {sn}: {raw} -> [{', '.join(deduped)}]")
+        else:
+            lines.append(f"  Slide {sn}: {raw}")
+
+        # For --page-floors suggestion, use original labels joined
+        page_parts.append(f"{sn}={', '.join(labels)}" if len(labels) == 1
+                          else f"{sn}={labels[0]}")
+
+    lines.append("")
+    lines.append("Suggested --page-floors:")
+    lines.append(f'  "{", ".join(page_parts)}"')
+    return "\n".join(lines)
+
+
+def parse_legend_label(label: str):
+    """Parse a legend label text.
+
+    Returns (element_type, section_or_None, specificity, prefix, is_diaphragm).
+    """
+    lab = label.strip()
+
+    # 1) Specific section: SB30x60, FB100x230, FWB60x230, B55x80 …
+    m = _SECTION_RE.search(lab)
+    if m:
+        prefix = m.group(1).upper()
+        w, d = int(m.group(2)), int(m.group(3))
+        section = f"{prefix}{w}X{d}"
+        if prefix in ("SB", "FSB"):
+            return "small_beam", section, 1, prefix, False
+        return "beam", section, 1, prefix, False
+
+    # 2) Wall thickness: "90CM 連續壁"
+    m = _WALL_CM_RE.search(lab)
+    if m:
+        t = int(m.group(1))
+        return "wall", f"W{t}", 1, "W", True
+
+    # 3) Generic Chinese keywords
+    if "連續壁" in lab:
+        return "wall", None, 0, "W", True
+    if "<RC大梁>" in lab or "大梁" in lab:
+        return "beam", None, 0, "B", False
+    if "<RC小梁>" in lab or "小梁" in lab or "次梁" in lab:
+        return "small_beam", None, 0, "SB", False
+    if any(kw in lab for kw in ("<RC柱>", "邊柱", "內柱", "角柱")):
+        return "column", None, 0, "C", False
+    if "壁" in lab or "剪力牆" in lab:
+        return "wall", None, 0, "W", False
+
+    return "unknown", None, 0, "", False
+
+
+def _round5(val_m: float) -> int:
+    """Round meter value to nearest 5 cm (returns cm)."""
+    cm = val_m * 100
+    return max(5, round(cm / ROUND_5CM) * ROUND_5CM)
+
+
+def _direction_of(x1, y1, x2, y2) -> str:
+    dx, dy = abs(x2 - x1), abs(y2 - y1)
+    if dx < 0.01 and dy < 0.01:
+        return ""
+    if dy < 0.01 or (dx > 0 and dy / max(dx, 1e-9) < DIRECTION_RATIO):
+        return "X"
+    if dx < 0.01 or (dy > 0 and dx / max(dy, 1e-9) < DIRECTION_RATIO):
+        return "Y"
+    return ""
+
+
+def _wall_centerline(verts):
+    """Extract (x1,y1,x2,y2) centerline and thickness from wall polygon.
+
+    For a 4-vertex polygon: centerline = midpoints of the shorter pair of
+    opposite edges; thickness = average of that shorter pair's lengths.
+    For other polygons: bounding-box heuristic.
+
+    Returns ((x1,y1,x2,y2), thickness_m) or (None, 0).
+    """
+    if len(verts) < 3:
+        return None, 0
+
+    if len(verts) == 4:
+        def elen(i, j):
+            return math.hypot(verts[j][0] - verts[i][0],
+                              verts[j][1] - verts[i][1])
+
+        e01, e12, e23, e30 = elen(0, 1), elen(1, 2), elen(2, 3), elen(3, 0)
+        pair1 = (e01 + e23) / 2   # edges 0-1, 2-3
+        pair2 = (e12 + e30) / 2   # edges 1-2, 3-0
+
+        if pair1 > pair2:
+            # pair2 = short edges → thickness; centerline through pair2 midpoints
+            thickness = pair2
+            m1 = ((verts[3][0] + verts[0][0]) / 2,
+                  (verts[3][1] + verts[0][1]) / 2)
+            m2 = ((verts[1][0] + verts[2][0]) / 2,
+                  (verts[1][1] + verts[2][1]) / 2)
+        else:
+            thickness = pair1
+            m1 = ((verts[0][0] + verts[1][0]) / 2,
+                  (verts[0][1] + verts[1][1]) / 2)
+            m2 = ((verts[2][0] + verts[3][0]) / 2,
+                  (verts[2][1] + verts[3][1]) / 2)
+
+        return ((round(m1[0], COORD_PRECISION), round(m1[1], COORD_PRECISION),
+                 round(m2[0], COORD_PRECISION), round(m2[1], COORD_PRECISION)),
+                thickness)
+
+    # Fallback: bounding box
+    xs = [v[0] for v in verts]
+    ys = [v[1] for v in verts]
+    mn_x, mx_x = min(xs), max(xs)
+    mn_y, mx_y = min(ys), max(ys)
+    w, h = mx_x - mn_x, mx_y - mn_y
+    if w > h:
+        thickness = h
+        cy = (mn_y + mx_y) / 2
+        return ((round(mn_x, COORD_PRECISION), round(cy, COORD_PRECISION),
+                 round(mx_x, COORD_PRECISION), round(cy, COORD_PRECISION)),
+                thickness)
+    else:
+        thickness = w
+        cx = (mn_x + mx_x) / 2
+        return ((round(cx, COORD_PRECISION), round(mn_y, COORD_PRECISION),
+                 round(cx, COORD_PRECISION), round(mx_y, COORD_PRECISION)),
+                thickness)
+
+
+def _elem_key(e: dict) -> tuple:
+    """Key for deduplication: type + coordinates + section."""
+    return (
+        e["element_type"],
+        round(e["x1"], COORD_PRECISION),
+        round(e["y1"], COORD_PRECISION),
+        round(e["x2"], COORD_PRECISION),
+        round(e["y2"], COORD_PRECISION),
+        e.get("section", ""),
+    )
+
+
+def _snap_walls_to_beams(elements, tolerance=1.0, warnings=None):
+    """Snap wall fixed-axis coordinates to nearest beam sharing the same direction.
+
+    On 2D structural plans, walls/連續壁 are drawn parallel to but offset from beams.
+    In the model they should share the beam's axis coordinate.
+
+    Args:
+        elements: list of element dicts (modified in-place).
+        tolerance: max snap distance in meters (default 1.0m).
+        warnings: list to append snap messages to.
+    """
+    beams = [e for e in elements if e["element_type"] == "beam"]
+    walls = [e for e in elements if e["element_type"] == "wall"]
+
+    snap_count = 0
+    for wall in walls:
+        direction = _direction_of(wall["x1"], wall["y1"], wall["x2"], wall["y2"])
+        if direction == "X":
+            # X-direction wall: fixed Y -> snap to nearest X-direction beam's Y
+            fixed_coord = wall["y1"]
+            candidates = [b for b in beams
+                          if _direction_of(b["x1"], b["y1"], b["x2"], b["y2"]) == "X"]
+            if not candidates:
+                continue
+            best = min(candidates, key=lambda b: abs(b["y1"] - fixed_coord))
+            dist = abs(best["y1"] - fixed_coord)
+            if 0.01 < dist <= tolerance:
+                old_y = wall["y1"]
+                wall["y1"] = best["y1"]
+                wall["y2"] = best["y1"]  # Fixed axis: both endpoints same Y
+                snap_count += 1
+                msg = (f"Wall at Y={old_y:.2f} snapped to beam at "
+                       f"Y={best['y1']:.2f} (delta={dist:.2f}m)")
+                if warnings is not None:
+                    warnings.append(msg)
+        elif direction == "Y":
+            # Y-direction wall: fixed X -> snap to nearest Y-direction beam's X
+            fixed_coord = wall["x1"]
+            candidates = [b for b in beams
+                          if _direction_of(b["x1"], b["y1"], b["x2"], b["y2"]) == "Y"]
+            if not candidates:
+                continue
+            best = min(candidates, key=lambda b: abs(b["x1"] - fixed_coord))
+            dist = abs(best["x1"] - fixed_coord)
+            if 0.01 < dist <= tolerance:
+                old_x = wall["x1"]
+                wall["x1"] = best["x1"]
+                wall["x2"] = best["x1"]  # Fixed axis: both endpoints same X
+                snap_count += 1
+                msg = (f"Wall at X={old_x:.2f} snapped to beam at "
+                       f"X={best['x1']:.2f} (delta={dist:.2f}m)")
+                if warnings is not None:
+                    warnings.append(msg)
+
+    if snap_count > 0:
+        print(f"  Wall snap: {snap_count} walls snapped to beam coordinates")
+
+
+def group_and_dedup(all_elements: list[dict]) -> dict[str, list[dict]]:
+    """Group elements by type; merge floors for duplicates (same position+section).
+
+    Returns {"columns": [...], "beams": [...], "walls": [...], "small_beams": [...]}.
+    """
+    merged: dict[tuple, dict] = {}
+
+    for e in all_elements:
+        key = _elem_key(e)
+        if key in merged:
+            # Merge floors (union, preserve order)
+            existing_floors = merged[key]["floors"]
+            for f in e["floors"]:
+                if f not in existing_floors:
+                    existing_floors.append(f)
+        else:
+            merged[key] = dict(e)  # shallow copy
+
+    # Split into typed arrays
+    result = {"columns": [], "beams": [], "walls": [], "small_beams": []}
+    for elem in merged.values():
+        etype = elem.pop("element_type")
+        elem.pop("page_num", None)
+        elem.pop("section_uncertain", None)
+        target_key = {
+            "column": "columns",
+            "beam": "beams",
+            "wall": "walls",
+            "small_beam": "small_beams",
+        }.get(etype)
+        if target_key:
+            # For columns: use grid_x/grid_y naming
+            if etype == "column":
+                out = {
+                    "grid_x": elem["x1"],
+                    "grid_y": elem["y1"],
+                    "section": elem["section"],
+                    "floors": elem["floors"],
+                }
+                result["columns"].append(out)
+            else:
+                out = {
+                    "x1": elem["x1"], "y1": elem["y1"],
+                    "x2": elem["x2"], "y2": elem["y2"],
+                    "section": elem["section"],
+                    "floors": elem["floors"],
+                    "direction": elem.get("direction", ""),
+                }
+                if etype == "wall" and elem.get("is_diaphragm_wall"):
+                    out["is_diaphragm_wall"] = True
+                result[target_key].append(out)
+
+    return result
+
+
+def collect_sections(grouped: dict) -> dict:
+    """Gather all unique section names by type."""
+    frame_set = set()
+    wall_set = set()
+
+    for c in grouped.get("columns", []):
+        if c["section"]:
+            frame_set.add(c["section"])
+    for b in grouped.get("beams", []):
+        if b["section"]:
+            frame_set.add(b["section"])
+    for sb in grouped.get("small_beams", []):
+        if sb["section"]:
+            frame_set.add(sb["section"])
+    for w in grouped.get("walls", []):
+        s = w["section"]
+        if s:
+            m = re.match(r"^W(\d+)$", s)
+            if m:
+                wall_set.add(int(m.group(1)))
+
+    return {
+        "frame": sorted(frame_set),
+        "wall": sorted(wall_set),
+    }
 
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -295,7 +745,7 @@ def extract_base_png(slide, slide_num, floor_label, crop_dir):
 def _detect_legend_region(slide, slide_w, slide_h):
     """Detect whether the legend is on the left or right side of the slide.
 
-    Strategy: Count structural keywords in TEXT_BOX shapes on each side.
+    Strategy: Count structural keywords in text shapes on each side.
     The side with more keywords is the legend side.
 
     Returns ("left", x_boundary) or ("right", x_boundary).
@@ -304,11 +754,7 @@ def _detect_legend_region(slide, slide_w, slide_h):
     left_score = 0
     right_score = 0
 
-    for shape in slide.shapes:
-        if shape.shape_type != MSO_SHAPE_TYPE.TEXT_BOX:
-            continue
-        if not shape.has_text_frame:
-            continue
+    for shape in _iter_text_shapes(slide):
         text = shape.text_frame.text
         cx = shape.left + shape.width // 2
 
@@ -323,23 +769,21 @@ def _detect_legend_region(slide, slide_w, slide_h):
     if left_score >= right_score:
         # Legend on left: find the rightmost legend text to set boundary
         max_right = 0
-        for shape in slide.shapes:
-            if shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX and shape.has_text_frame:
-                text = shape.text_frame.text
-                if any(kw in text for kw in LEGEND_KEYWORDS):
-                    r = shape.left + shape.width
-                    if r > max_right and shape.left < mid_x:
-                        max_right = r
+        for shape in _iter_text_shapes(slide):
+            text = shape.text_frame.text
+            if any(kw in text for kw in LEGEND_KEYWORDS):
+                r = shape.left + shape.width
+                if r > max_right and shape.left < mid_x:
+                    max_right = r
         boundary = max_right + 200000 if max_right > 0 else int(slide_w * 0.25)
         return "left", boundary
     else:
         min_left = slide_w
-        for shape in slide.shapes:
-            if shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX and shape.has_text_frame:
-                text = shape.text_frame.text
-                if any(kw in text for kw in LEGEND_KEYWORDS):
-                    if shape.left > mid_x:
-                        min_left = min(min_left, shape.left)
+        for shape in _iter_text_shapes(slide):
+            text = shape.text_frame.text
+            if any(kw in text for kw in LEGEND_KEYWORDS):
+                if shape.left > mid_x:
+                    min_left = min(min_left, shape.left)
         boundary = min_left - 200000 if min_left < slide_w else int(slide_w * 0.75)
         return "right", boundary
 
@@ -357,13 +801,9 @@ def parse_legend(slide, slide_w, slide_h):
     """
     side, boundary = _detect_legend_region(slide, slide_w, slide_h)
 
-    # Collect legend TEXT_BOX shapes
+    # Collect legend text shapes (TEXT_BOX, AUTO_SHAPE, PLACEHOLDER, GROUP children)
     legend_texts = []
-    for shape in slide.shapes:
-        if shape.shape_type != MSO_SHAPE_TYPE.TEXT_BOX:
-            continue
-        if not shape.has_text_frame:
-            continue
+    for shape in _iter_text_shapes(slide):
         cx = shape.left + shape.width // 2
         if side == "left" and cx > boundary:
             continue
@@ -422,11 +862,13 @@ def parse_legend(slide, slide_w, slide_h):
                 })
             y_offset += 1
 
-    # Collect colored FREEFORM swatches in legend region
-    # Swatches are short lines or small shapes with distinct colors
+    # Collect colored swatches in legend region
+    # Swatches can be FREEFORM, RECTANGLE, or AUTO_SHAPE with color
     legend_swatches = []
     for shape in slide.shapes:
-        if shape.shape_type != MSO_SHAPE_TYPE.FREEFORM:
+        if shape.shape_type not in (MSO_SHAPE_TYPE.FREEFORM,
+                                     MSO_SHAPE_TYPE.RECTANGLE,
+                                     MSO_SHAPE_TYPE.AUTO_SHAPE):
             continue
         cx = shape.left + shape.width // 2
         if side == "left" and cx > boundary:
@@ -496,14 +938,135 @@ def parse_legend(slide, slide_w, slide_h):
     return mapping
 
 
+# ─── Legend Validation ───────────────────────────────────────────────────────
+
+def _validate_legend(slide, slide_num, legend, slide_w, slide_h,
+                     legend_side, legend_boundary, warnings):
+    """Validate legend coverage: count matched/unmatched shapes per color.
+
+    Returns validation dict for metadata.
+    """
+    # Count drawing-area shapes by color
+    shape_colors = {}  # color_hex -> count
+    for shape in slide.shapes:
+        if shape.shape_type != MSO_SHAPE_TYPE.FREEFORM:
+            continue
+        cx = shape.left + shape.width // 2
+        # Skip legend region shapes
+        if legend_side == "left" and cx < legend_boundary:
+            continue
+        if legend_side == "right" and cx > legend_boundary:
+            continue
+        # Skip very large shapes
+        if shape.width > 0 and shape.height > 0:
+            if (shape.width * shape.height) > slide_w * slide_h * SLIDE_AREA_RATIO_MAX:
+                continue
+
+        line_color = _get_shape_color(shape, "line")
+        fill_color = _get_shape_color(shape, "fill")
+        color = line_color or fill_color
+        if color and color != "FFFFFF":
+            shape_colors[color] = shape_colors.get(color, 0) + 1
+
+    validation = {"slide": slide_num, "entries": []}
+
+    # Check each legend entry
+    for color_hex, entries in legend.items():
+        count = shape_colors.pop(color_hex, 0)
+        # Also check fuzzy matches
+        to_remove = []
+        for sc in shape_colors:
+            r, g, b = int(sc[0:2], 16), int(sc[2:4], 16), int(sc[4:6], 16)
+            lr, lg, lb = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
+            if max(abs(r-lr), abs(g-lg), abs(b-lb)) <= 5:
+                count += shape_colors[sc]
+                to_remove.append(sc)
+        for sc in to_remove:
+            shape_colors.pop(sc, None)
+
+        for entry in entries:
+            status = "matched" if count > 0 else "no_shapes"
+            validation["entries"].append({
+                "color": color_hex,
+                "section": entry.section or "(generic)",
+                "type": entry.element_type,
+                "label": entry.label,
+                "shape_count": count,
+                "status": status,
+            })
+            if count == 0:
+                warnings.append(
+                    f"Slide {slide_num}: legend entry #{color_hex} -> "
+                    f"{entry.section or entry.label} ({entry.element_type}): "
+                    f"0 shapes matched"
+                )
+
+    # Orphan shapes (drawing-area colors not in any legend)
+    for color_hex, count in shape_colors.items():
+        validation["entries"].append({
+            "color": color_hex,
+            "section": None,
+            "type": "unmatched",
+            "label": "",
+            "shape_count": count,
+            "status": "orphan",
+        })
+        warnings.append(
+            f"Slide {slide_num}: {count} shapes with color #{color_hex} "
+            f"have no legend entry"
+        )
+
+    return validation
+
+
+def _print_legend_validation(validation):
+    """Print legend validation report for a slide."""
+    print(f"  Legend Validation (Slide {validation['slide']}):")
+    for entry in validation["entries"]:
+        color = entry["color"]
+        section = entry["section"] or "(no legend)"
+        etype = entry["type"]
+        count = entry["shape_count"]
+        if entry["status"] == "matched":
+            print(f"    + #{color} -> {section} ({etype}): {count} shapes matched")
+        elif entry["status"] == "no_shapes":
+            print(f"    ? #{color} -> {section} ({etype}): 0 shapes matched")
+        elif entry["status"] == "orphan":
+            print(f"    ! #{color} -> no legend entry: {count} shapes unmatched")
+
+
 # ─── Shape Extraction & Classification ────────────────────────────────────────
+
+def _fuzzy_color_match(color_hex, legend, tolerance=5):
+    """Find legend entry list with closest color within tolerance.
+
+    Uses Chebyshev distance (max per-channel difference).
+    Returns the list of LegendEntry for the matched color, or None.
+    """
+    # Exact match first
+    if color_hex in legend:
+        return legend[color_hex]
+    # Fuzzy match
+    r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
+    best_key, best_dist = None, float('inf')
+    for key in legend:
+        kr = int(key[0:2], 16)
+        kg = int(key[2:4], 16)
+        kb = int(key[4:6], 16)
+        dist = max(abs(r - kr), abs(g - kg), abs(b - kb))
+        if dist <= tolerance and dist < best_dist:
+            best_dist = dist
+            best_key = key
+    return legend[best_key] if best_key else None
+
 
 def _resolve_pptx_legend(color_hex, geom_type, legend):
     """Resolve a shape's color to a legend entry.
 
     geom_type: 'line' | 'rectangle'
+    Uses fuzzy color matching (tolerance ±5 per RGB channel).
     """
-    entries = legend.get(color_hex, [])
+    entries = _fuzzy_color_match(color_hex, legend)
     if not entries:
         return None
 
@@ -747,13 +1310,15 @@ def list_slides(prs):
             stype = str(shape.shape_type).split(".")[-1].split("(")[0].strip()
             counts[stype] = counts.get(stype, 0) + 1
         parts = [f"{k}={v}" for k, v in sorted(counts.items())]
-        # Find floor label texts
+        # Find floor label texts (broadened to match ranges and more shape types)
         floor_texts = []
-        for shape in slide.shapes:
-            if shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX and shape.has_text_frame:
-                t = shape.text_frame.text.strip()
-                if re.match(r"^[BR]?\d+F$", t):
-                    floor_texts.append(t)
+        for shape in _iter_text_shapes(slide):
+            t = shape.text_frame.text.strip()
+            for line in t.split("\n"):
+                for m in FLOOR_LABEL_RE.finditer(line.strip()):
+                    val = m.group(1).strip()
+                    if val not in floor_texts:
+                        floor_texts.append(val)
         floor_info = f" (floors: {', '.join(floor_texts)})" if floor_texts else ""
         print(f"  Slide {i+1}: {', '.join(parts)}{floor_info}")
     print()
@@ -789,6 +1354,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
     all_elements = []
     per_page_stats = {}
     scale_details = []
+    legend_validations = []
 
     # Pre-compute scales for all requested slides; allow fallback
     slide_scales = {}
@@ -851,6 +1417,12 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
         # 4) Detect legend region for exclusion
         legend_side, legend_boundary = _detect_legend_region(slide, slide_w, slide_h)
 
+        # 4b) Legend validation report
+        lv = _validate_legend(slide, sn, legend, slide_w, slide_h,
+                              legend_side, legend_boundary, warnings)
+        _print_legend_validation(lv)
+        legend_validations.append(lv)
+
         # 5) Extract & classify shapes
         slide_elems = extract_and_classify_shapes(
             slide, sn, legend, scale, floors, phase,
@@ -866,11 +1438,14 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
         per_page_stats[str(sn)] = stats
         print(f"  Elements: {', '.join(f'{k}={v}' for k, v in stats.items() if v > 0) or 'none'}")
 
+    # Snap walls to nearest beam axis (post-processing)
+    _snap_walls_to_beams(all_elements, tolerance=1.0, warnings=warnings)
+
     # Group & dedup
     grouped = group_and_dedup(all_elements)
     sections = collect_sections(grouped)
 
-    # Build output (identical format to annot_to_elements)
+    # Build output
     output = {
         "_metadata": {
             "source": "pptx_to_elements.py",
@@ -887,6 +1462,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
                 "walls": len(grouped["walls"]),
                 "small_beams": len(grouped["small_beams"]),
             },
+            "legend_validation": legend_validations,
             "warnings": warnings,
         },
         "columns": grouped["columns"],
@@ -928,8 +1504,19 @@ def main():
     parser.add_argument(
         "--list-slides", action="store_true",
         help="List slides and exit")
+    parser.add_argument(
+        "--scan-floors", action="store_true",
+        help="Scan all slides for floor labels and print suggested --page-floors, then exit")
+    parser.add_argument(
+        "--auto-floors", action="store_true",
+        help="Auto-detect floor labels and use them (no --page-floors needed)")
 
     args = parser.parse_args()
+
+    # Validate mutually exclusive options
+    if args.auto_floors and args.page_floors:
+        print("ERROR: --auto-floors and --page-floors are mutually exclusive")
+        sys.exit(1)
 
     # Load PPTX
     input_path = Path(args.input)
@@ -946,20 +1533,54 @@ def main():
         list_slides(prs)
         return
 
-    # Require --page-floors and --output for processing
-    if not args.page_floors:
-        print("ERROR: --page-floors is required for processing")
+    # Scan-floors mode: detect and print, then exit
+    if args.scan_floors:
+        detected = scan_floors(prs)
+        if not detected:
+            print("No floor labels detected on any slide.")
+        else:
+            print(format_scan_floors_output(detected))
+        return
+
+    # Auto-floors mode: detect and use
+    if args.auto_floors:
+        detected = scan_floors(prs)
+        if not detected:
+            print("ERROR: --auto-floors found no floor labels on any slide")
+            sys.exit(1)
+        # Convert detected labels to page_floors format
+        page_floors = {}
+        for sn, labels in detected.items():
+            all_floors = []
+            for label in labels:
+                all_floors.extend(expand_floor_range(label))
+            # Deduplicate
+            seen = set()
+            deduped = []
+            for f in all_floors:
+                if f not in seen:
+                    seen.add(f)
+                    deduped.append(f)
+            page_floors[sn] = deduped
+        print(f"Auto-detected floor mappings: {len(page_floors)} slides")
+        for sn in sorted(page_floors.keys()):
+            floors = page_floors[sn]
+            print(f"  Slide {sn}: {', '.join(floors)}")
+    elif args.page_floors:
+        # Parse page-floors
+        page_floors = parse_page_floors(args.page_floors)
+        if not page_floors:
+            print("ERROR: No valid slide-floor mappings in --page-floors")
+            sys.exit(1)
+        print(f"Slide-floor mappings: {len(page_floors)} slides")
+    else:
+        print("ERROR: --page-floors or --auto-floors is required for processing")
         sys.exit(1)
+
+    # Require --output for processing
     if not args.output:
         print("ERROR: --output is required for processing")
         sys.exit(1)
-
-    # Parse page-floors
-    page_floors = parse_page_floors(args.page_floors)
-    if not page_floors:
-        print("ERROR: No valid slide-floor mappings in --page-floors")
-        sys.exit(1)
-    print(f"Slide-floor mappings: {len(page_floors)} slides")
 
     # Process
     output = process(prs, page_floors, args.phase,

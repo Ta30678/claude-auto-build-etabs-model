@@ -11,7 +11,7 @@ maxTurns: 50
 
 ## 重要：構件數量已由腳本確定
 
-**`annot_to_elements.py` 已經自動完成了柱/梁/牆/小梁的分類和計數。**
+**`pptx_to_elements.py` 已經自動完成了柱/梁/牆/小梁的分類和計數。**
 你**不再需要**分類或計數結構構件。
 
 **你只處理**：Grid 名稱與座標、建物外框、樓板區域判斷、強度分配、Story 高度。
@@ -130,7 +130,7 @@ Grid 系統只需由一個 Reader 輸出。如果兩個 Reader 分別輸出了 G
 收到含 "RESUME" 關鍵字的 SendMessage 時：
 
 1. **解析指令**：讀取 Team Lead 指定的額外頁面和樓層範圍
-2. **利用既有上下文**：annotations.json、SKILL.md、Grid 系統已載入，不需重讀
+2. **利用既有上下文**：elements.json、SKILL.md、Grid 系統已載入，不需重讀
 3. **處理新頁面**：讀取新頁面的 Grid / 建物外框 / 板區域資訊
 4. **更新 grid_info.json**：合併新資訊
 5. **完成後**：SendMessage 通知 **Team Lead**「額外頁面處理完成」

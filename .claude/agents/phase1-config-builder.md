@@ -14,7 +14,7 @@ maxTurns: 30
 ## 核心原則
 
 你**不需要**了解 ETABS API。你的工作是**資料合併**：
-- 從 `elements.json`（annot_to_elements.py 腳本輸出）讀取構件座標和斷面
+- 從 `elements.json`（pptx_to_elements.py 腳本輸出）讀取構件座標和斷面
 - 從 `grid_info.json`（READER AI 輸出）讀取 Grid 名稱/座標、建物外框、板區域
 - 將用戶提供的樓層高度、強度分配、載重參數填入 JSON
 - 確保 JSON 結構符合 `golden_scripts/config_schema.json`

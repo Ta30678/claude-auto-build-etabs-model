@@ -2,7 +2,7 @@
 eq_sb_generator.py — 等分小梁座標計算工具
 
 從 eq_sb_rules.json 讀取等分規則，計算精確的等分點座標，
-輸出與 annot_to_elements.py phase2 格式完全相同的 sb_elements.json。
+輸出與 pptx_to_elements.py phase2 格式完全相同的 sb_elements.json。
 
 用法：
     python -m golden_scripts.tools.eq_sb_generator \
@@ -126,7 +126,7 @@ def main():
     total_sbs = len(small_beams)
     sections_used = sorted({sb["section"] for sb in small_beams})
 
-    # 輸出格式與 annot_to_elements.py phase2 完全一致
+    # 輸出格式與 pptx_to_elements.py phase2 完全一致
     output = {
         "small_beams": small_beams,
         "_metadata": {
