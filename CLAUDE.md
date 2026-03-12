@@ -63,6 +63,8 @@ claude-auto-build-etabs-model/
 │       ├── pptx_to_elements.py            # PPT structural plan → elements JSON (primary extraction tool)
 │       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
 │       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls
+│       ├── affine_calibrate.py            # Transform PPTX-meter SB coords to grid-aligned coords
+│       ├── slab_generator.py              # Graph-based slab polygon generation from beam layout
 │       ├── gs_split.py                    # Split multi-building → single-building e2k
 │       └── gs_merge.py                    # Merge single-building e2k files → unified model
 ├── golden_scripts/qc/                     # QC verification scripts
@@ -76,7 +78,9 @@ claude-auto-build-etabs-model/
 │   ├── test_rigid_zones.py                # RZ factor = 0.75
 │   ├── test_diaphragms.py                 # Diaphragm definitions exist
 │   ├── test_loads.py                      # DL/LL/EQ patterns, no SDL, DL self-weight=1
-│   └── test_element_counts.py             # Frames, areas, columns, beams, stories exist
+│   ├── test_element_counts.py             # Frames, areas, columns, beams, stories exist
+│   ├── test_affine_calibrate.py           # Affine calibration tool tests (mock data)
+│   └── test_slab_generator.py             # Slab generator tool tests (mock data)
 ├── skills/
 │   ├── structural-glossary/SKILL.md       # Canonical structural terminology (上構/下構/屋突/共構)
 │   ├── e2k-split/SKILL.md                 # E2K split tool SOP
@@ -92,7 +96,7 @@ claude-auto-build-etabs-model/
 │   │   ├── phase1-reader.md               # Phase 1 READER: grid+columns+beams+walls → folders
 │   │   ├── phase1-config-builder.md       # Phase 1 CONFIG-BUILDER: folders → model_config.json (no SB/slabs)
 │   │   ├── phase2-sb-reader.md            # Phase 2 SB-READER: small beam coords → SB-BEAM/ folder
-│   │   ├── phase2-config-builder.md       # Phase 2 CONFIG-BUILDER: SB-BEAM/ → sb_slabs_patch.json
+│   │   ├── phase2-config-builder.md       # Phase 2 CONFIG-BUILDER: sb_elements_aligned.json → sb_patch.json → slab_generator → GS
 │   │   ├── reader.md                      # READER: reads structural plan images (bts-gs)
 │   │   ├── sb-reader.md                   # SB-READER: small beam coordinate validation (bts-gs)
 │   │   ├── config-builder.md              # CONFIG-BUILDER: generates model_config.json (bts-gs)
@@ -170,6 +174,10 @@ python -m golden_scripts.tools.pptx_to_elements \
     --page-floors "3=1F~2F, 4=3F~14F" \
     --phase phase2
 
+# Scan floors with confidence scoring + confirm
+python -m golden_scripts.tools.pptx_to_elements --input plan.pptx --scan-floors
+python -m golden_scripts.tools.pptx_to_elements --input plan.pptx --confirm-floors --phase phase2 --output sb_elements.json
+
 # List slides and shape counts
 python -m golden_scripts.tools.pptx_to_elements --input plan.pptx --list-slides
 
@@ -177,10 +185,30 @@ python -m golden_scripts.tools.pptx_to_elements --input plan.pptx --list-slides
 python -m golden_scripts.tools.pptx_to_elements ... --dry-run
 ```
 
+### Affine Calibrate Tool (Phase 2)
+```bash
+# Transform PPTX-meter SB coordinates to grid-aligned coordinates
+python -m golden_scripts.tools.affine_calibrate \
+    --elements elements.json \
+    --config model_config.json \
+    --sb-elements sb_elements.json \
+    --output sb_elements_aligned.json
+```
+
+### Slab Generator Tool (Phase 2)
+```bash
+# Graph-based slab polygon generation from beam layout
+python -m golden_scripts.tools.slab_generator \
+    --config snapped_config.json \
+    --slab-thickness 15 \
+    --raft-thickness 100 \
+    --output final_config.json
+```
+
 ### Slash commands (BTS Agent Teams — Phased, preferred)
 - `/bts-structure [description]` — Phase 1: 2 Readers + 1 Config-Builder → Grid+Story+柱+牆+大梁
 - `/bts-qc1 <config>` — Phase 1 QC: 比對 ETABS 模型 vs model_config.json（8 項檢查）
-- `/bts-sb [floor ranges]` — Phase 2: 2 SB-Readers + 1 Config-Builder → 小梁+版
+- `/bts-sb [floor ranges]` — Phase 2: 2 SB-Readers + 1 Config-Builder → 小梁+版（含 affine 校正 + 自動算板）
 - `/bts-props` — Phase 3: Properties + Loads + Diaphragms (no agent team, runs gs_09~gs_11)
 
 ### Slash commands (BTS Agent Teams — Single-pass)
@@ -189,8 +217,8 @@ python -m golden_scripts.tools.pptx_to_elements ... --dry-run
 
 ### Config Merge Tool (Phase 2)
 ```bash
-# Merge Phase 1 base config with Phase 2 SB/slab patch
-python -m golden_scripts.tools.config_merge --base model_config.json --patch sb_slabs_patch.json --output merged_config.json
+# Merge Phase 1 base config with Phase 2 SB patch
+python -m golden_scripts.tools.config_merge --base model_config.json --patch sb_patch.json --output merged_config.json
 ```
 
 ### Config Snap Tool (Phase 2)
@@ -312,14 +340,16 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 ### Phase 2: `/bts-sb`
 - **Team**: 2 SB-Readers (validation only) + 1 Config-Builder
 - **Builds**: Small Beams (SB/FSB) + Slabs (S/FS)
-- **Pre-step**: `pptx_to_elements.py --phase phase2` → `sb_elements.json` (deterministic SB extraction)
-- **Data flow**: SB-Readers validate `sb_elements.json` → Config-Builder reads `sb_elements.json` + `model_config.json` → `sb_slabs_patch.json` → **Config-Builder executes** `config_merge` → `config_snap` → `run_all.py --steps 2,7,8` → ETABS model
-- **Output**: `snapped_config.json` (complete config with corrected SB coordinates) + ETABS model with +小梁+版
+- **Pre-steps**:
+  1. `pptx_to_elements.py --phase phase2` → `sb_elements.json` (deterministic SB extraction, enhanced legend + floor detection)
+  2. `affine_calibrate.py` → `sb_elements_aligned.json` (per-slide PPTX-meter → grid coordinate transform)
+- **Data flow**: SB-Readers validate `sb_elements_aligned.json` → Config-Builder generates `sb_patch.json` (SB only, no slabs) → `config_merge` → `config_snap` (0.15m) → `slab_generator.py` (graph-based face enumeration) → `final_config.json` → `run_all.py --steps 2,7,8` → ETABS model
+- **Output**: `final_config.json` (complete config with corrected SB + auto-generated slabs) + ETABS model with +小梁+版
 
 ### Phase 3: `/bts-props`
 - **Team**: None (Team Lead direct execution)
 - **Builds**: Frame modifiers, rigid zones, end releases, load patterns, slab loads, seismic, spectrum, Kv/Kw springs, diaphragms
-- **Execution**: `run_all.py --config snapped_config.json --steps 9,10,11`
+- **Execution**: `run_all.py --config final_config.json --steps 9,10,11`
 - **Kw auto-detection**: All FWB (基礎壁梁) beams automatically receive Kw line springs
 - **Load defaults**: Uses `constants.py DEFAULT_LOADS` unless overridden in config `loads.zone_defaults`
 
@@ -331,13 +361,15 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 │   ├── COLUMN/        # Phase 1: READER grid/outline data
 │   ├── WALL/          # Phase 1: READER grid/outline data
 │   └── SB-BEAM/       # Phase 2: SB-READER validation results
-├── elements.json           # Phase 1 script output (columns/beams/walls — deterministic)
+├── elements.json           # Phase 1 script output (columns/beams/walls — with page_num)
 ├── grid_info.json          # Phase 1 READER output (grids/outline/stories — AI)
-├── sb_elements.json        # Phase 2 script output (small beams — deterministic)
+├── sb_elements.json        # Phase 2 script output (small beams — PPTX-meter)
+├── sb_elements_aligned.json # Phase 2 affine-calibrated (grid-aligned)
 ├── model_config.json       # Phase 1 output (no SB/slabs)
-├── sb_slabs_patch.json     # Phase 2 output (SB + slabs only)
-├── merged_config.json      # Merged (base + patch)
-└── snapped_config.json     # Final config with corrected SB coordinates
+├── sb_patch.json           # Phase 2 output (SB only, no slabs)
+├── merged_config.json      # Merged (base + SB patch)
+├── snapped_config.json     # Snap-corrected config
+└── final_config.json       # Final config with auto-generated slabs
 ```
 
 ---

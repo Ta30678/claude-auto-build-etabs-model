@@ -71,8 +71,11 @@ _SECTION_RE = re.compile(
 _WALL_CM_RE = re.compile(r"(\d+)\s*[cC][mM]\s*(?:連續壁|壁)")
 
 # Floor label patterns for --scan-floors / --auto-floors
-_FLOOR_SINGLE_RE = r"[BR]?\d+F"
-_FLOOR_RANGE_RE = rf"[BR]?\d+F\s*[~\-]\s*[BR]?\d+F"
+# Word boundaries prevent false positives (e.g. C490F should NOT match)
+_FLOOR_WB_BEFORE = r"(?<![A-EG-QS-Z\d])"  # Not preceded by letters (except F,R) or digits
+_FLOOR_WB_AFTER = r"(?!\w)"                 # Not followed by word characters
+_FLOOR_SINGLE_RE = rf"{_FLOOR_WB_BEFORE}[BR]?\d+F{_FLOOR_WB_AFTER}"
+_FLOOR_RANGE_RE = rf"{_FLOOR_WB_BEFORE}[BR]?\d+F\s*[~\-]\s*[BR]?\d+F{_FLOOR_WB_AFTER}"
 FLOOR_LABEL_RE = re.compile(
     rf"({_FLOOR_RANGE_RE}|{_FLOOR_SINGLE_RE})", re.IGNORECASE
 )
@@ -184,62 +187,122 @@ def _iter_text_shapes(slide):
                     yield child
 
 
-def scan_floors(prs) -> dict[int, list[str]]:
-    """Scan all slides for floor label text.
+def _conf_rank(confidence: str) -> int:
+    """Rank confidence levels for comparison."""
+    return {"high": 3, "medium": 2, "low": 1}.get(confidence, 0)
 
-    Returns {slide_num: [floor_names]} (1-based).
+
+_PLAN_KEYWORDS = ("結構平面圖", "結構配置圖", "配置圖", "平面圖")
+
+
+def scan_floors(prs) -> dict[int, list[dict]]:
+    """Scan all slides for floor label text with confidence scoring.
+
+    Returns {slide_num: [{"label": str, "confidence": str,
+                          "source_text": str, "position": str}]} (1-based).
+
+    Confidence:
+      - "high": label in title region (top 20%) or co-occurs with plan keywords
+      - "medium": label in body area without special context
+      - "low": label in legend region (likely a section label, not floor title)
     """
     result = {}
+    slide_h = prs.slide_height
+
     for i, slide in enumerate(prs.slides):
         slide_num = i + 1
-        floor_matches = []
+        detections = []
         for shape in _iter_text_shapes(slide):
             text = shape.text_frame.text.strip()
-            # Search all lines in the text
+            if not text:
+                continue
+
+            # Shape position info
+            shape_top_pct = shape.top / slide_h if slide_h > 0 else 0
+            is_title_region = shape_top_pct < 0.20  # Top 20% of slide
+
+            has_plan_keyword = any(kw in text for kw in _PLAN_KEYWORDS)
+
+            # Check if shape is in legend region (heuristic: contains legend keywords)
+            in_legend = any(kw in text for kw in LEGEND_KEYWORDS)
+
             for line in text.split("\n"):
-                for m in FLOOR_LABEL_RE.finditer(line.strip()):
-                    floor_matches.append(m.group(1).strip())
-        if floor_matches:
-            # Deduplicate while preserving order
-            seen = set()
-            deduped = []
-            for fm in floor_matches:
-                if fm not in seen:
-                    seen.add(fm)
-                    deduped.append(fm)
-            result[slide_num] = deduped
+                line_s = line.strip()
+                for m in FLOOR_LABEL_RE.finditer(line_s):
+                    label = m.group(1).strip()
+
+                    # Confidence scoring
+                    if is_title_region or has_plan_keyword:
+                        confidence = "high"
+                    elif in_legend:
+                        confidence = "low"
+                    else:
+                        confidence = "medium"
+
+                    pos = "title" if is_title_region else f"y={shape_top_pct:.0%}"
+                    detections.append({
+                        "label": label,
+                        "confidence": confidence,
+                        "source_text": line_s[:80],
+                        "position": pos,
+                    })
+
+        if detections:
+            # Deduplicate labels, keeping highest confidence for each
+            seen: dict[str, dict] = {}
+            for d in detections:
+                lbl = d["label"]
+                if lbl not in seen or _conf_rank(d["confidence"]) > _conf_rank(seen[lbl]["confidence"]):
+                    seen[lbl] = d
+            result[slide_num] = list(seen.values())
     return result
 
 
-def format_scan_floors_output(detected: dict[int, list[str]]) -> str:
-    """Format detected floor labels for display and suggested --page-floors string."""
-    lines = ["Detected floor labels:"]
-    page_parts = []
-    for sn in sorted(detected.keys()):
-        labels = detected[sn]
-        # Try to condense single floors into ranges for display
-        expanded_all = []
-        for label in labels:
-            expanded = expand_floor_range(label)
-            expanded_all.extend(expanded)
-        # Deduplicate
+def scan_floors_labels(prs) -> dict[int, list[str]]:
+    """Convenience wrapper: scan_floors() -> {slide_num: [label_strings]}.
+
+    Filters out low-confidence detections (likely legend labels).
+    """
+    raw = scan_floors(prs)
+    result = {}
+    for sn, detections in raw.items():
+        # Prefer medium/high confidence
+        labels = [d["label"] for d in detections if d["confidence"] != "low"]
+        if not labels:
+            # Fallback to all if nothing passes filter
+            labels = [d["label"] for d in detections]
+        # Deduplicate preserving order
         seen = set()
         deduped = []
-        for f in expanded_all:
-            if f not in seen:
-                seen.add(f)
-                deduped.append(f)
+        for lbl in labels:
+            if lbl not in seen:
+                seen.add(lbl)
+                deduped.append(lbl)
+        if deduped:
+            result[sn] = deduped
+    return result
 
-        # Display: show raw labels and expansion
-        raw = ", ".join(labels)
-        if len(deduped) > 1 and len(labels) == 1 and "~" in labels[0]:
-            lines.append(f"  Slide {sn}: {raw} -> [{', '.join(deduped)}]")
-        else:
-            lines.append(f"  Slide {sn}: {raw}")
 
-        # For --page-floors suggestion, use original labels joined
-        page_parts.append(f"{sn}={', '.join(labels)}" if len(labels) == 1
-                          else f"{sn}={labels[0]}")
+def format_scan_floors_output(detected: dict[int, list[dict]]) -> str:
+    """Format detected floor labels (with confidence) for display.
+
+    Args:
+        detected: {slide_num: [{"label", "confidence", "source_text", "position"}]}
+    """
+    lines = ["Detected floor mapping:"]
+    page_parts = []
+    for sn in sorted(detected.keys()):
+        entries = detected[sn]
+        for entry in entries:
+            label = entry["label"]
+            conf = entry["confidence"]
+            src = entry["source_text"]
+            lines.append(f"  Slide {sn}: {label} ({conf} confidence, source: \"{src}\")")
+
+        # For --page-floors suggestion, use first label
+        labels = [e["label"] for e in entries]
+        page_parts.append(f"{sn}={labels[0]}" if len(labels) == 1
+                          else f"{sn}={', '.join(labels)}")
 
     lines.append("")
     lines.append("Suggested --page-floors:")
@@ -453,7 +516,7 @@ def group_and_dedup(all_elements: list[dict]) -> dict[str, list[dict]]:
     result = {"columns": [], "beams": [], "walls": [], "small_beams": []}
     for elem in merged.values():
         etype = elem.pop("element_type")
-        elem.pop("page_num", None)
+        # Preserve page_num for affine calibration (Phase 2 needs it)
         elem.pop("section_uncertain", None)
         target_key = {
             "column": "columns",
@@ -470,6 +533,8 @@ def group_and_dedup(all_elements: list[dict]) -> dict[str, list[dict]]:
                     "section": elem["section"],
                     "floors": elem["floors"],
                 }
+                if "page_num" in elem:
+                    out["page_num"] = elem["page_num"]
                 result["columns"].append(out)
             else:
                 out = {
@@ -479,6 +544,8 @@ def group_and_dedup(all_elements: list[dict]) -> dict[str, list[dict]]:
                     "floors": elem["floors"],
                     "direction": elem.get("direction", ""),
                 }
+                if "page_num" in elem:
+                    out["page_num"] = elem["page_num"]
                 if etype == "wall" and elem.get("is_diaphragm_wall"):
                     out["is_diaphragm_wall"] = True
                 result[target_key].append(out)
@@ -523,6 +590,13 @@ LEGEND_KEYWORDS = [
     "RC", "大梁", "小梁", "柱", "壁", "連續壁", "剪力牆",
     "梁", "版", "板", "基礎", "FB", "WB", "SB",
 ]
+# Phase 2 specific keywords for fallback legend scan
+LEGEND_KEYWORDS_PHASE2 = ["SB", "FSB", "小梁", "次梁", "版", "板", "SLAB", "FS"]
+# Phase 2 label regex for whole-slide scan fallback
+_PHASE2_LABEL_RE = re.compile(
+    r"(FSB|SB)\d+\s*[xX]\s*\d+|FS\d+|S\d+|小梁|次梁|版|板|SLAB",
+    re.IGNORECASE,
+)
 SLIDE_AREA_RATIO_MAX = 0.50       # Exclude shapes > 50% of slide area
 MIN_SCALE_MEASUREMENTS = 1        # Require at least 1 measurement per page
 MIN_COLUMN_DIM_EMU = 30000        # Min column shape dimension (~3cm at typical scale)
@@ -788,43 +862,26 @@ def _detect_legend_region(slide, slide_w, slide_h):
         return "right", boundary
 
 
-def parse_legend(slide, slide_w, slide_h):
-    """Parse the legend area to build color → LegendEntry mapping.
-
-    Strategy:
-    1. Detect legend region (left or right)
-    2. In the legend region, find colored FREEFORM shapes (color swatches)
-    3. For each swatch, find the nearest TEXT_BOX to its right
-    4. Parse the text as a legend label
-
-    Returns dict[color_hex, list[LegendEntry]].
-    """
-    side, boundary = _detect_legend_region(slide, slide_w, slide_h)
-
-    # Collect legend text shapes (TEXT_BOX, AUTO_SHAPE, PLACEHOLDER, GROUP children)
-    legend_texts = []
-    for shape in _iter_text_shapes(slide):
-        cx = shape.left + shape.width // 2
-        if side == "left" and cx > boundary:
+def _match_label_to_swatch(lbl, swatches, dy_tol=300000, dx_tol=500000):
+    """Find nearest swatch for a label entry within tolerance."""
+    best_swatch = None
+    best_dist = float("inf")
+    for sw in swatches:
+        dy = abs(sw["cy"] - lbl["cy"])
+        if dy > dy_tol:
             continue
-        if side == "right" and cx < boundary:
+        dx = sw["cx"] - lbl["cx"]
+        if dx > dx_tol:
             continue
-        text = shape.text_frame.text.strip()
-        if text:
-            legend_texts.append({
-                "text": text,
-                "left": shape.left,
-                "top": shape.top,
-                "right": shape.left + shape.width,
-                "bottom": shape.top + shape.height,
-                "cx": cx,
-                "cy": shape.top + shape.height // 2,
-            })
+        dist = math.sqrt(dx ** 2 + dy ** 2)
+        if dist < best_dist:
+            best_dist = dist
+            best_swatch = sw
+    return best_swatch
 
-    if not legend_texts:
-        return {}
 
-    # Parse all legend text blocks into individual label lines
+def _parse_text_to_labels(legend_texts):
+    """Parse text blocks into label entries (shared by Pass 1 and Pass 2)."""
     label_entries = []
     for lt in legend_texts:
         text = lt["text"]
@@ -861,10 +918,12 @@ def parse_legend(slide, slide_w, slide_h):
                     "left": lt["left"],
                 })
             y_offset += 1
+    return label_entries
 
-    # Collect colored swatches in legend region
-    # Swatches can be FREEFORM, RECTANGLE, or AUTO_SHAPE with color
-    legend_swatches = []
+
+def _collect_legend_swatches(slide, slide_w, slide_h, side, boundary):
+    """Collect colored swatches in legend region."""
+    swatches = []
     for shape in slide.shapes:
         if shape.shape_type not in (MSO_SHAPE_TYPE.FREEFORM,
                                      MSO_SHAPE_TYPE.RECTANGLE,
@@ -875,48 +934,90 @@ def parse_legend(slide, slide_w, slide_h):
             continue
         if side == "right" and cx < boundary:
             continue
-
-        # Skip very large shapes (borders, backgrounds)
         if shape.width > slide_w * 0.5 or shape.height > slide_h * 0.5:
             continue
-
         line_color = _get_shape_color(shape, "line")
         fill_color = _get_shape_color(shape, "fill")
         color = line_color or fill_color
-        if color and color != "FFFFFF":  # Skip white (background)
-            legend_swatches.append({
+        if color and color != "FFFFFF":
+            swatches.append({
                 "color": color,
                 "left": shape.left,
                 "top": shape.top,
-                "cx": shape.left + shape.width // 2,
+                "cx": cx,
                 "cy": shape.top + shape.height // 2,
                 "right": shape.left + shape.width,
             })
+    return swatches
 
-    # Match each label to the nearest swatch by proximity.
-    # Strategy: swatch should be near the label vertically and to its left
-    # (or overlapping). We use a generous tolerance since PPT layouts vary.
+
+def parse_legend(slide, slide_w, slide_h, phase="all"):
+    """Parse the legend area to build color -> LegendEntry mapping.
+
+    Three-pass strategy:
+      Pass 1: Standard legend region parsing (keyword-based region + label-swatch match)
+      Pass 2: (Phase 2 only) Scan ALL text shapes for SB/FSB/版/板 labels,
+              retry unmatched with relaxed tolerances (dy: 500K, RGB: +/-15)
+      Pass 3: Orphan swatch retry with relaxed RGB tolerance (+/-15)
+
+    Returns (mapping: dict[color_hex, list[LegendEntry]], diagnostics: dict).
+    """
+    side, boundary = _detect_legend_region(slide, slide_w, slide_h)
+    diagnostics = {
+        "pass1_labels": [],
+        "pass2_labels": [],
+        "pass3_orphans": [],
+        "all_swatches": [],
+        "unmatched_labels": [],
+        "unmatched_swatches": [],
+    }
+
+    # ── Collect legend text shapes in legend region ──
+    legend_texts = []
+    for shape in _iter_text_shapes(slide):
+        cx = shape.left + shape.width // 2
+        if side == "left" and cx > boundary:
+            continue
+        if side == "right" and cx < boundary:
+            continue
+        text = shape.text_frame.text.strip()
+        if text:
+            legend_texts.append({
+                "text": text,
+                "left": shape.left,
+                "top": shape.top,
+                "right": shape.left + shape.width,
+                "bottom": shape.top + shape.height,
+                "cx": cx,
+                "cy": shape.top + shape.height // 2,
+            })
+
+    if not legend_texts:
+        return {}, diagnostics
+
+    # ── Parse labels ──
+    label_entries = _parse_text_to_labels(legend_texts)
+
+    # ── Collect swatches ──
+    legend_swatches = _collect_legend_swatches(slide, slide_w, slide_h, side, boundary)
+    diagnostics["all_swatches"] = [
+        {"color": sw["color"], "cx": sw["cx"], "cy": sw["cy"]}
+        for sw in legend_swatches
+    ]
+
+    # ════════════════════════════════════════════════════════════════
+    # Pass 1: Standard matching (dy: 300K EMU, RGB: exact match on swatch)
+    # ════════════════════════════════════════════════════════════════
     mapping: dict[str, list[LegendEntry]] = {}
+    matched_swatch_indices = set()
+    unmatched_labels_pass1 = []
 
     for lbl in label_entries:
-        best_swatch = None
-        best_dist = float("inf")
-
-        for sw in legend_swatches:
-            # Swatch should be roughly at the same Y as the label
-            dy = abs(sw["cy"] - lbl["cy"])
-            if dy > 300000:  # Too far vertically
-                continue
-            # Swatch center should not be far to the right of label center
-            dx = sw["cx"] - lbl["cx"]
-            if dx > 500000:  # Swatch center too far right
-                continue
-            dist = math.sqrt(dx ** 2 + dy ** 2)
-            if dist < best_dist:
-                best_dist = dist
-                best_swatch = sw
-
+        best_swatch = _match_label_to_swatch(lbl, legend_swatches)
         if best_swatch:
+            idx = next(i for i, sw in enumerate(legend_swatches)
+                       if sw is best_swatch)
+            matched_swatch_indices.add(idx)
             color_hex = best_swatch["color"]
             rgb = [int(color_hex[i:i+2], 16) for i in (0, 2, 4)]
             entry = LegendEntry(
@@ -930,12 +1031,141 @@ def parse_legend(slide, slide_w, slide_h):
                 label=lbl["label"],
             )
             mapping.setdefault(color_hex, []).append(entry)
+            diagnostics["pass1_labels"].append({
+                "label": lbl["label"],
+                "color": color_hex,
+                "type": lbl["element_type"],
+            })
+        else:
+            unmatched_labels_pass1.append(lbl)
+
+    # ════════════════════════════════════════════════════════════════
+    # Pass 2: Phase 2 fallback — scan ALL text shapes for SB/FSB labels
+    # ════════════════════════════════════════════════════════════════
+    if phase == "phase2" and unmatched_labels_pass1:
+        # Scan entire slide for text shapes with phase2-relevant labels
+        all_slide_texts = []
+        for shape in _iter_text_shapes(slide):
+            text = shape.text_frame.text.strip()
+            if not text:
+                continue
+            # Check if text contains phase2 keywords
+            if not _PHASE2_LABEL_RE.search(text):
+                continue
+            cx = shape.left + shape.width // 2
+            all_slide_texts.append({
+                "text": text,
+                "left": shape.left,
+                "top": shape.top,
+                "right": shape.left + shape.width,
+                "bottom": shape.top + shape.height,
+                "cx": cx,
+                "cy": shape.top + shape.height // 2,
+            })
+
+        extra_labels = _parse_text_to_labels(all_slide_texts)
+        # Filter to only phase2-relevant types not already matched
+        matched_sections = {e.section for entries in mapping.values()
+                           for e in entries if e.section}
+        extra_labels = [
+            lbl for lbl in extra_labels
+            if lbl["element_type"] in ("small_beam",)
+            and lbl.get("section") and lbl["section"] not in matched_sections
+        ]
+
+        # Retry with relaxed tolerances (dy: 500K, RGB: ±15 via fuzzy color)
+        orphan_swatches = [sw for i, sw in enumerate(legend_swatches)
+                           if i not in matched_swatch_indices]
+
+        for lbl in unmatched_labels_pass1 + extra_labels:
+            best_swatch = _match_label_to_swatch(
+                lbl, orphan_swatches, dy_tol=500000, dx_tol=700000)
+            if best_swatch:
+                color_hex = best_swatch["color"]
+                # Try fuzzy RGB match: check if any existing mapping color is close
+                matched_color = color_hex
+                for existing_color in mapping:
+                    er = int(existing_color[0:2], 16)
+                    eg = int(existing_color[2:4], 16)
+                    eb = int(existing_color[4:6], 16)
+                    sr = int(color_hex[0:2], 16)
+                    sg = int(color_hex[2:4], 16)
+                    sb_ = int(color_hex[4:6], 16)
+                    if max(abs(er - sr), abs(eg - sg), abs(eb - sb_)) <= 15:
+                        matched_color = existing_color
+                        break
+
+                rgb = [int(matched_color[i:i+2], 16) for i in (0, 2, 4)]
+                entry = LegendEntry(
+                    element_type=lbl["element_type"],
+                    section=lbl["section"],
+                    color_name=matched_color,
+                    color_rgb=rgb,
+                    specificity=lbl["specificity"],
+                    is_diaphragm=lbl["is_diaphragm"],
+                    prefix=lbl["prefix"],
+                    label=lbl["label"] + " (relaxed_match)",
+                )
+                mapping.setdefault(matched_color, []).append(entry)
+                diagnostics["pass2_labels"].append({
+                    "label": lbl["label"],
+                    "color": matched_color,
+                    "type": lbl["element_type"],
+                    "relaxed_match": True,
+                })
+                # Mark swatch as used
+                idx = next((i for i, sw in enumerate(legend_swatches)
+                            if sw is best_swatch), None)
+                if idx is not None:
+                    matched_swatch_indices.add(idx)
+
+    # ════════════════════════════════════════════════════════════════
+    # Pass 3: Orphan swatch retry — fuzzy RGB (±15) for still-unmatched swatches
+    # ════════════════════════════════════════════════════════════════
+    final_orphan_swatches = [
+        (i, sw) for i, sw in enumerate(legend_swatches)
+        if i not in matched_swatch_indices
+    ]
+
+    for i, sw in final_orphan_swatches:
+        sw_r = int(sw["color"][0:2], 16)
+        sw_g = int(sw["color"][2:4], 16)
+        sw_b = int(sw["color"][4:6], 16)
+
+        # Try matching to an existing legend color with ±15 tolerance
+        for color_hex in mapping:
+            cr = int(color_hex[0:2], 16)
+            cg = int(color_hex[2:4], 16)
+            cb = int(color_hex[4:6], 16)
+            if max(abs(sw_r - cr), abs(sw_g - cg), abs(sw_b - cb)) <= 15:
+                # This orphan swatch is a fuzzy duplicate of an existing color
+                diagnostics["pass3_orphans"].append({
+                    "swatch_color": sw["color"],
+                    "matched_to": color_hex,
+                    "relaxed_match": True,
+                })
+                matched_swatch_indices.add(i)
+                break
+
+    # Record truly unmatched items for diagnostics
+    diagnostics["unmatched_labels"] = [
+        {"label": lbl["label"], "type": lbl["element_type"]}
+        for lbl in unmatched_labels_pass1
+        if not any(
+            d["label"] == lbl["label"] for d in diagnostics["pass2_labels"]
+        )
+    ]
+    diagnostics["unmatched_swatches"] = [
+        {"color": legend_swatches[i]["color"]}
+        for i in range(len(legend_swatches))
+        if i not in matched_swatch_indices
+    ]
 
     # Sort by specificity descending within each color
     for c in mapping:
         mapping[c].sort(key=lambda e: -e.specificity)
 
-    return mapping
+    return mapping, diagnostics
 
 
 # ─── Legend Validation ───────────────────────────────────────────────────────
@@ -1355,6 +1585,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
     per_page_stats = {}
     scale_details = []
     legend_validations = []
+    legend_diagnostics_all = []
 
     # Pre-compute scales for all requested slides; allow fallback
     slide_scales = {}
@@ -1403,7 +1634,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
             extract_base_png(slide, sn, floor_label, crop_dir)
 
         # 3) Parse legend
-        legend = parse_legend(slide, slide_w, slide_h)
+        legend, legend_diag = parse_legend(slide, slide_w, slide_h, phase=phase)
         if not legend:
             warnings.append(f"Slide {sn}: no legend detected, skipping")
             print(f"  WARNING: no legend detected")
@@ -1413,6 +1644,14 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
         for color, entries in legend.items():
             for e in entries:
                 print(f"    #{color} → {e.element_type}: {e.section or '(generic)'} [{e.label}]")
+        if legend_diag.get("pass2_labels"):
+            print(f"  Legend Pass 2 (relaxed): {len(legend_diag['pass2_labels'])} additional labels matched")
+        if legend_diag.get("unmatched_labels"):
+            for ul in legend_diag["unmatched_labels"]:
+                warnings.append(f"Slide {sn}: label '{ul['label']}' ({ul['type']}) unmatched to any swatch")
+        if legend_diag.get("unmatched_swatches"):
+            for us in legend_diag["unmatched_swatches"]:
+                warnings.append(f"Slide {sn}: swatch #{us['color']} has no legend label")
 
         # 4) Detect legend region for exclusion
         legend_side, legend_boundary = _detect_legend_region(slide, slide_w, slide_h)
@@ -1422,6 +1661,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
                               legend_side, legend_boundary, warnings)
         _print_legend_validation(lv)
         legend_validations.append(lv)
+        legend_diagnostics_all.append({"slide": sn, **legend_diag})
 
         # 5) Extract & classify shapes
         slide_elems = extract_and_classify_shapes(
@@ -1463,6 +1703,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
                 "small_beams": len(grouped["small_beams"]),
             },
             "legend_validation": legend_validations,
+            "legend_diagnostics": legend_diagnostics_all,
             "warnings": warnings,
         },
         "columns": grouped["columns"],
@@ -1510,12 +1751,16 @@ def main():
     parser.add_argument(
         "--auto-floors", action="store_true",
         help="Auto-detect floor labels and use them (no --page-floors needed)")
+    parser.add_argument(
+        "--confirm-floors", action="store_true",
+        help="Scan floors, display detections with confidence, and prompt for confirmation")
 
     args = parser.parse_args()
 
     # Validate mutually exclusive options
-    if args.auto_floors and args.page_floors:
-        print("ERROR: --auto-floors and --page-floors are mutually exclusive")
+    floor_opts = sum([bool(args.auto_floors), bool(args.page_floors), bool(args.confirm_floors)])
+    if floor_opts > 1:
+        print("ERROR: --auto-floors, --confirm-floors, and --page-floors are mutually exclusive")
         sys.exit(1)
 
     # Load PPTX
@@ -1533,7 +1778,7 @@ def main():
         list_slides(prs)
         return
 
-    # Scan-floors mode: detect and print, then exit
+    # Scan-floors mode: detect and print with confidence, then exit
     if args.scan_floors:
         detected = scan_floors(prs)
         if not detected:
@@ -1542,9 +1787,42 @@ def main():
             print(format_scan_floors_output(detected))
         return
 
-    # Auto-floors mode: detect and use
-    if args.auto_floors:
+    # Confirm-floors mode: scan, show confidence, prompt user
+    if args.confirm_floors:
         detected = scan_floors(prs)
+        if not detected:
+            print("No floor labels detected on any slide.")
+            sys.exit(1)
+        print(format_scan_floors_output(detected))
+        try:
+            answer = input("Confirm? [Y/n]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = "n"
+        if answer and answer != "y":
+            print("Aborted by user.")
+            sys.exit(1)
+        # Use confirmed labels as page_floors
+        page_floors = {}
+        for sn, entries in detected.items():
+            labels = [e["label"] for e in entries if e["confidence"] != "low"]
+            if not labels:
+                labels = [e["label"] for e in entries]
+            all_floors = []
+            for label in labels:
+                all_floors.extend(expand_floor_range(label))
+            seen = set()
+            deduped = []
+            for f in all_floors:
+                if f not in seen:
+                    seen.add(f)
+                    deduped.append(f)
+            if deduped:
+                page_floors[sn] = deduped
+        print(f"Confirmed floor mappings: {len(page_floors)} slides")
+
+    # Auto-floors mode: detect and use
+    elif args.auto_floors:
+        detected = scan_floors_labels(prs)
         if not detected:
             print("ERROR: --auto-floors found no floor labels on any slide")
             sys.exit(1)
@@ -1574,7 +1852,7 @@ def main():
             sys.exit(1)
         print(f"Slide-floor mappings: {len(page_floors)} slides")
     else:
-        print("ERROR: --page-floors or --auto-floors is required for processing")
+        print("ERROR: --page-floors, --auto-floors, or --confirm-floors is required for processing")
         sys.exit(1)
 
     # Require --output for processing
