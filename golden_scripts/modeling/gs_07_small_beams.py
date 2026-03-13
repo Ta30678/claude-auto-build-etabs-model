@@ -8,11 +8,24 @@ Golden Script 07: Small Beam Placement
 import json
 import sys
 import os
+import re
 
 _dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import build_strength_lookup
+
+
+def _get_frame_sections(SapModel):
+    """Query ETABS for all defined frame section names."""
+    ret = SapModel.PropFrame.GetNameList(0, [])
+    names = set()
+    for item in ret:
+        if isinstance(item, (list, tuple)):
+            for s in item:
+                if isinstance(s, str):
+                    names.add(s)
+    return names
 
 
 def place_small_beams(SapModel, config, elev_map, strength_lookup):
@@ -26,13 +39,15 @@ def place_small_beams(SapModel, config, elev_map, strength_lookup):
         print("  No small beams in config.")
         return []
 
+    available_sections = _get_frame_sections(SapModel)
     created = []
     failed = 0
+    fail_details = []
 
     for sb in small_beams:
         x1, y1 = sb["x1"], sb["y1"]
         x2, y2 = sb["x2"], sb["y2"]
-        base_sec = sb["section"]  # e.g. "SB30X50"
+        base_sec = sb["section"]  # e.g. "SB30X50" or "SB30X50C280"
 
         for plan_floor in sb["floors"]:
             z = elev_map.get(plan_floor, None)
@@ -41,18 +56,37 @@ def place_small_beams(SapModel, config, elev_map, strength_lookup):
                 failed += 1
                 continue
 
-            fc = strength_lookup.get((plan_floor, "beam"), 280)
-            sec_name = f"{base_sec}C{fc}"
+            # Section full name compatibility
+            if re.search(r'C\d+$', base_sec):
+                sec_name = base_sec
+            else:
+                fc = strength_lookup.get((plan_floor, "beam"), 280)
+                sec_name = f"{base_sec}C{fc}"
 
             name = ""
             ret = SapModel.FrameObj.AddByCoord(x1, y1, z, x2, y2, z, name, sec_name)
             if ret[-1] == 0:
                 created.append(ret[0])
             else:
-                print(f"  WARN: Failed SB {sec_name} at {plan_floor}")
+                if sec_name not in available_sections:
+                    base = re.sub(r'C\d+$', '', sec_name)
+                    similar = sorted([s for s in available_sections if s.startswith(base)])[:5]
+                    print(f"  ERROR: Section '{sec_name}' not in ETABS. Available: {similar}. Check sections.frame or strength_map.")
+                else:
+                    print(f"  WARN: Failed SB {sec_name} at {plan_floor}")
+                fail_details.append((sec_name, plan_floor, f"({x1},{y1})->({x2},{y2})"))
                 failed += 1
 
+    total = len(created) + failed
     print(f"  Small beams created: {len(created)} (failed: {failed})")
+    if fail_details:
+        print(f"  Failed small beams:")
+        for sec, fl, coord in fail_details[:10]:
+            print(f"    {sec} at {fl} {coord}")
+        if len(fail_details) > 10:
+            print(f"    ... and {len(fail_details) - 10} more")
+    if total > 0 and failed / total > 0.5:
+        raise RuntimeError(f"gs_07: {failed}/{total} small beams failed (>50%). Aborting.")
     return created
 
 

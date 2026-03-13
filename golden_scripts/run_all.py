@@ -73,7 +73,7 @@ def run_all(config, steps_to_run=None, dry_run=False):
         return
 
     # Pre-flight validation for steps that use AI-generated JSON (small_beams, slabs)
-    if config and steps_to_run and (7 in steps_to_run or 8 in steps_to_run):
+    if config and steps_to_run:
         from tools.config_merge import validate_config
         errors, warnings = validate_config(config)
         if warnings:
@@ -110,6 +110,7 @@ def run_all(config, steps_to_run=None, dry_run=False):
         base_elev = config.get("base_elevation", 0)
         if stories:
             elev_map = {}
+            elev_map["BASE"] = base_elev
             current_elev = base_elev
             for s in stories:
                 current_elev += s["height"]

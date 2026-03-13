@@ -191,6 +191,11 @@ def validate_config(config: dict) -> tuple:
         sec = col.get("section", "")
         if sec and not _FRAME_RE.match(sec):
             errors.append(f"{loc}.section: invalid frame section name {sec!r}")
+        # Coordinate types
+        for coord in ("grid_x", "grid_y"):
+            val = col.get(coord)
+            if val is not None and not isinstance(val, (int, float)):
+                errors.append(f"{loc}.{coord}: expected number, got {type(val).__name__} ({val!r})")
         floors = col.get("floors")
         if floors is not None:
             if not isinstance(floors, list):
@@ -205,6 +210,11 @@ def validate_config(config: dict) -> tuple:
     # --- Validate walls ---
     for i, wall in enumerate(config.get("walls", [])):
         loc = f"walls[{i}]"
+        # Coordinate types
+        for coord in ("x1", "y1", "x2", "y2"):
+            val = wall.get(coord)
+            if val is not None and not isinstance(val, (int, float)):
+                errors.append(f"{loc}.{coord}: expected number, got {type(val).__name__} ({val!r})")
         floors = wall.get("floors")
         if floors is not None:
             if not isinstance(floors, list):
@@ -259,6 +269,83 @@ def validate_config(config: dict) -> tuple:
                         for k, v in enumerate(pt):
                             if not isinstance(v, (int, float)):
                                 errors.append(f"{loc}.corners[{j}][{k}]: expected number, got {type(v).__name__} ({v!r})")
+
+    # --- Validate sections.frame format ---
+    for i, sec_name in enumerate(config.get("sections", {}).get("frame", [])):
+        if not _FRAME_RE.match(sec_name):
+            errors.append(
+                f"sections.frame[{i}] = {sec_name!r} — 格式不匹配\n"
+                f"  期望格式: {{PREFIX}}{{WIDTH}}X{{DEPTH}}[C{{fc}}]  例如: B55X80 或 B55X80C350\n"
+                f"  有效 PREFIX: B, SB, WB, FB, FSB, FWB, C")
+
+    # --- Validate strength_map key format ---
+    for key in config.get("strength_map", {}):
+        if not re.match(r'^\w+~\w+$', key):
+            errors.append(
+                f"strength_map key {key!r} — 格式不匹配\n"
+                f"  期望格式: {{START}}~{{END}}  例如: B3F~1F 或 2F~7F")
+
+    # --- Validate sections coverage ---
+    frame_bases = set()
+    for sec in config.get("sections", {}).get("frame", []):
+        frame_bases.add(sec)
+        frame_bases.add(re.sub(r'C\d+$', '', sec))
+    for key in ("columns", "beams", "small_beams"):
+        for i, elem in enumerate(config.get(key, [])):
+            sec = elem.get("section", "")
+            if not sec:
+                continue
+            base = re.sub(r'C\d+$', '', sec)
+            if base not in frame_bases and sec not in frame_bases:
+                errors.append(
+                    f"{key}[{i}].section = {sec!r} — base name {base!r} not in sections.frame\n"
+                    f"  Add {base!r} to sections.frame or check spelling")
+
+    # --- Validate stories elevation order ---
+    for i, s in enumerate(config.get("stories", [])):
+        h = s.get("height", 0)
+        if not isinstance(h, (int, float)) or h <= 0:
+            errors.append(f"stories[{i}].height = {h!r} — must be a positive number")
+
+    # --- Validate sections.wall format ---
+    for i, t in enumerate(config.get("sections", {}).get("wall", [])):
+        if not isinstance(t, int):
+            errors.append(
+                f"sections.wall[{i}] = {t!r} — expected integer (thickness in cm), got {type(t).__name__}")
+
+    # --- Validate sections.slab format ---
+    for i, t in enumerate(config.get("sections", {}).get("slab", [])):
+        if not isinstance(t, int):
+            errors.append(
+                f"sections.slab[{i}] = {t!r} — expected integer (thickness in cm), got {type(t).__name__}")
+
+    # --- WARNING: sections.frame with Cfc suffix ---
+    for sec in config.get("sections", {}).get("frame", []):
+        m = re.match(r'^(?:B|SB|WB|FB|FSB|FWB|C)\d+X\d+C(\d+)$', sec)
+        if m:
+            warnings.append(
+                f"sections.frame: '{sec}' has Cfc suffix — only this grade will be created (no expansion)")
+
+    # --- WARNING: strength_map coverage ---
+    all_story_list = [s["name"] for s in config.get("stories", [])
+                      if isinstance(s, dict) and "name" in s]
+    covered = set()
+    for range_key in config.get("strength_map", {}):
+        if "~" in range_key:
+            parts = range_key.split("~", 1)
+            start, end = parts[0], parts[1]
+            if start in all_story_list and end in all_story_list:
+                i_s = all_story_list.index(start)
+                i_e = all_story_list.index(end)
+                if i_s > i_e:
+                    i_s, i_e = i_e, i_s
+                covered.update(all_story_list[i_s:i_e + 1])
+        else:
+            if range_key in all_story_list:
+                covered.add(range_key)
+    for s_name in all_story_list:
+        if s_name not in covered:
+            warnings.append(f"strength_map: story {s_name!r} not covered by any range")
 
     return errors, warnings
 

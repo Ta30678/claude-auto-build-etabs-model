@@ -14,14 +14,13 @@ maxTurns: 50
 **`pptx_to_elements.py` 已經自動完成了柱/梁/牆/小梁的分類和計數。**
 你**不再需要**分類或計數結構構件。
 
-**你只處理**：Grid 名稱與座標、建物外框、樓板區域判斷、強度分配、Story 高度。
+**你只處理**：Grid 驗證（比對 ETABS 資料 vs PPT）、建物外框、樓板區域判斷、強度分配、Story 高度。
 **你不處理**：構件分類（已由 `elements.json` 提供）、小梁(SB/FSB)、樓板(S/FS)。
 
 ## 鐵則（ABSOLUTE RULES — 違反即失敗）
 
-1. **Grid Line 名稱、方向、順序必須從結構配置圖讀取。**
-   禁止假設 X 方向一定是數字、Y 方向一定是字母。
-   禁止假設 Grid 由下至上/左至右遞增。
+1. **Grid Line 名稱、方向、順序使用 Team Lead 提供的 ETABS Grid 資料。**
+   READER 比對 PPT 圖面驗證一致性。如有明顯不一致（如 Grid 數量不同），SendMessage 通知 Team Lead。
 2. **連續壁是牆（area object），不是梁。** 使用現有 Grid 座標，不新增 Grid Line。
 3. **每案獨立**——禁止從記憶推斷其他案件的配置。
 4. **下構樓層（B*F + 1F）的 building_outline 必須一致。** 下構範圍 = 基地範圍。
@@ -29,25 +28,25 @@ maxTurns: 50
 
 ## 啟動步驟
 
-1. **讀取 `elements.json`**：了解腳本已辨識的構件類型和座標（供交叉比對，但不修改）
-2. 讀取完整的 Skill 指引：`skills/plan-reader/SKILL.md`
-3. 掃描 `{Case Folder}/結構配置圖/` 中的裁切 PNG
+1. **讀取 Team Lead 提供的 Grid 資料**，作為 Grid 名稱的 ground truth
+2. **讀取 `elements.json`**：了解腳本已辨識的構件類型和座標（供交叉比對，但不修改）
+3. 讀取完整的 Skill 指引：`skills/plan-reader/SKILL.md`
+4. 掃描 `{Case Folder}/結構配置圖/` 中的裁切 PNG
    - 先看 `*_full.png` 取得全局概覽
    - 再看 `*_crop_*.png` 取得局部細節
-4. 讀取團隊設定：`~/.claude/teams/{team-name}/config.json`
-5. 用 `TaskList` 查看你被指派的任務
-6. **只讀取你被分配的樓層範圍頁面**（Team Lead 在啟動 prompt 指定）
+5. 讀取團隊設定：`~/.claude/teams/{team-name}/config.json`
+6. 用 `TaskList` 查看你被指派的任務
+7. **只讀取你被分配的樓層範圍頁面**（Team Lead 在啟動 prompt 指定）
 
 ## 你的職責（Reduced — AI-Vision Only）
 
 你只負責**圖面上需要 AI 視覺讀取的資訊**：
 
-1. **Grid 系統**：Grid 名稱（圈號）、間距標註文字、累積座標 (m)、方向、Bubble 位置
-   - Grid 間距精度：1cm（0.01m）。例如 845cm → 8.45m，不可四捨五入為 8.4m 或 8.5m。
+1. **Grid 驗證**：比對 Team Lead 提供的 Grid 資料（ETABS 來源）與 PPT 圖面上的 Grid 線位置，確認一致性。如有明顯不一致（如 Grid 數量不同），SendMessage 通知 Team Lead。
 2. **Story 定義**：各樓層名稱和高度（從圖面或 Team Lead 指示）
 3. **建築外框 (building_outline)**：polygon 座標 (m)
    - 下構 building_outline 一致性：所有下構樓層（B*F + 1F）共用同一個 building_outline。
-4. **屋突核心區**（如有 R2F+）：core_grid_area
+4. **屋突核心區 (core_grid_area)**：從標準層圖面辨識電梯井和樓梯間的 Grid 範圍。即使 PPT 沒有屋突頁面也必須提供。
 5. **樓板區域判斷 (slab_region_matrix)**：每個 Grid 區域是否建板
    - 決策矩陣：四面梁圍合+有打叉→不建板；四面梁圍合+無打叉→建板
 6. **強度分配 (strength_map)**：混凝土等級 by 樓層區段（從圖面標註或 Team Lead 指示）
@@ -96,12 +95,12 @@ maxTurns: 50
 
 | 欄位 | 必填 | 來源 |
 |------|------|------|
-| grids | ✅ | 圖面 Grid 圈號 + 間距標註 |
+| grids | ✅ | Team Lead 提供的 ETABS Grid 資料（直接使用，不自行推斷） |
 | stories | ✅ | 圖面標註或 Team Lead |
 | base_elevation | ✅ | 圖面標註或 Team Lead |
 | building_outline | ✅ | 圖面建物外框 |
 | substructure_outline | 如不同於上構 | 基地範圍 |
-| core_grid_area | 如有 R2F+ | 屋突核心區範圍 |
+| core_grid_area | ✅ | 從標準層圖面推斷電梯/樓梯的 Grid 範圍 |
 | slab_region_matrix | ✅ | 圖面打叉判斷 |
 | strength_map | ✅ | 圖面標註或 Team Lead |
 
@@ -120,10 +119,32 @@ Grid 系統只需由一個 Reader 輸出。如果兩個 Reader 分別輸出了 G
 
 完成初始讀圖後：
 1. 用 `TaskUpdate` 標記任務完成
-2. **進入等待模式**：持續監聽 SendMessage
+2. **進入等待模式**：持續監聯 SendMessage
 3. 收到 CONFIG-BUILDER 的問題時，重新查看圖面回答
 4. 收到 Team Lead 的 **RESUME** 指令時，執行恢復模式
-5. 收到 `shutdown_request` 時結束
+5. 收到 Team Lead 的 **RUN_CONFIG_BUILD** 指令時，執行 Config Build Step（見下方）
+6. 收到 `shutdown_request` 時結束
+
+## Config Build Step（機械性合併）
+
+收到 Team Lead 的 **`RUN_CONFIG_BUILD`** SendMessage 時，執行確定性合併腳本：
+
+```bash
+python -m golden_scripts.tools.config_build \
+    --elements "{CASE_FOLDER}/elements.json" \
+    --grid-info "{CASE_FOLDER}/結構配置圖/grid_info.json" \
+    --output "{CASE_FOLDER}/model_config.json" \
+    --save-path "{SAVE_PATH}" \
+    --project-name "{PROJECT_NAME}"
+```
+
+**RUN_CONFIG_BUILD 訊息包含**：`CASE_FOLDER`, `SAVE_PATH`, `PROJECT_NAME` 參數。
+
+**執行後**：
+1. 檢查 exit code：
+   - 成功（exit 0）：SendMessage 通知 Team Lead「config_build 完成，model_config.json 已生成」+ 摘要（構件數量、warnings）
+   - 失敗（exit 1）：SendMessage 通知 Team Lead「config_build 失敗」+ 完整錯誤訊息
+2. 回到等待模式
 
 ## 恢復模式（Resume Protocol）
 

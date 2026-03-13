@@ -9,11 +9,24 @@ Golden Script 05: Wall Placement
 import json
 import sys
 import os
+import re
 
 _dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import next_story, build_strength_lookup
+
+
+def _get_area_sections(SapModel):
+    """Query ETABS for all defined area section names."""
+    ret = SapModel.PropArea.GetNameList(0, [])
+    names = set()
+    for item in ret:
+        if isinstance(item, (list, tuple)):
+            for s in item:
+                if isinstance(s, str):
+                    names.add(s)
+    return names
 
 
 def place_walls(SapModel, config, elev_map, strength_lookup, all_stories=None):
@@ -27,13 +40,15 @@ def place_walls(SapModel, config, elev_map, strength_lookup, all_stories=None):
         print("  No walls in config.")
         return []
 
+    available_sections = _get_area_sections(SapModel)
     created = []
     failed = 0
+    fail_details = []
 
     for wall in walls:
         x1, y1 = wall["x1"], wall["y1"]
         x2, y2 = wall["x2"], wall["y2"]
-        base_sec = wall["section"]  # e.g. "W20"
+        base_sec = wall["section"]  # e.g. "W20" or "W20C350"
         is_diaphragm = wall.get("is_diaphragm_wall", False)
 
         for plan_floor in wall["floors"]:
@@ -46,13 +61,16 @@ def place_walls(SapModel, config, elev_map, strength_lookup, all_stories=None):
                 failed += 1
                 continue
 
-            # Diaphragm walls use C280; otherwise use strength_map
-            if is_diaphragm:
-                fc = 280
+            # Section full name compatibility
+            if re.search(r'C\d+$', base_sec):
+                sec_name = base_sec
             else:
-                fc = strength_lookup.get((plan_floor, "wall"), 350)
-
-            sec_name = f"{base_sec}C{fc}"
+                # Diaphragm walls use C280; otherwise use strength_map
+                if is_diaphragm:
+                    fc = 280
+                else:
+                    fc = strength_lookup.get((plan_floor, "wall"), 350)
+                sec_name = f"{base_sec}C{fc}"
 
             # 4-point area: bottom-left, bottom-right, top-right, top-left
             X = [x1, x2, x2, x1]
@@ -64,10 +82,25 @@ def place_walls(SapModel, config, elev_map, strength_lookup, all_stories=None):
             if ret[-1] == 0:
                 created.append(ret[0])
             else:
-                print(f"  WARN: Failed wall {sec_name} at {plan_floor}")
+                if sec_name not in available_sections:
+                    base = re.sub(r'C\d+$', '', sec_name)
+                    similar = sorted([s for s in available_sections if s.startswith(base)])[:5]
+                    print(f"  ERROR: Section '{sec_name}' not in ETABS. Available: {similar}. Check sections.wall or strength_map.")
+                else:
+                    print(f"  WARN: Failed wall {sec_name} at {plan_floor}")
+                fail_details.append((sec_name, plan_floor, f"({x1},{y1})->({x2},{y2})"))
                 failed += 1
 
+    total = len(created) + failed
     print(f"  Walls created: {len(created)} (failed: {failed})")
+    if fail_details:
+        print(f"  Failed walls:")
+        for sec, fl, coord in fail_details[:10]:
+            print(f"    {sec} at {fl} {coord}")
+        if len(fail_details) > 10:
+            print(f"    ... and {len(fail_details) - 10} more")
+    if total > 0 and failed / total > 0.5:
+        raise RuntimeError(f"gs_05: {failed}/{total} walls failed (>50%). Aborting.")
     return created
 
 

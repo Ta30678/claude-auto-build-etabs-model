@@ -88,14 +88,20 @@ def create_frame_sections(SapModel, sections_list, existing_materials=None):
     """
     count = 0
     skipped = 0
+    missing_mats = {}
     for name, mat, depth_m, width_m in sections_list:
         if existing_materials is not None and mat not in existing_materials:
             skipped += 1
+            missing_mats.setdefault(mat, []).append(name)
             continue
         ret = SapModel.PropFrame.SetRectangle(name, mat, depth_m, width_m)
         retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
         if retcode == 0:
             count += 1
+    if missing_mats:
+        for mat, names in missing_mats.items():
+            sample = names[:3]
+            print(f"  Material '{mat}' not found. Sections skipped: {sample}{'...' if len(names) > 3 else ''}")
     if skipped:
         print(f"  Skipped {skipped} frame sections (material not in model)")
     return count
@@ -107,9 +113,11 @@ def create_area_sections(SapModel, sections_list, existing_materials=None):
     """
     count = 0
     skipped = 0
+    missing_mats = {}
     for name, mat, t_m, shell_type in sections_list:
         if existing_materials is not None and mat not in existing_materials:
             skipped += 1
+            missing_mats.setdefault(mat, []).append(name)
             continue
         if name.startswith("W") and not name.startswith("WB"):
             ret = SapModel.PropArea.SetWall(name, 0, shell_type, mat, t_m)
@@ -118,6 +126,10 @@ def create_area_sections(SapModel, sections_list, existing_materials=None):
         retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
         if retcode == 0:
             count += 1
+    if missing_mats:
+        for mat, names in missing_mats.items():
+            sample = names[:3]
+            print(f"  Material '{mat}' not found. Sections skipped: {sample}{'...' if len(names) > 3 else ''}")
     if skipped:
         print(f"  Skipped {skipped} area sections (material not in model)")
     return count
@@ -205,12 +217,29 @@ def run(SapModel, config):
 
     # Expand frame sections
     all_frame = []
+    bad_names = []
     for sec_name in sections.get("frame", []):
-        prefix, w, d, _ = parse_frame_section(sec_name)
-        if prefix:
+        prefix, w, d, fc = parse_frame_section(sec_name)
+        if not prefix:
+            bad_names.append(sec_name)
+            continue
+        if fc is not None:
+            # Full name with Cfc: create only this single grade
+            mat = f"C{fc}"
+            depth_m = d / 100.0
+            width_m = w / 100.0
+            all_frame.append((sec_name, mat, depth_m, width_m))
+            print(f"  {sec_name} -> 1 section (single grade C{fc})")
+        else:
+            # Base name: expand +-20cm across all grades
             expanded = expand_frame_sections(prefix, w, d)
             all_frame.extend(expanded)
             print(f"  {sec_name} -> {len(expanded)} combinations")
+
+    if bad_names:
+        print(f"\n  ERROR: Invalid frame section names: {bad_names}")
+        print(f"  期望格式: {{PREFIX}}{{WIDTH}}X{{DEPTH}}[C{{fc}}]  例如: B55X80 或 B55X80C350")
+        print(f"  有效 PREFIX: B, SB, WB, FB, FSB, FWB, C")
 
     # Expand area sections
     all_area = []
@@ -256,6 +285,12 @@ def run(SapModel, config):
     # Assign area modifiers
     print("\n--- Assigning area modifiers ---")
     assign_area_modifiers(SapModel, area_unique, existing_materials)
+
+    # Summary
+    print(f"\n  Created: {n_frame} frame, {n_area} area | Skipped: {len(bad_names)} (bad name)")
+
+    if n_frame == 0 and len(sections.get("frame", [])) > 0:
+        raise RuntimeError("gs_02: 0 frame sections created. Check sections.frame names and materials.")
 
     SapModel.View.RefreshView(0, False)
     print("Step 02 complete.\n")

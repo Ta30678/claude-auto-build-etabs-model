@@ -61,10 +61,13 @@ claude-auto-build-etabs-model/
 │       ├── e2k_writer.py                  # E2k output (section ordering, formatting)
 │       ├── unit_converter.py              # Unit detection & conversion
 │       ├── pptx_to_elements.py            # PPT structural plan → elements JSON (primary extraction tool)
+│       ├── config_build.py                # Phase 1: elements.json + grid_info.json → model_config.json (deterministic merge)
+│       ├── sb_patch_build.py              # Phase 2: sb_elements_aligned.json → sb_patch.json (deterministic extraction)
 │       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
 │       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls
 │       ├── affine_calibrate.py            # Transform PPTX-meter SB coords to grid-aligned coords
 │       ├── slab_generator.py              # Graph-based slab polygon generation from beam layout
+│       ├── read_grid.py                   # Read Grid System from ETABS → grid_data.json
 │       ├── gs_split.py                    # Split multi-building → single-building e2k
 │       └── gs_merge.py                    # Merge single-building e2k files → unified model
 ├── golden_scripts/qc/                     # QC verification scripts
@@ -80,7 +83,9 @@ claude-auto-build-etabs-model/
 │   ├── test_loads.py                      # DL/LL/EQ patterns, no SDL, DL self-weight=1
 │   ├── test_element_counts.py             # Frames, areas, columns, beams, stories exist
 │   ├── test_affine_calibrate.py           # Affine calibration tool tests (mock data)
-│   └── test_slab_generator.py             # Slab generator tool tests (mock data)
+│   ├── test_slab_generator.py             # Slab generator tool tests (mock data)
+│   ├── test_config_build.py               # config_build merge tool tests (mock data)
+│   └── test_sb_patch_build.py             # sb_patch_build extraction tool tests (mock data)
 ├── skills/
 │   ├── structural-glossary/SKILL.md       # Canonical structural terminology (上構/下構/屋突/共構)
 │   ├── e2k-split/SKILL.md                 # E2K split tool SOP
@@ -93,10 +98,10 @@ claude-auto-build-etabs-model/
 │   └── etabs-api-lookup.md                # How to look up API docs
 ├── .claude/
 │   ├── agents/                            # BTS agent definitions
-│   │   ├── phase1-reader.md               # Phase 1 READER: grid+columns+beams+walls → folders
-│   │   ├── phase1-config-builder.md       # Phase 1 CONFIG-BUILDER: folders → model_config.json (no SB/slabs)
-│   │   ├── phase2-sb-reader.md            # Phase 2 SB-READER: small beam coords → SB-BEAM/ folder
-│   │   ├── phase2-config-builder.md       # Phase 2 CONFIG-BUILDER: sb_elements_aligned.json → sb_patch.json → slab_generator → GS
+│   │   ├── phase1-reader.md               # Phase 1 READER: grid/outline/stories → grid_info.json + config_build.py
+│   │   ├── phase1-config-builder.md       # Phase 1 CONFIG-BUILDER: GS execution only (steps 1-6)
+│   │   ├── phase2-sb-reader.md            # Phase 2 SB-READER: SB validation + SB pipeline execution
+│   │   ├── phase2-config-builder.md       # Phase 2 CONFIG-BUILDER: GS execution only (steps 2,7,8)
 │   │   ├── reader.md                      # READER: reads structural plan images (bts-gs)
 │   │   ├── sb-reader.md                   # SB-READER: small beam coordinate validation (bts-gs)
 │   │   ├── config-builder.md              # CONFIG-BUILDER: generates model_config.json (bts-gs)
@@ -205,6 +210,38 @@ python -m golden_scripts.tools.slab_generator \
     --output final_config.json
 ```
 
+### Config Build Tool (Phase 1 — deterministic merge)
+```bash
+# Merge elements.json + grid_info.json → model_config.json
+python -m golden_scripts.tools.config_build \
+    --elements elements.json \
+    --grid-info grid_info.json \
+    --output model_config.json \
+    --save-path "C:/path/to/model.EDB" \
+    --project-name "ProjectName"
+
+# Preview without writing
+python -m golden_scripts.tools.config_build ... --dry-run
+```
+
+### SB Patch Build Tool (Phase 2 — deterministic extraction)
+```bash
+# Extract small beams from sb_elements_aligned.json → sb_patch.json
+python -m golden_scripts.tools.sb_patch_build \
+    --sb-elements sb_elements_aligned.json \
+    --config model_config.json \
+    --output sb_patch.json
+
+# Preview without writing
+python -m golden_scripts.tools.sb_patch_build ... --dry-run
+```
+
+### Read Grid from ETABS (Phase 1 prerequisite)
+```bash
+# Read pre-built Grid System from running ETABS instance
+python -m golden_scripts.tools.read_grid --output grid_data.json
+```
+
 ### Slash commands (BTS Agent Teams — Phased, preferred)
 - `/bts-structure [description]` — Phase 1: 2 Readers + 1 Config-Builder → Grid+Story+柱+牆+大梁
 - `/bts-qc1 <config>` — Phase 1 QC: 比對 ETABS 模型 vs model_config.json（8 項檢查）
@@ -263,7 +300,7 @@ python -m golden_scripts.tools.gs_merge --base sub.e2k --buildings A=A.e2k B=B.e
 The golden scripts are split into three sub-packages under `golden_scripts/`:
 - **`modeling/`** (gs_01–gs_11): Deterministic model construction — reads `model_config.json` and executes ETABS API calls with no AI reasoning.
 - **`design/`** (gs_12+): Analysis-design iteration and optimization.
-- **`tools/`**: E2K split/merge utilities, config merge — e2k parser, writer, unit converter, split, merge, config_merge.
+- **`tools/`**: E2K split/merge utilities, config tools — e2k parser, writer, unit converter, split, merge, config_build, sb_patch_build, config_merge, config_snap, affine_calibrate, slab_generator.
 
 All structural engineering rules are hardcoded in `golden_scripts/constants.py`.
 
@@ -272,7 +309,7 @@ All structural engineering rules are hardcoded in `golden_scripts/constants.py`.
 |------|--------|-------------|
 | 01 | modeling/gs_01_init.py | New model + materials (C280–C490, SD420/SD490) |
 | 02 | modeling/gs_02_sections.py | Batch section expansion + D/B swap + rebar + area modifiers |
-| 03 | modeling/gs_03_grid_stories.py | Grid system + story definitions |
+| 03 | modeling/gs_03_grid_stories.py | Grid system (skip if pre-built) + story definitions |
 | 04 | modeling/gs_04_columns.py | Columns with +1 floor rule built-in |
 | 05 | modeling/gs_05_walls.py | Walls with +1 floor rule, diaphragm walls → C280 |
 | 06 | modeling/gs_06_beams.py | Beams (B, WB, FB) |
@@ -331,10 +368,13 @@ Foundation floor = BASE 上一層 (e.g. B3F). BASE has NO objects.
 Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumption and improve AI quality.
 
 ### Phase 1: `/bts-structure`
+- **Prerequisite**: User has pre-built Grid System in ETABS
 - **Team**: 2 Readers (split by floor range) + 1 Config-Builder
-- **Builds**: Grid, Story, Columns, Walls, Major Beams (B/WB/FB/FWB)
-- **Pre-step**: `pptx_to_elements.py --phase phase1` → `elements.json` (deterministic element extraction)
-- **Data flow**: `elements.json` + Readers → `grid_info.json` → Config-Builder merges → `model_config.json` → **Config-Builder executes** `run_all.py --steps 1,2,3,4,5,6` → ETABS model
+- **Builds**: Grid (skip if pre-built), Story, Columns, Walls, Major Beams (B/WB/FB/FWB)
+- **Pre-steps**:
+  1. `read_grid.py` → `grid_data.json` (read Grid from ETABS as ground truth)
+  2. `pptx_to_elements.py --phase phase1` → `elements.json` (deterministic element extraction)
+- **Data flow**: `grid_data.json` + `elements.json` + Readers → `grid_info.json` → `config_build.py` (deterministic merge, run by READER) → `model_config.json` → **Config-Builder executes** `run_all.py --steps 1,2,3,4,5,6` → ETABS model
 - **Output**: `model_config.json` (small_beams=[], slabs=[]) + ETABS model with Grid+Story+柱+牆+大梁
 
 ### Phase 2: `/bts-sb`
@@ -343,7 +383,7 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 - **Pre-steps**:
   1. `pptx_to_elements.py --phase phase2` → `sb_elements.json` (deterministic SB extraction, enhanced legend + floor detection)
   2. `affine_calibrate.py` → `sb_elements_aligned.json` (per-slide PPTX-meter → grid coordinate transform)
-- **Data flow**: SB-Readers validate `sb_elements_aligned.json` → Config-Builder generates `sb_patch.json` (SB only, no slabs) → `config_merge` → `config_snap` (0.15m) → `slab_generator.py` (graph-based face enumeration) → `final_config.json` → `run_all.py --steps 2,7,8` → ETABS model
+- **Data flow**: SB-Readers validate `sb_elements_aligned.json` → SB-Reader runs pipeline: `sb_patch_build.py` → `config_merge` → `config_snap` (0.15m) → `slab_generator.py` → `final_config.json` → **Config-Builder executes** `run_all.py --steps 2,7,8` → ETABS model
 - **Output**: `final_config.json` (complete config with corrected SB + auto-generated slabs) + ETABS model with +小梁+版
 
 ### Phase 3: `/bts-props`
@@ -362,7 +402,8 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 │   ├── WALL/          # Phase 1: READER grid/outline data
 │   └── SB-BEAM/       # Phase 2: SB-READER validation results
 ├── elements.json           # Phase 1 script output (columns/beams/walls — with page_num)
-├── grid_info.json          # Phase 1 READER output (grids/outline/stories — AI)
+├── grid_data.json          # Phase 0.3 ETABS Grid read (ground truth)
+├── grid_info.json          # Phase 1 READER output (outline/stories/slab_region — AI)
 ├── sb_elements.json        # Phase 2 script output (small beams — PPTX-meter)
 ├── sb_elements_aligned.json # Phase 2 affine-calibrated (grid-aligned)
 ├── model_config.json       # Phase 1 output (no SB/slabs)
@@ -385,7 +426,7 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
    > 是工程師明確宣告等分設計意圖，不是 AI 猜測。
 5. **No SDL load pattern.** NEVER create SDL. All additional dead loads go under DL.
 6. **Each project is independent** — never infer from memory of other projects.
-7. **Grid line names, direction, and order must be read from the structural plan.** Do not assume X=numbers, Y=letters, or that grids increase left-to-right / bottom-to-top.
+7. **Grid line names, direction, and order must be read from the ETABS pre-built model (`grid_data.json`).** PPT is used for validation only. Do not assume X=numbers, Y=letters, or that grids increase left-to-right / bottom-to-top.
 8. **Diaphragm walls (連續壁) are walls, not beams.** They use existing grid coordinates — never add extra grid lines for them.
 9. **Slabs must be cut along every beam including small beams.** Every SB fixed-axis coordinate is a slab cutting line.
 10. **L-shaped / non-rectangular buildings must define a building_outline polygon.** No columns, beams, or slabs outside the outline.

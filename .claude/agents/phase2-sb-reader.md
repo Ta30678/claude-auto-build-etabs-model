@@ -90,4 +90,42 @@ maxTurns: 50
 1. 用 `TaskUpdate` 標記任務完成
 2. **進入等待模式**：持續監聽 SendMessage
 3. 收到 CONFIG-BUILDER 的確認要求時，查看圖面回覆
-4. 收到 `shutdown_request` 時結束
+4. 收到 Team Lead 的 **RUN_SB_PIPELINE** 指令時，執行 SB Pipeline Step（見下方）
+5. 收到 `shutdown_request` 時結束
+
+## SB Pipeline Step（機械性工具鏈）
+
+收到 Team Lead 的 **`RUN_SB_PIPELINE`** SendMessage 時，依序執行以下 4 個步驟：
+
+```bash
+# Step 1: 生成 sb_patch.json
+python -m golden_scripts.tools.sb_patch_build \
+    --sb-elements "{CASE_FOLDER}/sb_elements_aligned.json" \
+    --config "{CASE_FOLDER}/model_config.json" \
+    --output "{CASE_FOLDER}/sb_patch.json"
+
+# Step 2: Merge base + SB patch
+python -m golden_scripts.tools.config_merge \
+    --base "{CASE_FOLDER}/model_config.json" \
+    --patch "{CASE_FOLDER}/sb_patch.json" \
+    --output "{CASE_FOLDER}/merged_config.json" --validate
+
+# Step 3: Snap SB coordinates
+python -m golden_scripts.tools.config_snap \
+    --input "{CASE_FOLDER}/merged_config.json" \
+    --output "{CASE_FOLDER}/snapped_config.json" --tolerance 0.15
+
+# Step 4: Slab generation
+python -m golden_scripts.tools.slab_generator \
+    --config "{CASE_FOLDER}/snapped_config.json" \
+    --slab-thickness {SLAB_THICKNESS} --raft-thickness {RAFT_THICKNESS} \
+    --output "{CASE_FOLDER}/final_config.json"
+```
+
+**RUN_SB_PIPELINE 訊息包含**：`CASE_FOLDER`, `SLAB_THICKNESS`, `RAFT_THICKNESS` 參數。
+
+**執行後**：
+1. 每步檢查 exit code：
+   - 如任一步驟失敗，SendMessage 通知 Team Lead 哪一步失敗 + 錯誤訊息
+   - 全部成功：SendMessage 通知 Team Lead「SB pipeline 完成，final_config.json 已生成」+ 摘要（小梁數量、板數量）
+2. 回到等待模式

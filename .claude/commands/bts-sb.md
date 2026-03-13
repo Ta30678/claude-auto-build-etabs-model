@@ -30,7 +30,7 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
 |-------|------|-------------|------|
 | Agent 1 | **SB-READER-A** | `.claude/agents/phase2-sb-reader.md` | 驗證分配的樓層區間 SB 座標連接性 |
 | Agent 2 | **SB-READER-B** | `.claude/agents/phase2-sb-reader.md` | 驗證分配的樓層區間 SB 座標連接性 |
-| Agent 3 | **CONFIG-BUILDER** | `.claude/agents/phase2-config-builder.md` | 從 sb_elements_aligned.json + model_config.json → sb_patch.json → slab_generator → GS |
+| Agent 3 | **CONFIG-BUILDER** | `.claude/agents/phase2-config-builder.md` | 執行 GS steps 2,7,8 + 錯誤修正（sb_patch+merge+snap+slab 已由腳本完成） |
 
 ---
 
@@ -42,28 +42,41 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
    - `model_config.json` 存在於 case folder
    - `elements.json` 存在於 case folder（需含 `page_num`，用於 affine 校正）
    - ETABS 模型已開啟且有 Grid+柱+牆+梁
-2. **確認用戶提供的樓層區間分類**：
-   - 用戶需告知哪些 PDF 頁面對應哪些樓層區間
-   - 例如：「2F~23F 在 page 3-4, 1F 在 page 4, B1F~B3F 在 page 5」
-   - **以樓層區間分類，不以 PDF 頁碼分類**
-3. **確認板厚**：
-   - 如果 Phase 1 已記錄，直接使用
-   - 否則詢問用戶
+2. **樓層區間自動掃描**（取代手動分類）：
+   - 使用 `--scan-floors` 自動從 PPT 掃描樓層標註，不需用戶手動指定
+   - 掃描結果含信心度評分，高信心度直接使用，低信心度才請用戶確認
+   ```bash
+   python -m golden_scripts.tools.pptx_to_elements \
+     --input "{Case Folder}/結構配置圖/xxx.pptx" \
+     --scan-floors
+   ```
+3. **板厚**：
+   - **先嘗試從 PPT 標註讀取**（掃描 PPT 中的板厚標註，如 "S=15cm", "FS=100cm"）
+   - 如 PPT 無標註，再用 AskUserQuestion 詢問用戶
 
-### Step 0: 提取小梁座標（PPT，含 --confirm-floors）
+### Step 0: 提取小梁座標（PPT，自動樓層偵測）
 
 掃描 `結構配置圖/` 內的 `.pptx` 檔案：
 
+**方式 A：自動樓層（推薦，Phase 0 掃描結果信心度高時）**
 ```bash
 python -m golden_scripts.tools.pptx_to_elements \
   --input "{Case Folder}/結構配置圖/xxx.pptx" \
   --output "{Case Folder}/sb_elements.json" \
-  --page-floors "{SB_PAGE_FLOOR_MAPPING}" \
+  --auto-floors \
+  --phase phase2
+```
+
+**方式 B：確認後指定（掃描信心度低時）**
+```bash
+python -m golden_scripts.tools.pptx_to_elements \
+  --input "{Case Folder}/結構配置圖/xxx.pptx" \
+  --output "{Case Folder}/sb_elements.json" \
+  --confirm-floors \
   --phase phase2
 ```
 
 **驗證**：檢查輸出 summary 的小梁數量是否合理。
-**信心評分**：如果用 `--confirm-floors`，確認偵測結果（高/中/低信心度）。
 
 ### Step 1: Affine 座標校正（PPTX-meter → Grid）
 
@@ -192,64 +205,7 @@ model_config.json 路徑：{Case Folder}/model_config.json
 
 反覆執行 TaskList，直到 T1 或 T2 狀態為 "completed"。
 
-#### Step B: 啟動 CONFIG-BUILDER（延遲啟動）
-
-第一個 SB-Reader 完成後，**立即啟動** CONFIG-BUILDER：
-
-```
-Agent(
-  subagent_type="phase2-config-builder",
-  team_name="bts-sb-team",
-  name="CONFIG-BUILDER",
-  description="生成 SB patch → merge → snap → slab_generator → 執行 GS steps 2,7,8",
-  prompt="你被指派為 BTS-SB Team 的 CONFIG-BUILDER。
-你被延遲啟動。至少一個 SB-READER 已完成驗證。
-
-Case Folder 絕對路徑：{Case Folder}
-
-⭐ 小梁座標已由 pptx_to_elements.py 腳本確定性提取，並經 affine_calibrate.py 校正。
-你直接從 sb_elements_aligned.json 讀取小梁座標（不從 SB-BEAM/*.md 讀取）。
-
-步驟（Phase 1 — 生成 SB patch）：
-1. 立即預讀 golden_scripts/config_schema.json
-2. 讀取 {Case Folder}/sb_elements_aligned.json（小梁座標 — affine 校正後）
-3. 讀取 {Case Folder}/model_config.json（大梁座標、Grid 系統）
-4. 讀取 SB-READER 驗證結果 結構配置圖/SB-BEAM/validation_*.json（如有問題需處理）
-5. 等待 Team Lead 的 'ALL_DATA_READY' SendMessage（確認所有驗證完成）
-6. 生成 sb_patch.json（只含 small_beams + sections.frame，不含 slabs）
-
-步驟（Phase 2 — 合併 + 校正 + 自動算板 + 執行 GS）：
-7. python -m golden_scripts.tools.config_merge --base \"{Case Folder}/model_config.json\" --patch \"{Case Folder}/sb_patch.json\" --output \"{Case Folder}/merged_config.json\" --validate
-8. python -m golden_scripts.tools.config_snap --input \"{Case Folder}/merged_config.json\" --output \"{Case Folder}/snapped_config.json\" --tolerance 0.15
-9. python -m golden_scripts.tools.slab_generator --config \"{Case Folder}/snapped_config.json\" --slab-thickness {SLAB_THICKNESS_CM} --raft-thickness {RAFT_THICKNESS_CM} --output \"{Case Folder}/final_config.json\"
-10. cd golden_scripts && python run_all.py --config \"{Case Folder}/final_config.json\" --steps 2,7,8
-11. 如有 ERROR，檢查 config 並修正後重跑失敗的 step（最多重試 2 次）
-
-請按照 .claude/agents/phase2-config-builder.md 的指示執行。
-
-資料來源：
-- sb_elements_aligned.json 的 small_beams 陣列（小梁座標+斷面+樓層）
-- model_config.json 的 beams（大梁座標）、grids、stories
-
-整合為 sb_patch.json：
-1. 從 sb_elements_aligned.json 取得小梁座標（去重、合併 floors）
-2. 輸出 small_beams + sections.frame（不含 slabs）
-3. 板由 slab_generator.py 在 config_snap 後自動生成
-
-板厚資訊：
-- 上構板厚：{SLAB_THICKNESS_SUPER}
-- 基礎板厚：{SLAB_THICKNESS_FS}（如有）
-
-完成後：
-1. 將 sb_patch.json 寫入 {Case Folder}/
-2. 執行 config_merge → config_snap → slab_generator → run_all.py --steps 2,7,8
-3. SendMessage 告知 Team Lead：final_config.json 路徑 + GS 執行結果（成功/失敗 + 構件數量）
-4. TaskUpdate 標記完成",
-  run_in_background=true
-)
-```
-
-#### Step C: 等待所有驗證完成
+#### Step B: 等待所有 SB-Reader 完成
 
 監控 TaskList，直到 T1 和 T2 都為 "completed"。
 SB-READER 驗證工作較輕量，通常不需要負載平衡。
@@ -259,22 +215,72 @@ SB-READER 驗證工作較輕量，通常不需要負載平衡。
 - 判斷是否需要重新執行 pptx_to_elements.py 或手動修正 sb_elements.json
 - 問題解決後才可繼續
 
-#### Step D: 通知 CONFIG-BUILDER
+#### Step C: 發送 RUN_SB_PIPELINE（腳本執行 sb_patch + merge + snap + slab_generator）
 
-SendMessage 給 CONFIG-BUILDER：
-"ALL_DATA_READY — 所有 SB-READER 驗證完成。驗證結果：{A_result}, {B_result}。請處理 sb_elements_aligned.json 生成 patch。"
+所有 SB-READER 驗證完成後，SendMessage 給**先完成的 SB-READER**：
+
+```
+SendMessage(
+  recipient="SB-READER-A",  // 或 SB-READER-B（先完成者）
+  message="RUN_SB_PIPELINE — 所有驗證完成，請執行 SB Pipeline。
+CASE_FOLDER={Case Folder}
+SLAB_THICKNESS={SLAB_THICKNESS_CM}
+RAFT_THICKNESS={RAFT_THICKNESS_CM}"
+)
+```
+
+SB-READER 會依序執行 4 步腳本（見 phase2-sb-reader.md「SB Pipeline Step」）：
+1. `sb_patch_build.py` → sb_patch.json
+2. `config_merge` → merged_config.json
+3. `config_snap` → snapped_config.json
+4. `slab_generator` → final_config.json
+
+#### Step D: 等待 Pipeline 完成
+
+監控 SB-READER 的 SendMessage 回報。成功時會收到「SB pipeline 完成，final_config.json 已生成」。
+失敗時會收到具體錯誤，Team Lead 需判斷修正方式。
+
+#### Step E: 啟動 CONFIG-BUILDER（只執行 GS）
+
+Pipeline 成功後，啟動 CONFIG-BUILDER：
+
+```
+Agent(
+  subagent_type="phase2-config-builder",
+  team_name="bts-sb-team",
+  name="CONFIG-BUILDER",
+  description="執行 GS steps 2,7,8",
+  prompt="你被指派為 BTS-SB Team 的 CONFIG-BUILDER。
+
+⭐ final_config.json 已由 sb_patch_build + config_merge + config_snap + slab_generator 腳本生成。
+你只需要執行 Golden Scripts 並處理錯誤。
+
+final_config.json 路徑：{Case Folder}/final_config.json
+
+執行：
+cd golden_scripts && python run_all.py --config \"{Case Folder}/final_config.json\" --steps 2,7,8
+
+請按照 .claude/agents/phase2-config-builder.md 的指示執行。
+
+完成後：
+1. SendMessage 告知 Team Lead：GS 執行結果（成功/失敗 + 構件數量）
+2. TaskUpdate 標記完成",
+  run_in_background=true
+)
+```
 
 #### Step F: 等待 CONFIG-BUILDER 完成
 
-監控 T3 狀態為 "completed"。CONFIG-BUILDER 現在負責完整流程：生成 patch → merge → snap → slab_generator → 執行 GS steps 2,7,8。
+監控 T3 狀態為 "completed"。CONFIG-BUILDER 只負責 GS 執行 + 錯誤修正。
 
 #### 邊界情況處理
 
 | Case | Handling |
 |------|----------|
-| 兩個 SB-Reader 同時完成 | 啟動 CB + 直接發送 ALL_DATA_READY |
+| 兩個 SB-Reader 同時完成 | 直接發送 RUN_SB_PIPELINE 給 SB-READER-A |
 | SB-READER 回報 REJECT | 檢視 issues，修正 sb_elements.json + 重跑 affine 後重新驗證 |
-| SB-READER 回報 WARN | 記錄警告，繼續（CONFIG-BUILDER 可處理） |
+| SB-READER 回報 WARN | 記錄警告，繼續 |
+| Pipeline 腳本失敗 | 檢視錯誤，修正 sb_elements_aligned.json 或 model_config.json 後重發 RUN_SB_PIPELINE |
 
 ### Phase 5: 驗證 CONFIG-BUILDER 結果
 
@@ -338,15 +344,11 @@ Step 1: affine_calibrate.py
 Step 2: SB-READER 驗證 sb_elements_aligned.json (tolerance: 0.15m)
         → validation_*.json
 
-Step 3: CONFIG-BUILDER 生成 sb_patch.json（只含 SB + sections）
+Step 3: SB-READER 執行 SB Pipeline（4 步腳本，秒級完成）：
+        sb_patch_build → config_merge → config_snap → slab_generator
+        → final_config.json（含板）
 
-Step 4: config_merge (base + SB patch) → merged_config.json
-
-Step 5: config_snap (tolerance: 0.15m) → snapped_config.json
-
-Step 6: slab_generator.py → final_config.json（含板）
-
-Step 7: run_all.py --config final_config.json --steps 2,7,8 → ETABS model
+Step 4: CONFIG-BUILDER 執行 GS steps 2,7,8 → ETABS model
 ```
 
 ---

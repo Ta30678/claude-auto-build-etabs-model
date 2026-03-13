@@ -108,11 +108,15 @@ Case Folder 絕對路徑：{Case Folder}
 1. 立即預讀 golden_scripts/config_schema.json
 2. 讀取 {Case Folder}/sb_elements.json（等分小梁座標）
 3. 讀取 {Case Folder}/model_config.json（大梁座標、Grid 系統、building_outline）
-4. 合併小梁 + 大梁座標 → 執行板切割 → {Case Folder}/sb_slabs_patch.json
-5. 執行驗證 Checklist（跳過等分檢查項目）
-6. python -m golden_scripts.tools.config_merge --base \"{Case Folder}/model_config.json\" --patch \"{Case Folder}/sb_slabs_patch.json\" --output \"{Case Folder}/merged_config.json\" --validate
-7. python -m golden_scripts.tools.config_snap --input \"{Case Folder}/merged_config.json\" --output \"{Case Folder}/snapped_config.json\"
-8. cd golden_scripts && python run_all.py --config \"{Case Folder}/snapped_config.json\" --steps 2,7,8
+4. 注意屋突複製規則（見 phase2-config-builder.md）：
+   - R1F = 頂樓全複製（小梁+板）
+   - R2F~PRF = 核心區複製（小梁+板）
+   板切割完成後，將 R1F/R2F~PRF 加入對應構件的 floors。
+5. 合併小梁 + 大梁座標 → 執行板切割 → {Case Folder}/sb_slabs_patch.json
+6. 執行驗證 Checklist（跳過等分檢查項目）
+7. python -m golden_scripts.tools.config_merge --base \"{Case Folder}/model_config.json\" --patch \"{Case Folder}/sb_slabs_patch.json\" --output \"{Case Folder}/merged_config.json\" --validate
+8. python -m golden_scripts.tools.config_snap --input \"{Case Folder}/merged_config.json\" --output \"{Case Folder}/snapped_config.json\"
+9. cd golden_scripts && python run_all.py --config \"{Case Folder}/snapped_config.json\" --steps 2,7,8
 
 板厚資訊：
 - 上構板厚：{SLAB_THICKNESS_SUPER}

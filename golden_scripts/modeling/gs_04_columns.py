@@ -9,11 +9,24 @@ Golden Script 04: Column Placement
 import json
 import sys
 import os
+import re
 
 _dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import next_story, build_strength_lookup
+
+
+def _get_frame_sections(SapModel):
+    """Query ETABS for all defined frame section names."""
+    ret = SapModel.PropFrame.GetNameList(0, [])
+    names = set()
+    for item in ret:
+        if isinstance(item, (list, tuple)):
+            for s in item:
+                if isinstance(s, str):
+                    names.add(s)
+    return names
 
 
 def place_columns(SapModel, config, elev_map, strength_lookup, all_stories=None):
@@ -26,13 +39,15 @@ def place_columns(SapModel, config, elev_map, strength_lookup, all_stories=None)
         print("  No columns in config.")
         return []
 
+    available_sections = _get_frame_sections(SapModel)
     created = []
     failed = 0
+    fail_details = []
 
     for col in columns:
         x = col["grid_x"]
         y = col["grid_y"]
-        base_sec = col["section"]  # e.g. "C90X90"
+        base_sec = col["section"]  # e.g. "C90X90" or "C90X90C350"
 
         for plan_floor in col["floors"]:
             # +1 rule: column bottom at plan_floor, top at next story
@@ -45,19 +60,37 @@ def place_columns(SapModel, config, elev_map, strength_lookup, all_stories=None)
                 failed += 1
                 continue
 
-            # Get concrete grade for this floor
-            fc = strength_lookup.get((plan_floor, "column"), 350)
-            sec_name = f"{base_sec}C{fc}"
+            # Section full name compatibility
+            if re.search(r'C\d+$', base_sec):
+                sec_name = base_sec
+            else:
+                fc = strength_lookup.get((plan_floor, "column"), 350)
+                sec_name = f"{base_sec}C{fc}"
 
             name = ""
             ret = SapModel.FrameObj.AddByCoord(x, y, z_bot, x, y, z_top, name, sec_name)
             if ret[-1] == 0:
                 created.append(ret[0])
             else:
-                print(f"  WARN: Failed column {sec_name} at ({x},{y}) {plan_floor}")
+                if sec_name not in available_sections:
+                    base = re.sub(r'C\d+$', '', sec_name)
+                    similar = sorted([s for s in available_sections if s.startswith(base)])[:5]
+                    print(f"  ERROR: Section '{sec_name}' not in ETABS. Available: {similar}. Check sections.frame or strength_map.")
+                else:
+                    print(f"  WARN: Failed column {sec_name} at ({x},{y}) {plan_floor}")
+                fail_details.append((sec_name, plan_floor, f"({x},{y})"))
                 failed += 1
 
+    total = len(created) + failed
     print(f"  Columns created: {len(created)} (failed: {failed})")
+    if fail_details:
+        print(f"  Failed columns:")
+        for sec, fl, coord in fail_details[:10]:
+            print(f"    {sec} at {fl} {coord}")
+        if len(fail_details) > 10:
+            print(f"    ... and {len(fail_details) - 10} more")
+    if total > 0 and failed / total > 0.5:
+        raise RuntimeError(f"gs_04: {failed}/{total} columns failed (>50%). Aborting.")
     return created
 
 

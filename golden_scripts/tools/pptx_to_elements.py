@@ -793,24 +793,40 @@ def extract_base_png(slide, slide_num, floor_label, crop_dir):
     crop_path = Path(crop_dir)
     crop_path.mkdir(parents=True, exist_ok=True)
 
+    pic_idx = 0
     for shape in slide.shapes:
-        if shape.shape_type != MSO_SHAPE_TYPE.GROUP:
-            continue
-        for idx, child in enumerate(shape.shapes):
-            if child.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                img = child.image
-                ext = {
-                    "image/png": ".png",
-                    "image/jpeg": ".jpg",
-                    "image/gif": ".gif",
-                }.get(img.content_type, ".png")
-
-                fname = f"{floor_label}_full{ext}" if idx == 0 else f"{floor_label}_full_{idx}{ext}"
-                fpath = crop_path / fname
-                with open(fpath, "wb") as f:
-                    f.write(img.blob)
-                saved.append(str(fpath))
-                print(f"  Saved: {fpath} ({len(img.blob)} bytes)")
+        # Extract from GROUP children
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            for child in shape.shapes:
+                if child.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                    img = child.image
+                    ext = {
+                        "image/png": ".png",
+                        "image/jpeg": ".jpg",
+                        "image/gif": ".gif",
+                    }.get(img.content_type, ".png")
+                    fname = f"{floor_label}_full{ext}" if pic_idx == 0 else f"{floor_label}_full_{pic_idx}{ext}"
+                    fpath = crop_path / fname
+                    with open(fpath, "wb") as f:
+                        f.write(img.blob)
+                    saved.append(str(fpath))
+                    print(f"  Saved: {fpath} ({len(img.blob)} bytes)")
+                    pic_idx += 1
+        # Extract top-level PICTURE shapes
+        elif shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+            img = shape.image
+            ext = {
+                "image/png": ".png",
+                "image/jpeg": ".jpg",
+                "image/gif": ".gif",
+            }.get(img.content_type, ".png")
+            fname = f"{floor_label}_full{ext}" if pic_idx == 0 else f"{floor_label}_full_{pic_idx}{ext}"
+            fpath = crop_path / fname
+            with open(fpath, "wb") as f:
+                f.write(img.blob)
+            saved.append(str(fpath))
+            print(f"  Saved: {fpath} ({len(img.blob)} bytes)")
+            pic_idx += 1
     return saved
 
 
@@ -926,7 +942,6 @@ def _collect_legend_swatches(slide, slide_w, slide_h, side, boundary):
     swatches = []
     for shape in slide.shapes:
         if shape.shape_type not in (MSO_SHAPE_TYPE.FREEFORM,
-                                     MSO_SHAPE_TYPE.RECTANGLE,
                                      MSO_SHAPE_TYPE.AUTO_SHAPE):
             continue
         cx = shape.left + shape.width // 2

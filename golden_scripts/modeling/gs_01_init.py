@@ -34,9 +34,14 @@ def connect_etabs(config):
 
 def _reacquire_SapModel():
     """Re-acquire SapModel from COM after InitializeNewModel."""
-    import comtypes.client
-    etabs = comtypes.client.GetActiveObject("CSI.ETABS.API.ETABSObject")
-    return etabs.SapModel
+    try:
+        from find_etabs import find_etabs
+        etabs, _ = find_etabs(run=False, backup=False)
+        return etabs.SapModel
+    except (ImportError, ModuleNotFoundError):
+        import comtypes.client
+        etabs = comtypes.client.GetActiveObject("CSI.ETABS.API.ETABSObject")
+        return etabs.SapModel
 
 
 def init_model(SapModel, config):
@@ -63,7 +68,10 @@ def init_model(SapModel, config):
         SapModel.InitializeNewModel(UNITS_TON_M)
         # COM reference becomes stale after InitializeNewModel; re-acquire
         SapModel = _reacquire_SapModel()
-        SapModel.File.NewBlank()
+        try:
+            SapModel.File.NewBlank()
+        except Exception:
+            pass  # InitializeNewModel already created a blank model
         print("Created new blank model")
 
     SapModel.SetPresentUnits(UNITS_TON_M)
@@ -72,7 +80,7 @@ def init_model(SapModel, config):
     return SapModel
 
 
-def define_materials(SapModel, config=None, skip_materials=True):
+def define_materials(SapModel, config=None, skip_materials=False):
     """Define all concrete grades and rebar materials."""
     if skip_materials:
         print("  Skipping material creation (using existing materials in model)")
@@ -83,11 +91,7 @@ def define_materials(SapModel, config=None, skip_materials=True):
         props = CONCRETE_PROPS[fc]
         mat_name = f"C{fc}"
         try:
-            ret = SapModel.PropMaterial.AddMaterial(mat_name, 2, "", "", "")
-            # ETABS may auto-rename; use ChangeName to set desired name
-            actual = ret[0] if isinstance(ret, (list, tuple)) else mat_name
-            if actual != mat_name:
-                SapModel.PropMaterial.ChangeName(actual, mat_name)
+            SapModel.PropMaterial.SetMaterial(mat_name, 2)
         except:
             pass  # may already exist
 
@@ -100,10 +104,7 @@ def define_materials(SapModel, config=None, skip_materials=True):
 
     for rb_name, rb_props in REBAR_PROPS.items():
         try:
-            ret = SapModel.PropMaterial.AddMaterial(rb_name, 5, "", "", "")
-            actual = ret[0] if isinstance(ret, (list, tuple)) else rb_name
-            if actual != rb_name:
-                SapModel.PropMaterial.ChangeName(actual, rb_name)
+            SapModel.PropMaterial.SetMaterial(rb_name, 5)
         except:
             pass
 

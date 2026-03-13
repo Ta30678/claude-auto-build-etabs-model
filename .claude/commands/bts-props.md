@@ -28,17 +28,26 @@ argument-hint: "[config 路徑，預設使用 merged_config.json]"
 
 ## 執行流程
 
-### Step 1: 確認前置條件
+### Step 1: 確認前置條件 + 收集參數
 
 1. **找到 config 檔**（按優先順序）：
    - 用戶指定的路徑：`$ARGUMENTS`
+   - `final_config.json`（Phase 2 slab_generator 輸出）
    - `merged_config.json`（Phase 2 輸出）
    - `model_config.json`（如果 Phase 2 直接修改了 model_config）
 2. **確認 ETABS 模型已開啟** — 有 Grid、Story、柱、牆、梁、小梁、版
-3. **讀取 config**，確認有以下欄位：
-   - `loads.seismic.base_shear_c`
-   - `loads.spectrum_file`（選填）
-   - `foundation.kv`, `foundation.kw`, `foundation.restraint_floor`
+3. **收集地震與基礎參數**（Phase 1 移入的必問項目）：
+
+   用 AskUserQuestion 一次詢問以下參數：
+
+   | # | 參數 | 說明 | 必要性 |
+   |---|------|------|--------|
+   | 1 | 基礎 Kv | 垂直彈簧係數 (ton/m³) | **必問** |
+   | 2 | 邊梁 Kw | 側邊彈簧係數 (ton/m³) | **必問** |
+   | 3 | Base Shear C | 地震力係數 | **必問** |
+   | 4 | 反應譜檔案 | SPECTRUM.TXT 路徑 | 可選（無則跳過） |
+
+4. **將參數寫入 config**：更新 config 的 `loads.seismic.base_shear_c`、`foundation.kv`、`foundation.kw`、`loads.spectrum_file`（如有）
 
 ### Step 2: 顯示載重預設值 + 確認
 
@@ -66,11 +75,12 @@ argument-hint: "[config 路徑，預設使用 merged_config.json]"
 
 ### Step 3: 確認地震與基礎參數
 
-從 config 中讀取並顯示：
-- `loads.seismic.base_shear_c`
-- `loads.spectrum_file`（是否存在）
-- `foundation.kv`, `foundation.kw`
-- `foundation.restraint_floor`
+從 config 中讀取並顯示 Step 1 寫入的參數：
+- `loads.seismic.base_shear_c` = {C_VALUE}
+- `loads.spectrum_file` = {SPECTRUM_PATH}（如有）
+- `foundation.kv` = {KV_VALUE}
+- `foundation.kw` = {KW_VALUE}
+- `foundation.restraint_floor`（自動偵測的基礎樓層）
 
 確認無誤後繼續。
 

@@ -14,13 +14,36 @@ sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import UNITS_TON_M
 
 
+def _check_existing_grids(SapModel):
+    """Check if grid lines already exist in the ETABS model.
+
+    Returns True if grid lines are found, False otherwise.
+    """
+    try:
+        table_key = "Grid Definitions - Grid Lines"
+        ret = SapModel.DatabaseTables.GetTableForDisplayArray(
+            table_key, [], "All", 0, [], 0, [])
+        retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+        if retcode == 0:
+            num_records = ret[3] if len(ret) > 3 else 0
+            return num_records > 0
+    except Exception:
+        pass
+    return False
+
+
 def define_grids(SapModel, config):
     """Define grid system from config using DatabaseTables API.
 
-    The ETABS API only has SetGridSys(Name, x, y, RZ) which creates a grid
-    system but cannot define individual grid lines. Grid lines must be
-    defined via DatabaseTables.SetTableForEditingArray.
+    If grid lines already exist in the ETABS model (e.g. user pre-built),
+    skip grid creation entirely. The config still retains grids data for
+    Phase 2 tools that need grid coordinate references.
     """
+    # Check for existing grids first
+    if _check_existing_grids(SapModel):
+        print("  Grid system already exists, skipping grid creation.")
+        return
+
     grids = config.get("grids", {})
     x_grids = grids.get("x", [])
     y_grids = grids.get("y", [])
