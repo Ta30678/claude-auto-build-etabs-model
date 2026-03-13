@@ -582,6 +582,7 @@ def collect_sections(grouped: dict) -> dict:
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
+_COLOR_TOLERANCE_OVERRIDE = None   # Set by --color-tolerance CLI; None = use default (15)
 TICK_MAX_LENGTH_EMU = 300000       # Max length for a tick mark (short line)
 TICK_Y_TOLERANCE_EMU = 100000     # Y-proximity for grouping tick marks
 TEXT_TICK_Y_TOLERANCE_EMU = 300000 # Y-proximity for matching text to ticks
@@ -953,10 +954,14 @@ def _collect_legend_swatches(slide, slide_w, slide_h, side, boundary):
             continue
         line_color = _get_shape_color(shape, "line")
         fill_color = _get_shape_color(shape, "fill")
-        color = line_color or fill_color
+        # Prefer fill color (represents element's actual color);
+        # outline is usually just decorative (e.g. black border)
+        color = fill_color or line_color
         if color and color != "FFFFFF":
             swatches.append({
                 "color": color,
+                "fill_color": fill_color,
+                "line_color": line_color,
                 "left": shape.left,
                 "top": shape.top,
                 "cx": cx,
@@ -1046,6 +1051,12 @@ def parse_legend(slide, slide_w, slide_h, phase="all"):
                 label=lbl["label"],
             )
             mapping.setdefault(color_hex, []).append(entry)
+            # Dual-color protection: if swatch has both fill and line colors
+            # that differ, register the alternate color too (same entry)
+            alt_color = best_swatch.get("line_color") if color_hex == best_swatch.get("fill_color") \
+                else best_swatch.get("fill_color")
+            if alt_color and alt_color != color_hex and alt_color != "FFFFFF" and alt_color != "000000":
+                mapping.setdefault(alt_color, []).append(entry)
             diagnostics["pass1_labels"].append({
                 "label": lbl["label"],
                 "color": color_hex,
@@ -1282,12 +1293,17 @@ def _print_legend_validation(validation):
 
 # ─── Shape Extraction & Classification ────────────────────────────────────────
 
-def _fuzzy_color_match(color_hex, legend, tolerance=5):
+def _fuzzy_color_match(color_hex, legend, tolerance=15):
     """Find legend entry list with closest color within tolerance.
 
     Uses Chebyshev distance (max per-channel difference).
+    Default tolerance=15 to handle PPT color variations (manual color picks,
+    theme adjustments, export artifacts). Pass 3 orphan retry already used ±15;
+    this unifies the main matching path to the same value.
     Returns the list of LegendEntry for the matched color, or None.
     """
+    if _COLOR_TOLERANCE_OVERRIDE is not None:
+        tolerance = _COLOR_TOLERANCE_OVERRIDE
     # Exact match first
     if color_hex in legend:
         return legend[color_hex]
@@ -1309,7 +1325,7 @@ def _resolve_pptx_legend(color_hex, geom_type, legend):
     """Resolve a shape's color to a legend entry.
 
     geom_type: 'line' | 'rectangle'
-    Uses fuzzy color matching (tolerance ±5 per RGB channel).
+    Uses fuzzy color matching (tolerance ±15 per RGB channel).
     """
     entries = _fuzzy_color_match(color_hex, legend)
     if not entries:
@@ -1366,9 +1382,12 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
             length = max(w, h)
             if length <= TICK_MAX_LENGTH_EMU:
                 continue  # Skip tick marks
+            primary_color = line_color or fill_color
+            alt_color_line = fill_color if primary_color == line_color else line_color
             lines.append({
                 "left": left, "top": top, "width": w, "height": h,
-                "color": line_color or fill_color,
+                "color": primary_color,
+                "alt_color": alt_color_line,
                 "orientation": "H" if h == 0 else "V",
             })
         elif w > 0 and h > 0 and w < 500000 and h < 500000:
@@ -1377,11 +1396,13 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
                 filled_rects.append({
                     "left": left, "top": top, "width": w, "height": h,
                     "color": fill_color,
+                    "alt_color": line_color,
                 })
             elif line_color:
                 outline_rects.append({
                     "left": left, "top": top, "width": w, "height": h,
                     "color": line_color,
+                    "alt_color": fill_color,
                 })
 
     # ── Deduplicate columns (fill + outline pairs) ──────────────────
@@ -1391,6 +1412,11 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
     if phase in ("phase1", "all"):
         for col in columns:
             entry = _resolve_pptx_legend(col["color"], "rectangle", legend)
+            # Fallback: try alternate color if primary didn't match column
+            if (not entry or entry.element_type != "column") and col.get("alt_color"):
+                alt_entry = _resolve_pptx_legend(col["alt_color"], "rectangle", legend)
+                if alt_entry and alt_entry.element_type == "column":
+                    entry = alt_entry
             if not entry or entry.element_type != "column":
                 continue
 
@@ -1423,6 +1449,9 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
             continue
 
         entry = _resolve_pptx_legend(color, "line", legend)
+        # Fallback: try alternate color if primary didn't match
+        if not entry and line.get("alt_color"):
+            entry = _resolve_pptx_legend(line["alt_color"], "line", legend)
         if not entry:
             continue
 
@@ -1571,7 +1600,70 @@ def list_slides(prs):
 
 # ─── Main Pipeline ───────────────────────────────────────────────────────────
 
-def process(prs, page_floors, phase, crop=False, crop_dir=None):
+def _parse_color_map(color_map_args):
+    """Parse --color-map arguments into legend entries.
+
+    Args:
+        color_map_args: list of strings like "FF0000=column:C100X100"
+
+    Returns:
+        dict[color_hex, list[LegendEntry]]
+    """
+    if not color_map_args:
+        return {}
+    result = {}
+    _PREFIX_MAP = {
+        "column": "C", "beam": "B", "wall": "W",
+        "small_beam": "SB",
+    }
+    for entry_str in color_map_args:
+        entry_str = entry_str.strip()
+        if "=" not in entry_str:
+            print(f"  WARNING: invalid --color-map entry (no '='): {entry_str}")
+            continue
+        color_part, mapping_part = entry_str.split("=", 1)
+        color_hex = color_part.strip().upper()
+        if len(color_hex) != 6:
+            print(f"  WARNING: invalid color hex '{color_hex}' in --color-map")
+            continue
+        # Parse type:section
+        if ":" in mapping_part:
+            elem_type, section = mapping_part.split(":", 1)
+        else:
+            elem_type = mapping_part
+            section = None
+        elem_type = elem_type.strip().lower()
+        if section:
+            section = section.strip()
+        if elem_type not in ("column", "beam", "wall", "small_beam"):
+            print(f"  WARNING: unknown element type '{elem_type}' in --color-map")
+            continue
+        # Derive prefix from section or element type
+        prefix = ""
+        if section:
+            m = re.match(r"^([A-Z]+)", section)
+            if m:
+                prefix = m.group(1)
+        if not prefix:
+            prefix = _PREFIX_MAP.get(elem_type, "")
+        is_diaphragm = section and "連續壁" in section
+        rgb = [int(color_hex[i:i+2], 16) for i in (0, 2, 4)]
+        le = LegendEntry(
+            element_type=elem_type,
+            section=section if section else None,
+            color_name=f"#{color_hex}",
+            color_rgb=rgb,
+            specificity=1 if section else 0,
+            is_diaphragm=is_diaphragm,
+            prefix=prefix,
+            label=f"[manual] {elem_type}:{section or 'generic'}",
+        )
+        result.setdefault(color_hex, []).append(le)
+    return result
+
+
+def process(prs, page_floors, phase, crop=False, crop_dir=None,
+            manual_scale=None, color_map=None):
     """Main processing pipeline: PPTX → elements dict.
 
     Args:
@@ -1580,6 +1672,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
         phase: "phase1", "phase2", or "all".
         crop: Whether to extract PNG images.
         crop_dir: Directory for extracted PNGs.
+        color_map: dict[color_hex, list[LegendEntry]] from --color-map.
 
     Returns:
         Complete output dict ready for JSON serialization.
@@ -1604,14 +1697,25 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
 
     # Pre-compute scales for all requested slides; allow fallback
     slide_scales = {}
-    for sn in sorted(page_floors.keys()):
-        if sn < 1 or sn > num_slides:
-            continue
-        scale_val, scale_info = detect_slide_scale(prs.slides[sn - 1], sn)
-        if scale_val is not None:
-            slide_scales[sn] = (scale_val, scale_info)
+    if manual_scale:
+        # Manual scale overrides auto-detection for all slides
+        for sn in sorted(page_floors.keys()):
+            if sn < 1 or sn > num_slides:
+                continue
+            slide_scales[sn] = (manual_scale, {
+                "slide": sn, "emu_per_meter": round(manual_scale, 1),
+                "num_measurements": 0, "manual": True
+            })
+        print(f"  Using manual scale: {manual_scale:.1f} EMU/m for all slides")
+    else:
+        for sn in sorted(page_floors.keys()):
+            if sn < 1 or sn > num_slides:
+                continue
+            scale_val, scale_info = detect_slide_scale(prs.slides[sn - 1], sn)
+            if scale_val is not None:
+                slide_scales[sn] = (scale_val, scale_info)
 
-    # Fallback scale: use median of all detected scales
+    # Fallback scale: use median of all detected scales (or manual scale)
     fallback_scale = None
     if slide_scales:
         all_scales = sorted(v[0] for v in slide_scales.values())
@@ -1650,6 +1754,17 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
 
         # 3) Parse legend
         legend, legend_diag = parse_legend(slide, slide_w, slide_h, phase=phase)
+        # Inject manual color-map entries into legend
+        if color_map:
+            for cm_color, cm_entries in color_map.items():
+                if cm_color not in legend:
+                    legend[cm_color] = list(cm_entries)
+                else:
+                    # Append manual entries, avoiding duplicates
+                    existing_types = {(e.element_type, e.section) for e in legend[cm_color]}
+                    for cme in cm_entries:
+                        if (cme.element_type, cme.section) not in existing_types:
+                            legend[cm_color].append(cme)
         if not legend:
             warnings.append(f"Slide {sn}: no legend detected, skipping")
             print(f"  WARNING: no legend detected")
@@ -1699,6 +1814,25 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None):
     # Group & dedup
     grouped = group_and_dedup(all_elements)
     sections = collect_sections(grouped)
+
+    # Section coverage diagnostics
+    total_elems = (len(grouped["columns"]) + len(grouped["beams"]) +
+                   len(grouped["walls"]) + len(grouped["small_beams"]))
+    empty_section_count = sum(
+        1 for cat in ("columns", "beams", "walls", "small_beams")
+        for elem in grouped[cat]
+        if not elem.get("section")
+    )
+    if empty_section_count > 0 and total_elems > 0:
+        pct = empty_section_count / total_elems * 100
+        msg = (f"Section coverage: {empty_section_count}/{total_elems} "
+               f"elements ({pct:.0f}%) have empty section")
+        if pct > 20:
+            warnings.append(
+                f"WARNING: 大量元素無斷面 — {msg}. "
+                f"Check Legend color matching (fill vs outline, tolerance).")
+        else:
+            warnings.append(msg)
 
     # Build output
     output = {
@@ -1769,6 +1903,18 @@ def main():
     parser.add_argument(
         "--confirm-floors", action="store_true",
         help="Scan floors, display detections with confidence, and prompt for confirmation")
+    parser.add_argument(
+        "--scale", type=float, default=None,
+        help="Manual scale in EMU/m (overrides auto-detection from measurement texts)")
+    parser.add_argument(
+        "--color-map", nargs="*", default=None,
+        help='Manual color-to-element mappings for unmatched colors. '
+             'Format: "RRGGBB=type:SECTION" e.g. "FF0000=column:C100X100" '
+             '"FF0000=wall:W90" "FFFF00=beam:B60X80". '
+             'Multiple entries per color allowed.')
+    parser.add_argument(
+        "--color-tolerance", type=int, default=None,
+        help="Override fuzzy color matching tolerance (default: 15 per RGB channel)")
 
     args = parser.parse_args()
 
@@ -1777,6 +1923,11 @@ def main():
     if floor_opts > 1:
         print("ERROR: --auto-floors, --confirm-floors, and --page-floors are mutually exclusive")
         sys.exit(1)
+
+    # Apply color tolerance override if specified
+    global _COLOR_TOLERANCE_OVERRIDE
+    if args.color_tolerance is not None:
+        _COLOR_TOLERANCE_OVERRIDE = args.color_tolerance
 
     # Load PPTX
     input_path = Path(args.input)
@@ -1875,9 +2026,18 @@ def main():
         print("ERROR: --output is required for processing")
         sys.exit(1)
 
+    # Parse color-map if provided
+    manual_color_map = _parse_color_map(args.color_map) if args.color_map else None
+    if manual_color_map:
+        print(f"Manual color-map: {sum(len(v) for v in manual_color_map.values())} entries")
+        for c, entries in manual_color_map.items():
+            for e in entries:
+                print(f"  #{c} → {e.element_type}: {e.section or '(generic)'}")
+
     # Process
     output = process(prs, page_floors, args.phase,
-                     crop=args.crop, crop_dir=args.crop_dir)
+                     crop=args.crop, crop_dir=args.crop_dir,
+                     manual_scale=args.scale, color_map=manual_color_map)
 
     # Summary
     print_summary(output)

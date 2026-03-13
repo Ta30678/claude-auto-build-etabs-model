@@ -342,7 +342,7 @@ class TestBuildConfig:
             mock_elements, mock_grid_info, "Test", "C:/test.EDB")
         assert config["project"]["name"] == "Test"
         assert config["project"]["units"] == 12
-        assert config["project"]["new_model"] is True
+        assert config["project"]["skip_materials"] is False
         assert len(config["columns"]) == 1
         assert len(config["beams"]) == 1
         assert len(config["walls"]) == 1
@@ -367,12 +367,17 @@ class TestBuildConfig:
     def test_copies_grid_info_fields(self, mock_elements, mock_grid_info):
         mock_grid_info["building_outline"] = [[0, 0], [10, 0], [10, 10], [0, 10]]
         mock_grid_info["core_grid_area"] = {"x_range": [3, 7], "y_range": [3, 7]}
-        mock_grid_info["slab_region_matrix"] = {"1F": {"1~2/A~B": True}}
         config, _ = build_config(
             mock_elements, mock_grid_info, "Test", "C:/test.EDB")
         assert config["building_outline"] == [[0, 0], [10, 0], [10, 10], [0, 10]]
         assert "core_grid_area" in config
-        assert "slab_region_matrix" in config
+
+    def test_slab_region_matrix_not_copied(self, mock_elements, mock_grid_info):
+        """slab_region_matrix moved to Phase 2 SB-READER — should NOT be in config."""
+        mock_grid_info["slab_region_matrix"] = {"1F": {"1~2/A~B": True}}
+        config, _ = build_config(
+            mock_elements, mock_grid_info, "Test", "C:/test.EDB")
+        assert "slab_region_matrix" not in config
 
     def test_empty_section_warning(self, mock_elements, mock_grid_info):
         mock_elements["columns"][0]["section"] = ""

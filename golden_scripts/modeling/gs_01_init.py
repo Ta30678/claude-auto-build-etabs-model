@@ -1,7 +1,7 @@
 """
 Golden Script 01: Model Initialization + Materials
 
-- Connects to ETABS (or creates new model)
+- Connects to running ETABS instance
 - Sets units to TON/M
 - Defines all concrete materials (C280~C490) and rebar (SD420, SD490)
 """
@@ -33,7 +33,7 @@ def connect_etabs(config):
 
 
 def _reacquire_SapModel():
-    """Re-acquire SapModel from COM after InitializeNewModel."""
+    """Re-acquire SapModel from COM (e.g. after section expansion)."""
     try:
         from find_etabs import find_etabs
         etabs, _ = find_etabs(run=False, backup=False)
@@ -45,35 +45,9 @@ def _reacquire_SapModel():
 
 
 def init_model(SapModel, config):
-    """Initialize model: set units, optionally create new blank model.
-    Returns (possibly new) SapModel reference.
+    """Initialize model: set units, unlock model.
+    Returns SapModel reference.
     """
-    project = config.get("project", {})
-
-    if project.get("new_model", False):
-        # If no model is open, open backup or any EDB first
-        # (ETABS COM requires an open model for File operations)
-        current = SapModel.GetModelFilename()
-        if not current or current == "None":
-            # Look for backup in same MODEL directory
-            save_path = project.get("save_path", "")
-            if save_path:
-                import glob as glob_mod
-                model_dir = os.path.dirname(save_path.replace("/", os.sep))
-                edbs = glob_mod.glob(os.path.join(model_dir, "*.EDB"))
-                if edbs:
-                    SapModel.File.OpenFile(edbs[0])
-                    print(f"  Opened existing model for init: {edbs[0]}")
-
-        SapModel.InitializeNewModel(UNITS_TON_M)
-        # COM reference becomes stale after InitializeNewModel; re-acquire
-        SapModel = _reacquire_SapModel()
-        try:
-            SapModel.File.NewBlank()
-        except Exception:
-            pass  # InitializeNewModel already created a blank model
-        print("Created new blank model")
-
     SapModel.SetPresentUnits(UNITS_TON_M)
     SapModel.SetModelIsLocked(False)
     print(f"Units set to TON/M ({UNITS_TON_M})")

@@ -35,17 +35,30 @@ def read_grid_from_etabs(SapModel):
     ret = SapModel.DatabaseTables.GetTableForDisplayArray(
         table_key, [], "All", 0, [], 0, [])
 
-    retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
-    if retcode != 0:
-        print(f"ERROR: GetTableForDisplayArray returned {retcode}")
+    # Raw COM returns: [FieldKeyList_out, TableVersion, FieldKeysIncluded,
+    #                    NumberRecords, TableData, retcode]
+    # etabs_api returns: (retcode, FieldKeysIncluded, ..., NumberRecords, TableData)
+    if not ret or len(ret) < 4:
+        print(f"ERROR: GetTableForDisplayArray returned {ret}")
         sys.exit(1)
 
-    # Parse return tuple: (retcode, FieldKeysIncluded, GroupName,
-    #                       NumberRecords, TableData, ...)
-    # Typical ETABS return: ret[1]=fields, ret[3]=num_records, ret[4]=data
-    fields = list(ret[1]) if len(ret) > 1 else []
-    num_records = ret[3] if len(ret) > 3 else 0
-    table_data = list(ret[4]) if len(ret) > 4 else []
+    # Detect format: raw COM has retcode at end, etabs_api at start
+    if isinstance(ret[-1], int) and isinstance(ret[0], (list, tuple)):
+        # Raw COM format
+        retcode = ret[-1]
+        fields = list(ret[2]) if len(ret) > 2 else []
+        num_records = ret[3] if len(ret) > 3 else 0
+        table_data = list(ret[4]) if len(ret) > 4 else []
+    else:
+        # etabs_api format
+        retcode = ret[0]
+        fields = list(ret[1]) if len(ret) > 1 else []
+        num_records = ret[3] if len(ret) > 3 else 0
+        table_data = list(ret[4]) if len(ret) > 4 else []
+
+    if retcode != 0:
+        print(f"ERROR: GetTableForDisplayArray returned code {retcode}")
+        sys.exit(1)
 
     if num_records == 0:
         print("ERROR: No grid lines found in ETABS model.")
@@ -65,7 +78,7 @@ def read_grid_from_etabs(SapModel):
         offset = row * num_fields
         row_data = {f: table_data[offset + col_idx[f]] for f in fields if f in col_idx}
 
-        grid_type = row_data.get("Grid Line Type", "")
+        grid_type = row_data.get("LineType", row_data.get("Grid Line Type", ""))
         label = row_data.get("ID", "")
         ordinate_str = row_data.get("Ordinate", "0")
         bubble_loc = row_data.get("BubbleLoc", "")
@@ -100,8 +113,10 @@ def read_grid_from_etabs(SapModel):
     }
 
     print(f"  Grid lines read: {len(x_grids)} X + {len(y_grids)} Y")
-    print(f"  X grids: {', '.join(f'{g[\"label\"]}={g[\"coordinate\"]}m' for g in x_grids)}")
-    print(f"  Y grids: {', '.join(f'{g[\"label\"]}={g[\"coordinate\"]}m' for g in y_grids)}")
+    x_str = ', '.join(f'{g["label"]}={g["coordinate"]}m' for g in x_grids)
+    y_str = ', '.join(f'{g["label"]}={g["coordinate"]}m' for g in y_grids)
+    print(f"  X grids: {x_str}")
+    print(f"  Y grids: {y_str}")
     print(f"  Bubble: X={x_bubble}, Y={y_bubble}")
 
     return result
@@ -114,10 +129,18 @@ def main():
                         help="Output JSON file path")
     args = parser.parse_args()
 
-    from find_etabs import find_etabs
-    etabs, filename = find_etabs(run=False, backup=False)
-    SapModel = etabs.SapModel
-    print(f"Connected to ETABS: {filename}")
+    try:
+        from find_etabs import find_etabs
+        etabs, filename = find_etabs(run=False, backup=False)
+        SapModel = etabs.SapModel
+        print(f"Connected to ETABS: {filename}")
+    except (ImportError, ModuleNotFoundError):
+        import comtypes.client
+        comtypes.client.gen_dir = None
+        etabs = comtypes.client.GetActiveObject("CSI.ETABS.API.ETABSObject")
+        SapModel = etabs.SapModel
+        filename = SapModel.GetModelFilename()
+        print(f"Connected to ETABS (COM): {filename}")
 
     result = read_grid_from_etabs(SapModel)
 

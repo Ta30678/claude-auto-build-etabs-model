@@ -62,6 +62,8 @@ claude-auto-build-etabs-model/
 │       ├── unit_converter.py              # Unit detection & conversion
 │       ├── pptx_to_elements.py            # PPT structural plan → elements JSON (primary extraction tool)
 │       ├── config_build.py                # Phase 1: elements.json + grid_info.json → model_config.json (deterministic merge)
+│       ├── elements_merge.py              # Phase 1: merge elements_A/B.json → elements.json (parallel extraction merge)
+│       ├── beam_validate.py               # Phase 1: beam endpoint connectivity validation + auto-snap
 │       ├── sb_patch_build.py              # Phase 2: sb_elements_aligned.json → sb_patch.json (deterministic extraction)
 │       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
 │       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls
@@ -85,6 +87,9 @@ claude-auto-build-etabs-model/
 │   ├── test_affine_calibrate.py           # Affine calibration tool tests (mock data)
 │   ├── test_slab_generator.py             # Slab generator tool tests (mock data)
 │   ├── test_config_build.py               # config_build merge tool tests (mock data)
+│   ├── test_elements_merge.py             # elements_merge tool tests (mock data)
+│   ├── test_beam_validate.py              # beam_validate tool tests (mock data)
+│   ├── test_pptx_color_matching.py        # pptx color matching tests (fuzzy, dual-color)
 │   └── test_sb_patch_build.py             # sb_patch_build extraction tool tests (mock data)
 ├── skills/
 │   ├── structural-glossary/SKILL.md       # Canonical structural terminology (上構/下構/屋突/共構)
@@ -98,7 +103,7 @@ claude-auto-build-etabs-model/
 │   └── etabs-api-lookup.md                # How to look up API docs
 ├── .claude/
 │   ├── agents/                            # BTS agent definitions
-│   │   ├── phase1-reader.md               # Phase 1 READER: grid/outline/stories → grid_info.json + config_build.py
+│   │   ├── phase1-reader.md               # Phase 1 READER: extraction + grid/outline/core_area → grid_info.json
 │   │   ├── phase1-config-builder.md       # Phase 1 CONFIG-BUILDER: GS execution only (steps 1-6)
 │   │   ├── phase2-sb-reader.md            # Phase 2 SB-READER: SB validation + SB pipeline execution
 │   │   ├── phase2-config-builder.md       # Phase 2 CONFIG-BUILDER: GS execution only (steps 2,7,8)
@@ -210,11 +215,36 @@ python -m golden_scripts.tools.slab_generator \
     --output final_config.json
 ```
 
+### Elements Merge Tool (Phase 1 — parallel extraction merge)
+```bash
+# Merge elements_A.json + elements_B.json → elements.json
+python -m golden_scripts.tools.elements_merge \
+    --inputs elements_A.json elements_B.json \
+    --output elements.json
+
+# Preview without writing
+python -m golden_scripts.tools.elements_merge ... --dry-run
+```
+
+### Beam Validate Tool (Phase 1 — endpoint connectivity)
+```bash
+# Validate and snap beam endpoints to grid/columns/walls/beams
+python -m golden_scripts.tools.beam_validate \
+    --elements elements.json \
+    --grid-data grid_data.json \
+    --output elements_validated.json \
+    --tolerance 1.5 \
+    --report beam_validation_report.json
+
+# Preview without writing
+python -m golden_scripts.tools.beam_validate ... --dry-run
+```
+
 ### Config Build Tool (Phase 1 — deterministic merge)
 ```bash
 # Merge elements.json + grid_info.json → model_config.json
 python -m golden_scripts.tools.config_build \
-    --elements elements.json \
+    --elements elements_validated.json \
     --grid-info grid_info.json \
     --output model_config.json \
     --save-path "C:/path/to/model.EDB" \
@@ -373,8 +403,13 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 - **Builds**: Grid (skip if pre-built), Story, Columns, Walls, Major Beams (B/WB/FB/FWB)
 - **Pre-steps**:
   1. `read_grid.py` → `grid_data.json` (read Grid from ETABS as ground truth)
-  2. `pptx_to_elements.py --phase phase1` → `elements.json` (deterministic element extraction)
-- **Data flow**: `grid_data.json` + `elements.json` + Readers → `grid_info.json` → `config_build.py` (deterministic merge, run by READER) → `model_config.json` → **Config-Builder executes** `run_all.py --steps 1,2,3,4,5,6` → ETABS model
+  2. `pptx_to_elements.py --scan-floors` → `PAGE_FLOOR_MAPPING` (floor label detection)
+- **Data flow**:
+  READER-A: `pptx_to_elements.py --page-floors "{上構}" → elements_A.json` (parallel)
+  READER-B: `pptx_to_elements.py --page-floors "{下構}" → elements_B.json` (parallel)
+  Readers → `grid_info.json` (Grid驗證 + outline + core_area)
+  Team Lead: `elements_merge.py` → `elements.json` → `beam_validate.py` → `elements_validated.json` → `config_build.py` → `model_config.json`
+  CONFIG-BUILDER: `run_all.py --steps 1,2,3,4,5,6` → ETABS model
 - **Output**: `model_config.json` (small_beams=[], slabs=[]) + ETABS model with Grid+Story+柱+牆+大梁
 
 ### Phase 2: `/bts-sb`
@@ -401,9 +436,13 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 │   ├── COLUMN/        # Phase 1: READER grid/outline data
 │   ├── WALL/          # Phase 1: READER grid/outline data
 │   └── SB-BEAM/       # Phase 2: SB-READER validation results
-├── elements.json           # Phase 1 script output (columns/beams/walls — with page_num)
+├── elements_A.json         # Phase 1 READER-A extraction (superstructure pages)
+├── elements_B.json         # Phase 1 READER-B extraction (substructure pages)
+├── elements.json           # Phase 1 merged elements (elements_merge.py)
+├── elements_validated.json # Phase 1 beam-snapped elements (beam_validate.py)
+├── beam_validation_report.json # Phase 1 beam endpoint correction report
 ├── grid_data.json          # Phase 0.3 ETABS Grid read (ground truth)
-├── grid_info.json          # Phase 1 READER output (outline/stories/slab_region — AI)
+├── grid_info.json          # Phase 1 READER output (outline/stories — AI)
 ├── sb_elements.json        # Phase 2 script output (small beams — PPTX-meter)
 ├── sb_elements_aligned.json # Phase 2 affine-calibrated (grid-aligned)
 ├── model_config.json       # Phase 1 output (no SB/slabs)

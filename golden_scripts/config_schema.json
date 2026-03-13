@@ -11,8 +11,7 @@
       "properties": {
         "name": { "type": "string", "description": "Project name" },
         "save_path": { "type": "string", "description": "Full path for .EDB file" },
-        "units": { "type": "integer", "default": 12, "description": "eUnits code (12=TON/M)" },
-        "new_model": { "type": "boolean", "default": false, "description": "True = create new blank model, False = attach to existing" }
+        "units": { "type": "integer", "default": 12, "description": "eUnits code (12=TON/M)" }
       }
     },
     "grids": {

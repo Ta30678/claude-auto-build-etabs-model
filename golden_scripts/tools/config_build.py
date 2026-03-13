@@ -308,7 +308,7 @@ def build_config(elements, grid_info, project_name, save_path):
         "name": project_name,
         "save_path": save_path,
         "units": 12,
-        "new_model": True,
+        "skip_materials": False,
     }
 
     # From grid_info
@@ -317,9 +317,8 @@ def build_config(elements, grid_info, project_name, save_path):
     config["base_elevation"] = grid_info.get("base_elevation", 0)
     config["strength_map"] = grid_info.get("strength_map", {})
 
-    # Optional grid_info fields
-    for key in ("building_outline", "substructure_outline",
-                "core_grid_area", "slab_region_matrix"):
+    # Optional grid_info fields (slab_region_matrix moved to Phase 2 SB-READER)
+    for key in ("building_outline", "substructure_outline", "core_grid_area"):
         if key in grid_info:
             config[key] = grid_info[key]
 

@@ -2,8 +2,7 @@
   "project": {
     "name": "A21 捷運社宅",
     "save_path": "C:/ETABS_Models/A21_golden.EDB",
-    "units": 12,
-    "new_model": true
+    "units": 12
   },
   "grids": {
     "x": [

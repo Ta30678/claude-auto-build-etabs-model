@@ -54,31 +54,54 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
    - **先嘗試從 PPT 標註讀取**（掃描 PPT 中的板厚標註，如 "S=15cm", "FS=100cm"）
    - 如 PPT 無標註，再用 AskUserQuestion 詢問用戶
 
-### Step 0: 提取小梁座標（PPT，自動樓層偵測）
+### Phase 0.5: Sequential 提取+校正
 
-掃描 `結構配置圖/` 內的 `.pptx` 檔案：
+構件提取下放給 SB-READER-A，affine 校正仍由 Team Lead 執行：
 
-**方式 A：自動樓層（推薦，Phase 0 掃描結果信心度高時）**
-```bash
-python -m golden_scripts.tools.pptx_to_elements \
-  --input "{Case Folder}/結構配置圖/xxx.pptx" \
-  --output "{Case Folder}/sb_elements.json" \
-  --auto-floors \
-  --phase phase2
+#### Step A: 建立 Team + 啟動 SB-READER-A（提取模式）
+
+```
+TeamCreate(team_name="bts-sb-team", description="BTS Phase 2 小梁+版建模")
 ```
 
-**方式 B：確認後指定（掃描信心度低時）**
-```bash
-python -m golden_scripts.tools.pptx_to_elements \
-  --input "{Case Folder}/結構配置圖/xxx.pptx" \
-  --output "{Case Folder}/sb_elements.json" \
-  --confirm-floors \
-  --phase phase2
+| Task | 主題 | Owner | blockedBy |
+|------|------|-------|-----------|
+| T1 | SB-READER-A 提取+驗證小梁座標 | SB-READER-A | (無) |
+| T2 | SB-READER-B 驗證小梁座標 | SB-READER-B | (無) |
+| T3 | CONFIG-BUILDER 執行 GS | CONFIG-BUILDER | (無) |
+
+啟動 SB-READER-A（background，提取模式）：
+
+```
+Agent(
+  subagent_type="phase2-sb-reader",
+  team_name="bts-sb-team",
+  name="SB-READER-A",
+  description="提取小梁座標",
+  prompt="你被指派為 BTS-SB Team 的 SB-READER-A。
+
+RUN_SB_EXTRACT=true
+PPT_PATH={PPT_PATH}
+PAGE_FLOOR_MAPPING={PAGE_FLOOR_MAPPING}
+CASE_FOLDER={Case Folder}
+
+請先執行 pptx_to_elements.py --phase phase2 提取小梁座標。
+完成後 SendMessage 回報 SB_EXTRACTION_COMPLETE 或 SB_EXTRACTION_FAILED。
+然後進入等待模式，等待 VALIDATE 指令。
+
+請按照 .claude/agents/phase2-sb-reader.md 的指示執行。",
+  run_in_background=true
+)
 ```
 
-**驗證**：檢查輸出 summary 的小梁數量是否合理。
+#### Step B: 等待 SB_EXTRACTION_COMPLETE
 
-### Step 1: Affine 座標校正（PPTX-meter → Grid）
+監聽 SB-READER-A 的 SendMessage。
+
+- 收到 `SB_EXTRACTION_COMPLETE`：繼續 Step C
+- 收到 `SB_EXTRACTION_FAILED`：檢視錯誤，修正後 SendMessage 給 SB-READER-A 重新執行
+
+#### Step C: Team Lead 執行 Affine 校正
 
 ```bash
 python -m golden_scripts.tools.affine_calibrate \
@@ -92,7 +115,9 @@ python -m golden_scripts.tools.affine_calibrate \
 - 每個 slide 的 max_residual 應 < 0.05m
 - 如果 residual 過大，警告用戶（可能 elements.json 需重跑）
 
-### Step 2: 建立資料夾 & 分配驗證工作
+### Phase 1: 平行驗證
+
+#### Step 1: 建立資料夾 & 分配驗證工作
 
 1. **建立子資料夾**（如尚未存在）：
    ```bash
@@ -103,40 +128,21 @@ python -m golden_scripts.tools.affine_calibrate \
    - 原則：工作量大致相等
    - 例如：SB-READER-A 驗證 2F~23F, SB-READER-B 驗證 1F + B1F~B3F
 
-### Phase 1: 建立 Team + 創建任務
+#### Step 2: 啟動平行驗證
+
+SB-READER-A 已在 Phase 0.5 啟動並完成提取。現在發送 VALIDATE 指令，同時啟動 SB-READER-B：
 
 ```
-TeamCreate(team_name="bts-sb-team", description="BTS Phase 2 小梁+版建模")
-```
-
-| Task | 主題 | Owner | blockedBy |
-|------|------|-------|-----------|
-| T1 | SB-READER-A 驗證小梁座標 | SB-READER-A | (無) |
-| T2 | SB-READER-B 驗證小梁座標 | SB-READER-B | (無) |
-| T3 | CONFIG-BUILDER 生成 patch + merge + snap + slab_generator + 執行 GS | CONFIG-BUILDER | (無) |
-
-### Phase 2A: 啟動 SB-Readers Only
-
-**只啟動** SB-READER-A 和 SB-READER-B，`run_in_background=true`。CONFIG-BUILDER 在 Phase 2.5 才啟動。
-
-```
-Agent(
-  subagent_type="phase2-sb-reader",
-  team_name="bts-sb-team",
-  name="SB-READER-A",
-  description="驗證小梁座標（樓層區間 1）",
-  prompt="你被指派為 BTS-SB Team 的 SB-READER-A。
-
-⭐ 小梁座標已由 pptx_to_elements.py 腳本確定性提取，並經 affine_calibrate.py 校正至 grid 座標。
-你的職責是**驗證**座標的連接性和合理性，不需要從圖面手動提取。
+// 發送 VALIDATE 給 SB-READER-A（已在等待模式）
+SendMessage(
+  recipient="SB-READER-A",
+  message="VALIDATE
+你負責驗證的樓層區間：{SB_GROUP_1_FLOORS}
+對應的裁切圖：{SB_GROUP_1_PAGES}
 
 sb_elements_aligned.json 路徑：{Case Folder}/sb_elements_aligned.json
 model_config.json 路徑：{Case Folder}/model_config.json
 結構配置圖路徑：{Case Folder}/結構配置圖/
-你負責驗證的樓層區間：{SB_GROUP_1_FLOORS}
-對應的裁切圖（供視覺交叉比對）：{SB_GROUP_1_PAGES}
-
-請按照 .claude/agents/phase2-sb-reader.md 的指示執行。
 
 驗證項目：
 1. 連接性：每根小梁兩端是否接觸大梁/牆/柱/其他小梁（容差 0.15m）
@@ -144,20 +150,10 @@ model_config.json 路徑：{Case Folder}/model_config.json
 3. Grid 邊界：所有小梁座標是否在 Grid 系統範圍內
 4. 視覺交叉比對：抽查對照圖面 PNG
 
-驗證資料來源：
-- sb_elements_aligned.json 的 small_beams 陣列
-- model_config.json 的 beams/walls/columns 欄位
-
-輸出驗證結果至：
-- 結構配置圖/SB-BEAM/validation_{floor_range}.json
-
-完成後：
-1. SendMessage 通知 Team Lead：驗證結果 OK/WARN/REJECT
-2. TaskUpdate 標記完成
-3. 進入等待模式（監聽 CONFIG-BUILDER 確認要求和 shutdown_request）",
-  run_in_background=true
+輸出至：結構配置圖/SB-BEAM/validation_{floor_range}.json"
 )
 
+// 同時啟動 SB-READER-B（純驗證模式）
 Agent(
   subagent_type="phase2-sb-reader",
   team_name="bts-sb-team",
@@ -192,7 +188,7 @@ model_config.json 路徑：{Case Folder}/model_config.json
 完成後：
 1. SendMessage 通知 Team Lead：驗證結果 OK/WARN/REJECT
 2. TaskUpdate 標記完成
-3. 進入等待模式（監聯 CONFIG-BUILDER 確認要求和 shutdown_request）",
+3. 進入等待模式（監聽 CONFIG-BUILDER 確認要求和 shutdown_request）",
   run_in_background=true
 )
 ```
@@ -281,6 +277,7 @@ cd golden_scripts && python run_all.py --config \"{Case Folder}/final_config.jso
 | SB-READER 回報 REJECT | 檢視 issues，修正 sb_elements.json + 重跑 affine 後重新驗證 |
 | SB-READER 回報 WARN | 記錄警告，繼續 |
 | Pipeline 腳本失敗 | 檢視錯誤，修正 sb_elements_aligned.json 或 model_config.json 後重發 RUN_SB_PIPELINE |
+| SB-READER-A SB_EXTRACTION_FAILED | 檢視錯誤，修正後 SendMessage 給 SB-READER-A 重新執行提取 |
 
 ### Phase 5: 驗證 CONFIG-BUILDER 結果
 
@@ -335,20 +332,20 @@ SendMessage(type="shutdown_request", recipient="CONFIG-BUILDER")
 ## 改善後的完整 Pipeline 摘要
 
 ```
-Step 0: pptx_to_elements.py --phase phase2 [--confirm-floors]
-        → sb_elements.json (PPTX-meter, 含 page_num)
+Phase 0.5A: SB-READER-A 執行 pptx_to_elements.py --phase phase2
+            → sb_elements.json (PPTX-meter, 含 page_num)
 
-Step 1: affine_calibrate.py
-        → sb_elements_aligned.json (grid-aligned)
+Phase 0.5C: TEAM LEAD 執行 affine_calibrate.py
+            → sb_elements_aligned.json (grid-aligned)
 
-Step 2: SB-READER 驗證 sb_elements_aligned.json (tolerance: 0.15m)
-        → validation_*.json
+Phase 1:    SB-READER-A + SB-READER-B 平行驗證 sb_elements_aligned.json
+            → validation_*.json
 
-Step 3: SB-READER 執行 SB Pipeline（4 步腳本，秒級完成）：
-        sb_patch_build → config_merge → config_snap → slab_generator
-        → final_config.json（含板）
+Phase 2.5:  SB-READER 執行 SB Pipeline（4 步腳本，秒級完成）：
+            sb_patch_build → config_merge → config_snap → slab_generator
+            → final_config.json（含板）
 
-Step 4: CONFIG-BUILDER 執行 GS steps 2,7,8 → ETABS model
+Phase 2.5E: CONFIG-BUILDER 執行 GS steps 2,7,8 → ETABS model
 ```
 
 ---

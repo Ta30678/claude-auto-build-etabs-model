@@ -10,8 +10,10 @@ Golden Script 02: Batch Section Generation
 D/B swap is IMPOSSIBLE here: parsing logic is hardcoded.
 """
 import json
+import re
 import sys
 import os
+import time
 
 _dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
@@ -41,7 +43,22 @@ def get_existing_materials(SapModel):
     return names
 
 
-def expand_frame_sections(prefix, base_w, base_d):
+def extract_used_grades(config):
+    """Extract concrete grades actually used in this config."""
+    grades = set()
+    # From strength_map values
+    for range_str, grade_dict in config.get("strength_map", {}).items():
+        for elem_type, fc in grade_dict.items():
+            grades.add(fc)
+    # From explicit C{fc} in section names
+    for sec_name in config.get("sections", {}).get("frame", []):
+        m = re.search(r'C(\d+)$', sec_name)
+        if m:
+            grades.add(int(m.group(1)))
+    return sorted(grades) if grades else CONCRETE_GRADES
+
+
+def expand_frame_sections(prefix, base_w, base_d, grades=None):
     """Expand one base section into all size+grade combinations.
     Returns list of (name, mat_name, depth_m, width_m).
 
@@ -56,7 +73,7 @@ def expand_frame_sections(prefix, base_w, base_d):
                    base_w + EXPAND_RANGE + 1, EXPAND_STEP):
         for d in range(max(base_d - EXPAND_RANGE, min_d),
                        base_d + EXPAND_RANGE + 1, EXPAND_STEP):
-            for fc in CONCRETE_GRADES:
+            for fc in (grades or CONCRETE_GRADES):
                 name = f"{prefix}{w}X{d}C{fc}"
                 mat = f"C{fc}"
                 depth_m = d / 100.0  # T3
@@ -65,12 +82,12 @@ def expand_frame_sections(prefix, base_w, base_d):
     return results
 
 
-def expand_area_sections(prefix, thickness_cm):
+def expand_area_sections(prefix, thickness_cm, grades=None):
     """Expand area section across all grades.
     Returns list of (name, mat_name, thickness_m, shell_type).
     """
     results = []
-    for fc in CONCRETE_GRADES:
+    for fc in (grades or CONCRETE_GRADES):
         mat = f"C{fc}"
         t_m = thickness_cm / 100.0
         if prefix == "FS":
@@ -82,14 +99,24 @@ def expand_area_sections(prefix, thickness_cm):
     return results
 
 
-def create_frame_sections(SapModel, sections_list, existing_materials=None):
-    """Create frame sections in ETABS.
+def create_frame_sections(SapModel, sections_list, existing_materials=None,
+                          batch_size=100, batch_pause=1.0,
+                          skip_existing=None):
+    """Create frame sections in ETABS with batching to prevent COM crashes.
     sections_list: list of (name, mat_name, depth_m, width_m)
+    batch_size: pause every N sections to let ETABS process
+    batch_pause: seconds to pause between batches
+    skip_existing: set of section names already in model (skip these)
     """
     count = 0
     skipped = 0
+    skipped_existing = 0
     missing_mats = {}
+    batch_counter = 0
     for name, mat, depth_m, width_m in sections_list:
+        if skip_existing is not None and name in skip_existing:
+            skipped_existing += 1
+            continue
         if existing_materials is not None and mat not in existing_materials:
             skipped += 1
             missing_mats.setdefault(mat, []).append(name)
@@ -98,10 +125,20 @@ def create_frame_sections(SapModel, sections_list, existing_materials=None):
         retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
         if retcode == 0:
             count += 1
+        batch_counter += 1
+        if batch_counter % batch_size == 0:
+            try:
+                SapModel.View.RefreshView(0, False)
+            except Exception:
+                pass
+            time.sleep(batch_pause)
+            print(f"    ... {batch_counter} sections created so far")
     if missing_mats:
         for mat, names in missing_mats.items():
             sample = names[:3]
             print(f"  Material '{mat}' not found. Sections skipped: {sample}{'...' if len(names) > 3 else ''}")
+    if skipped_existing:
+        print(f"  Skipped {skipped_existing} existing sections")
     if skipped:
         print(f"  Skipped {skipped} frame sections (material not in model)")
     return count
@@ -135,11 +172,18 @@ def create_area_sections(SapModel, sections_list, existing_materials=None):
     return count
 
 
-def assign_all_rebar(SapModel, frame_sections, existing_materials=None):
+def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
+                     batch_size=100, batch_pause=1.0,
+                     skip_existing=None):
     """Assign rebar configuration to all created frame sections."""
     beam_count, col_count, fail_count = 0, 0, 0
+    skipped_existing = 0
+    batch_counter = 0
 
     for name, mat, depth_m, width_m in frame_sections:
+        if skip_existing is not None and name in skip_existing:
+            skipped_existing += 1
+            continue
         if existing_materials is not None and mat not in existing_materials:
             continue
         prefix, w_cm, d_cm, fc = parse_frame_section(name)
@@ -183,6 +227,16 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None):
             else:
                 fail_count += 1
 
+        batch_counter += 1
+        if batch_counter % batch_size == 0:
+            try:
+                SapModel.View.RefreshView(0, False)
+            except Exception:
+                pass
+            time.sleep(batch_pause)
+
+    if skipped_existing:
+        print(f"  Skipped {skipped_existing} existing sections (rebar)")
     print(f"  Rebar assigned: {beam_count} beams, {col_count} columns")
     if fail_count > 0:
         print(f"  WARNING: {fail_count} rebar assignments failed (section may not be concrete)")
@@ -215,6 +269,10 @@ def run(SapModel, config):
 
     sections = config.get("sections", {})
 
+    # Determine used concrete grades (reduces section count by 40-60%)
+    used_grades = extract_used_grades(config)
+    print(f"Concrete grades to expand: {used_grades}")
+
     # Expand frame sections
     all_frame = []
     bad_names = []
@@ -231,8 +289,8 @@ def run(SapModel, config):
             all_frame.append((sec_name, mat, depth_m, width_m))
             print(f"  {sec_name} -> 1 section (single grade C{fc})")
         else:
-            # Base name: expand +-20cm across all grades
-            expanded = expand_frame_sections(prefix, w, d)
+            # Base name: expand +-20cm across used grades only
+            expanded = expand_frame_sections(prefix, w, d, grades=used_grades)
             all_frame.extend(expanded)
             print(f"  {sec_name} -> {len(expanded)} combinations")
 
@@ -240,21 +298,27 @@ def run(SapModel, config):
         print(f"\n  ERROR: Invalid frame section names: {bad_names}")
         print(f"  期望格式: {{PREFIX}}{{WIDTH}}X{{DEPTH}}[C{{fc}}]  例如: B55X80 或 B55X80C350")
         print(f"  有效 PREFIX: B, SB, WB, FB, FSB, FWB, C")
+        if len(bad_names) == len(sections.get("frame", [])):
+            raise RuntimeError(
+                f"gs_02: ALL {len(bad_names)} frame section names are invalid. "
+                f"Check elements extraction (legend color matching may have failed). "
+                f"Bad names: {bad_names[:10]}"
+            )
 
     # Expand area sections
     all_area = []
     for t in sections.get("slab", []):
-        expanded = expand_area_sections("S", t)
+        expanded = expand_area_sections("S", t, grades=used_grades)
         all_area.extend(expanded)
         print(f"  Slab t={t}cm -> {len(expanded)}")
 
     for t in sections.get("wall", []):
-        expanded = expand_area_sections("W", t)
+        expanded = expand_area_sections("W", t, grades=used_grades)
         all_area.extend(expanded)
         print(f"  Wall t={t}cm -> {len(expanded)}")
 
     for t in sections.get("raft", []):
-        expanded = expand_area_sections("FS", t)
+        expanded = expand_area_sections("FS", t, grades=used_grades)
         all_area.extend(expanded)
         print(f"  Raft t={t}cm -> {len(expanded)}")
 
@@ -269,10 +333,32 @@ def run(SapModel, config):
     existing_materials = get_existing_materials(SapModel)
     print(f"\nExisting materials in model: {sorted(existing_materials)}")
 
+    # Query existing frame sections (skip in Phase 2 to avoid redundant COM calls)
+    existing_sections = set()
+    try:
+        ret = SapModel.PropFrame.GetNameList(0, [])
+        for item in ret:
+            if isinstance(item, (list, tuple)):
+                for s in item:
+                    if isinstance(s, str):
+                        existing_sections.add(s)
+    except Exception:
+        pass
+    if existing_sections:
+        print(f"Existing frame sections in model: {len(existing_sections)}")
+
+    save_path = config.get("project", {}).get("save_path")
+
     # Create in ETABS
     print("\n--- Creating frame sections ---")
-    n_frame = create_frame_sections(SapModel, frame_unique, existing_materials)
+    n_frame = create_frame_sections(SapModel, frame_unique, existing_materials,
+                                    skip_existing=existing_sections or None)
     print(f"  Created {n_frame} frame sections")
+
+    # Checkpoint save after frame section creation
+    if save_path:
+        SapModel.File.Save(os.path.normpath(save_path))
+        print("  [Checkpoint] Saved after frame section creation")
 
     print("\n--- Creating area sections ---")
     n_area = create_area_sections(SapModel, area_unique, existing_materials)
@@ -280,7 +366,13 @@ def run(SapModel, config):
 
     # Assign rebar to all frame sections
     print("\n--- Assigning rebar ---")
-    assign_all_rebar(SapModel, frame_unique, existing_materials)
+    assign_all_rebar(SapModel, frame_unique, existing_materials,
+                     skip_existing=existing_sections or None)
+
+    # Checkpoint save after rebar assignment
+    if save_path:
+        SapModel.File.Save(os.path.normpath(save_path))
+        print("  [Checkpoint] Saved after rebar assignment")
 
     # Assign area modifiers
     print("\n--- Assigning area modifiers ---")
