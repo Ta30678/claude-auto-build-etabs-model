@@ -66,7 +66,8 @@ claude-auto-build-etabs-model/
 │       ├── beam_validate.py               # Phase 1: beam endpoint connectivity validation + auto-snap
 │       ├── sb_patch_build.py              # Phase 2: sb_elements_aligned.json → sb_patch.json (deterministic extraction)
 │       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
-│       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls
+│       ├── sb_validate.py                 # Phase 2 SB angle correction + snap + split (replaces config_snap in pipeline)
+│       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls (legacy, imported by sb_validate)
 │       ├── affine_calibrate.py            # Transform PPTX-meter coords to grid-aligned (Phase 1 grid mode + Phase 2 elements mode)
 │       ├── slab_generator.py              # Graph-based slab polygon generation from beam layout
 │       ├── read_grid.py                   # Read Grid System from ETABS → grid_data.json
@@ -90,7 +91,8 @@ claude-auto-build-etabs-model/
 │   ├── test_elements_merge.py             # elements_merge tool tests (mock data)
 │   ├── test_beam_validate.py              # beam_validate tool tests (mock data)
 │   ├── test_pptx_color_matching.py        # pptx color matching tests (fuzzy, dual-color)
-│   └── test_sb_patch_build.py             # sb_patch_build extraction tool tests (mock data)
+│   ├── test_sb_patch_build.py             # sb_patch_build extraction tool tests (mock data)
+│   └── test_sb_validate.py               # sb_validate tool tests (mock data)
 ├── skills/
 │   ├── structural-glossary/SKILL.md       # Canonical structural terminology (上構/下構/屋突/共構)
 │   ├── e2k-split/SKILL.md                 # E2K split tool SOP
@@ -221,11 +223,41 @@ python -m golden_scripts.tools.affine_calibrate \
     --output sb_elements_aligned.json
 ```
 
+### SB Validate Tool (Phase 2 — angle correction + snap + split)
+```bash
+# Full SB validation pipeline (replaces config_snap in Phase 2)
+python -m golden_scripts.tools.sb_validate \
+    --sb-elements sb_elements_aligned.json \
+    --config model_config.json \
+    --grid-data grid_data.json \
+    --output sb_elements_validated.json \
+    --report sb_validate_report.json
+
+# Custom tolerances
+python -m golden_scripts.tools.sb_validate \
+    --sb-elements sb_elements_aligned.json \
+    --config model_config.json \
+    --grid-data grid_data.json \
+    --output sb_elements_validated.json \
+    --tolerance 1.0 --split-tolerance 0.15
+
+# Disable angle correction or splitting
+python -m golden_scripts.tools.sb_validate \
+    --sb-elements sb_elements_aligned.json \
+    --config model_config.json \
+    --grid-data grid_data.json \
+    --output sb_elements_validated.json \
+    --no-angle-correct --no-split
+
+# Preview without writing
+python -m golden_scripts.tools.sb_validate ... --dry-run
+```
+
 ### Slab Generator Tool (Phase 2)
 ```bash
 # Graph-based slab polygon generation from beam layout
 python -m golden_scripts.tools.slab_generator \
-    --config snapped_config.json \
+    --config merged_config.json \
     --slab-thickness 15 \
     --raft-thickness 100 \
     --output final_config.json
@@ -366,7 +398,7 @@ python -m golden_scripts.tools.gs_merge --base sub.e2k --buildings A=A.e2k B=B.e
 The golden scripts are split into three sub-packages under `golden_scripts/`:
 - **`modeling/`** (gs_01–gs_11): Deterministic model construction — reads `model_config.json` and executes ETABS API calls with no AI reasoning.
 - **`design/`** (gs_12+): Analysis-design iteration and optimization.
-- **`tools/`**: E2K split/merge utilities, config tools — e2k parser, writer, unit converter, split, merge, config_build, sb_patch_build, config_merge, config_snap, affine_calibrate, slab_generator.
+- **`tools/`**: E2K split/merge utilities, config tools — e2k parser, writer, unit converter, split, merge, config_build, sb_patch_build, config_merge, config_snap, sb_validate, affine_calibrate, slab_generator.
 
 All structural engineering rules are hardcoded in `golden_scripts/constants.py`.
 
@@ -455,8 +487,8 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 - **Pre-steps**:
   1. `pptx_to_elements.py --phase phase2` → `sb_elements.json` (deterministic SB extraction, enhanced legend + floor detection)
   2. `affine_calibrate.py` → `sb_elements_aligned.json` (per-slide PPTX-meter → grid coordinate transform)
-- **Data flow**: SB-Readers validate `sb_elements_aligned.json` → SB-Reader runs pipeline: `sb_patch_build.py` → `config_merge` → `config_snap` (0.15m) → `slab_generator.py` → `final_config.json` → **Config-Builder executes** `run_all.py --steps 2,7,8` → ETABS model
-- **Output**: `final_config.json` (complete config with corrected SB + auto-generated slabs) + ETABS model with +小梁+版
+- **Data flow**: SB-Readers validate `sb_elements_aligned.json` → SB-Reader runs pipeline: `sb_validate.py` → `sb_elements_validated.json` → `sb_patch_build.py` → `config_merge` → `slab_generator.py` → `final_config.json` → **Config-Builder executes** `run_all.py --steps 2,7,8` → ETABS model
+- **Output**: `final_config.json` (complete config with validated SB + auto-generated slabs) + ETABS model with +小梁+版
 
 ### Phase 3: `/bts-props`
 - **Team**: None (Team Lead direct execution)
@@ -484,10 +516,10 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 ├── grid_data.json               # Phase 0.3 ETABS Grid read (ground truth)
 ├── sb_elements.json             # Phase 2 script output (small beams — PPTX-meter)
 ├── sb_elements_aligned.json     # Phase 2 affine-calibrated (grid-aligned)
+├── sb_elements_validated.json   # Phase 2 sb_validate.py output (angle+snap+split)
 ├── model_config.json            # Phase 1 output (no SB/slabs)
 ├── sb_patch.json                # Phase 2 output (SB only, no slabs)
 ├── merged_config.json           # Merged (base + SB patch)
-├── snapped_config.json          # Snap-corrected config
 └── final_config.json            # Final config with auto-generated slabs
 ```
 

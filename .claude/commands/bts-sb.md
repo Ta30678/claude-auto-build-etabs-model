@@ -30,7 +30,7 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
 |-------|------|-------------|------|
 | Agent 1 | **SB-READER-A** | `.claude/agents/phase2-sb-reader.md` | 驗證分配的樓層區間 SB 座標連接性 |
 | Agent 2 | **SB-READER-B** | `.claude/agents/phase2-sb-reader.md` | 驗證分配的樓層區間 SB 座標連接性 |
-| Agent 3 | **CONFIG-BUILDER** | `.claude/agents/phase2-config-builder.md` | 執行 GS steps 2,7,8 + 錯誤修正（sb_patch+merge+snap+slab 已由腳本完成） |
+| Agent 3 | **CONFIG-BUILDER** | `.claude/agents/phase2-config-builder.md` | 執行 GS steps 2,7,8 + 錯誤修正（sb_validate+sb_patch+merge+slab 已由腳本完成） |
 
 ---
 
@@ -211,7 +211,7 @@ SB-READER 驗證工作較輕量，通常不需要負載平衡。
 - 判斷是否需要重新執行 pptx_to_elements.py 或手動修正 sb_elements.json
 - 問題解決後才可繼續
 
-#### Step C: 發送 RUN_SB_PIPELINE（腳本執行 sb_patch + merge + snap + slab_generator）
+#### Step C: 發送 RUN_SB_PIPELINE（腳本執行 sb_validate + sb_patch + merge + slab_generator）
 
 所有 SB-READER 驗證完成後，SendMessage 給**先完成的 SB-READER**：
 
@@ -220,15 +220,16 @@ SendMessage(
   recipient="SB-READER-A",  // 或 SB-READER-B（先完成者）
   message="RUN_SB_PIPELINE — 所有驗證完成，請執行 SB Pipeline。
 CASE_FOLDER={Case Folder}
+GRID_DATA_PATH={Case Folder}/grid_data.json
 SLAB_THICKNESS={SLAB_THICKNESS_CM}
 RAFT_THICKNESS={RAFT_THICKNESS_CM}"
 )
 ```
 
 SB-READER 會依序執行 4 步腳本（見 phase2-sb-reader.md「SB Pipeline Step」）：
-1. `sb_patch_build.py` → sb_patch.json
-2. `config_merge` → merged_config.json
-3. `config_snap` → snapped_config.json
+1. `sb_validate.py` → sb_elements_validated.json（角度校正 + snap + split）
+2. `sb_patch_build.py` → sb_patch.json
+3. `config_merge` → merged_config.json
 4. `slab_generator` → final_config.json
 
 #### Step D: 等待 Pipeline 完成
@@ -248,7 +249,7 @@ Agent(
   description="執行 GS steps 2,7,8",
   prompt="你被指派為 BTS-SB Team 的 CONFIG-BUILDER。
 
-⭐ final_config.json 已由 sb_patch_build + config_merge + config_snap + slab_generator 腳本生成。
+⭐ final_config.json 已由 sb_validate + sb_patch_build + config_merge + slab_generator 腳本生成。
 你只需要執行 Golden Scripts 並處理錯誤。
 
 final_config.json 路徑：{Case Folder}/final_config.json
@@ -342,7 +343,7 @@ Phase 1:    SB-READER-A + SB-READER-B 平行驗證 sb_elements_aligned.json
             → validation_*.json
 
 Phase 2.5:  SB-READER 執行 SB Pipeline（4 步腳本，秒級完成）：
-            sb_patch_build → config_merge → config_snap → slab_generator
+            sb_validate → sb_patch_build → config_merge → slab_generator
             → final_config.json（含板）
 
 Phase 2.5E: CONFIG-BUILDER 執行 GS steps 2,7,8 → ETABS model
@@ -362,10 +363,10 @@ Phase 2.5E: CONFIG-BUILDER 執行 GS steps 2,7,8 → ETABS model
 ├── elements.json              # Phase 1 output (含 page_num，用於 affine)
 ├── sb_elements.json           # Phase 2 PPTX-meter 座標
 ├── sb_elements_aligned.json   # Affine 校正後（grid-aligned）
+├── sb_elements_validated.json # sb_validate.py 校正後（角度+snap+split）
 ├── model_config.json          # Phase 1 output
 ├── sb_patch.json              # Phase 2 SB only patch（無 slabs）
 ├── merged_config.json         # Merged (base + SB patch)
-├── snapped_config.json        # Snap 校正後
 └── final_config.json          # 最終 config（含自動生成的板）
 ```
 
