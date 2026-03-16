@@ -9,6 +9,7 @@ from golden_scripts.tools.elements_merge import (
     dedup_elements,
     merge_sections,
     check_section_coverage,
+    normalize_per_slide_input,
 )
 
 
@@ -245,3 +246,131 @@ class TestEdgeCases:
         assert len(merged["beams"]) == 1
         assert merged["sections"]["frame"] == ["B55X80", "C90X90"]
         assert stats["input_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# TestNormalizePerSlideInput
+# ---------------------------------------------------------------------------
+
+class TestNormalizePerSlideInput:
+    def test_per_slide_format(self):
+        """Per-slide JSON (with slide_num) should be normalized."""
+        slide_data = {
+            "_metadata": {
+                "slide_num": 3,
+                "floors": ["1F", "2F"],
+                "floor_label": "1F~2F",
+                "stats": {"beams": 2, "columns": 1},
+            },
+            "columns": [
+                {"grid_x": 0, "grid_y": 0, "section": "C80X80",
+                 "floors": ["1F", "2F"], "element_type": "column"},
+            ],
+            "beams": [
+                {"x1": 0, "y1": 0, "x2": 6, "y2": 0, "section": "B55X80",
+                 "floors": ["1F"], "element_type": "beam"},
+                {"x1": 0, "y1": 0, "x2": 0, "y2": 8, "section": "B40X70",
+                 "floors": ["2F"], "element_type": "beam"},
+            ],
+            "walls": [
+                {"x1": 0, "y1": 0, "x2": 0, "y2": 5, "section": "W25",
+                 "floors": ["1F"], "element_type": "wall"},
+            ],
+            "small_beams": [],
+        }
+        result = normalize_per_slide_input(slide_data)
+        assert len(result["columns"]) == 1
+        assert len(result["beams"]) == 2
+        assert len(result["walls"]) == 1
+        assert "B55X80" in result["sections"]["frame"]
+        assert "C80X80" in result["sections"]["frame"]
+        assert 25 in result["sections"]["wall"]
+        assert result["_metadata"]["phase"] == "phase1"
+
+    def test_standard_format_passthrough(self):
+        """Standard format (no slide_num) should pass through unchanged."""
+        standard = make_elements(
+            columns=[make_column("A", "1", "C90X90", ["1F"])],
+            frame_sections=["C90X90"],
+        )
+        result = normalize_per_slide_input(standard)
+        assert result is standard  # same object, not a copy
+
+    def test_merge_per_slide_inputs(self):
+        """Merge two per-slide JSONs into one unified output."""
+        slide_a = {
+            "_metadata": {"slide_num": 3, "floors": ["1F"], "floor_label": "1F"},
+            "columns": [
+                {"grid_x": 0, "grid_y": 0, "section": "C80X80", "floors": ["1F"]},
+            ],
+            "beams": [
+                {"x1": 0, "y1": 0, "x2": 6, "y2": 0, "section": "B55X80",
+                 "floors": ["1F"]},
+            ],
+            "walls": [],
+            "small_beams": [],
+        }
+        slide_b = {
+            "_metadata": {"slide_num": 4, "floors": ["2F"], "floor_label": "2F"},
+            "columns": [
+                {"grid_x": 0, "grid_y": 0, "section": "C80X80", "floors": ["2F"]},
+            ],
+            "beams": [],
+            "walls": [],
+            "small_beams": [],
+        }
+        norm_a = normalize_per_slide_input(slide_a)
+        norm_b = normalize_per_slide_input(slide_b)
+        merged, stats = merge_elements(norm_a, norm_b)
+        assert len(merged["columns"]) == 2  # different floors, not deduped
+        assert len(merged["beams"]) == 1
+        assert stats["input_count"] == 2
+
+
+# ---------------------------------------------------------------------------
+# TestInputsDirSubfolderGlob
+# ---------------------------------------------------------------------------
+
+class TestInputsDirSubfolderGlob:
+    """Test that --inputs-dir correctly globs */elements.json in subdirectory structure."""
+
+    def test_subfolder_glob(self, tmp_path):
+        """Subdirectory structure: calibrated/{floor}/elements.json"""
+        import json
+
+        # Create subdirectory structure
+        for fl, col_grid in [("1F~2F", "A"), ("3F~14F", "B")]:
+            sub = tmp_path / fl
+            sub.mkdir()
+            data = make_elements(
+                columns=[make_column(col_grid, "1", "C90X90", [fl.split("~")[0]])],
+            )
+            with open(sub / "elements.json", "w") as f:
+                json.dump(data, f)
+
+        # Simulate what --inputs-dir does: glob */elements.json
+        from pathlib import Path
+        dir_path = Path(tmp_path)
+        json_files = sorted(dir_path.glob("*/elements.json"))
+        assert len(json_files) == 2
+        assert all(f.name == "elements.json" for f in json_files)
+
+    def test_subfolder_fallback_to_flat(self, tmp_path):
+        """Flat structure fallback: calibrated/*.json"""
+        import json
+
+        # Create flat structure (no subdirectories)
+        for fl in ["1F~2F", "3F~14F"]:
+            data = make_elements(
+                columns=[make_column("A", "1", "C90X90", [fl.split("~")[0]])],
+            )
+            with open(tmp_path / f"{fl}.json", "w") as f:
+                json.dump(data, f)
+
+        # Simulate fallback: */elements.json finds nothing, falls back to *.json
+        from pathlib import Path
+        dir_path = Path(tmp_path)
+        json_files = sorted(dir_path.glob("*/elements.json"))
+        assert len(json_files) == 0  # no subfolder match
+        json_files = sorted(dir_path.glob("*.json"))
+        assert len(json_files) == 2  # flat fallback works

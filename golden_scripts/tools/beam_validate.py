@@ -4,7 +4,9 @@ Beam Validate Tool — Deterministic beam endpoint connectivity validator.
 Phase 1 of the BTS workflow extracts major beams from structural plans via
 pptx_to_elements.py. The extracted beam endpoint coordinates may not land
 precisely on grid intersections, columns, walls, or other beams due to PPTX
-shape imprecision. This tool validates and auto-snaps floating endpoints.
+shape imprecision. This tool validates and auto-snaps floating endpoints,
+corrects near-orthogonal angle deviations, and splits beams at intermediate
+column/wall supports.
 
 Usage:
     python -m golden_scripts.tools.beam_validate \
@@ -13,6 +15,21 @@ Usage:
         --output elements_validated.json \
         --tolerance 1.5 \
         --report beam_validation_report.json
+
+    # With angle correction + splitting (default):
+    python -m golden_scripts.tools.beam_validate \
+        --elements elements.json \
+        --grid-data grid_data.json \
+        --output elements_validated.json \
+        --angle-threshold 5.0 \
+        --split-tolerance 0.15
+
+    # Disable angle correction or splitting:
+    python -m golden_scripts.tools.beam_validate \
+        --elements elements.json \
+        --grid-data grid_data.json \
+        --output elements_validated.json \
+        --no-angle-correct --no-split
 
     # Preview without writing:
     python -m golden_scripts.tools.beam_validate \
@@ -39,6 +56,28 @@ from golden_scripts.tools.config_snap import (
 # ---------------------------------------------------------------------------
 # 1. Target construction
 # ---------------------------------------------------------------------------
+
+def _normalize_grid_data_for_bv(raw):
+    """Accept any grid_data format, return {x: [{label, coordinate}], y: [...]}.
+
+    Supported input formats:
+      1. {grids: {x: [{label, coordinate}], y: [...]}}      — read_grid.py output (canonical)
+      2. {x_grids: [{name, coordinate}], y_grids: [...]}     — affine_calibrate format
+      3. {x: [{label, coordinate}], y: [...]}                — already flat (pass-through)
+    """
+    # Format 1: nested under "grids"
+    if "grids" in raw:
+        inner = raw["grids"]
+        return {"x": inner.get("x", []), "y": inner.get("y", [])}
+    # Format 2: affine format with "name" field
+    if "x_grids" in raw:
+        return {
+            "x": [{"label": g["name"], "coordinate": g["coordinate"]} for g in raw["x_grids"]],
+            "y": [{"label": g["name"], "coordinate": g["coordinate"]} for g in raw.get("y_grids", [])],
+        }
+    # Format 3: already {x: [{label}]} — pass through
+    return raw
+
 
 def build_beam_targets(elements, grid_data):
     """Build snap targets from grid intersections, columns, and walls.
@@ -113,7 +152,369 @@ def _grid_label_at(x, y, grid_data):
 
 
 # ---------------------------------------------------------------------------
-# 2. Single-point snapping
+# 2. Angle correction
+# ---------------------------------------------------------------------------
+
+def _find_nearest_grid_value(coord, grid_lines):
+    """Find nearest grid line coordinate.
+
+    Parameters
+    ----------
+    coord : float
+        Coordinate to match.
+    grid_lines : list[dict]
+        [{"label": "A", "coordinate": 0.0}, ...]
+
+    Returns
+    -------
+    tuple
+        (grid_coordinate, distance, grid_label) or (None, float('inf'), None).
+    """
+    if not grid_lines:
+        return None, float("inf"), None
+    best_coord = None
+    best_dist = float("inf")
+    best_label = None
+    for g in grid_lines:
+        d = abs(g["coordinate"] - coord)
+        if d < best_dist:
+            best_dist = d
+            best_coord = g["coordinate"]
+            best_label = g["label"]
+    return best_coord, best_dist, best_label
+
+
+def correct_angles(elements, grid_data, angle_threshold_deg=5.0):
+    """Auto-correct near-orthogonal angle deviations for beams and walls.
+
+    For each beam/wall with endpoints (x1,y1)→(x2,y2):
+    - If nearly horizontal (angle ≤ threshold): align Y coordinates to nearest
+      Y grid line, or fallback to average.
+    - If nearly vertical (|angle - 90°| ≤ threshold): align X coordinates to
+      nearest X grid line, or fallback to average.
+    - Otherwise: leave unchanged (true diagonal).
+
+    Angle correction runs BEFORE snap so that orthogonal elements align cleanly.
+
+    Parameters
+    ----------
+    elements : dict
+        Elements with "beams" and "walls" lists.
+    grid_data : dict
+        Grid data with "x" and "y" lists.
+    angle_threshold_deg : float
+        Maximum angle deviation from horizontal/vertical to correct (default 5.0).
+
+    Returns
+    -------
+    tuple[dict, list[dict]]
+        (corrected_elements, angle_report_list)
+    """
+    threshold_rad = math.radians(angle_threshold_deg)
+    x_grids = grid_data.get("x", [])
+    y_grids = grid_data.get("y", [])
+    # Max distance to accept a grid line (beyond this, use average)
+    grid_max_dist = 2.0
+
+    angle_report = []
+
+    for element_type in ("beams", "walls"):
+        items = elements.get(element_type, [])
+        for idx, item in enumerate(items):
+            x1, y1 = item["x1"], item["y1"]
+            x2, y2 = item["x2"], item["y2"]
+            dx = x2 - x1
+            dy = y2 - y1
+            length = math.hypot(dx, dy)
+            if length < 0.01:
+                continue  # skip zero-length
+
+            angle = math.atan2(abs(dy), abs(dx))  # 0=horizontal, pi/2=vertical
+
+            corrected = False
+            correction_axis = None
+            target_label = None
+            original = [x1, y1, x2, y2]
+
+            if angle <= threshold_rad:
+                # Near horizontal → align Y
+                correction_axis = "Y"
+                g1_coord, g1_dist, g1_label = _find_nearest_grid_value(y1, y_grids)
+                g2_coord, g2_dist, g2_label = _find_nearest_grid_value(y2, y_grids)
+
+                if g1_dist <= g2_dist and g1_dist <= grid_max_dist:
+                    y_target = g1_coord
+                    target_label = g1_label
+                elif g2_dist <= grid_max_dist:
+                    y_target = g2_coord
+                    target_label = g2_label
+                else:
+                    y_target = round((y1 + y2) / 2, 2)
+                    target_label = "average"
+
+                item["y1"] = round(y_target, 2)
+                item["y2"] = round(y_target, 2)
+                corrected = True
+
+            elif abs(angle - math.pi / 2) <= threshold_rad:
+                # Near vertical → align X
+                correction_axis = "X"
+                g1_coord, g1_dist, g1_label = _find_nearest_grid_value(x1, x_grids)
+                g2_coord, g2_dist, g2_label = _find_nearest_grid_value(x2, x_grids)
+
+                if g1_dist <= g2_dist and g1_dist <= grid_max_dist:
+                    x_target = g1_coord
+                    target_label = g1_label
+                elif g2_dist <= grid_max_dist:
+                    x_target = g2_coord
+                    target_label = g2_label
+                else:
+                    x_target = round((x1 + x2) / 2, 2)
+                    target_label = "average"
+
+                item["x1"] = round(x_target, 2)
+                item["x2"] = round(x_target, 2)
+                corrected = True
+
+            if corrected:
+                displacement = max(
+                    math.hypot(item["x1"] - original[0], item["y1"] - original[1]),
+                    math.hypot(item["x2"] - original[2], item["y2"] - original[3]),
+                )
+                angle_report.append({
+                    "element_type": element_type.rstrip("s"),  # "beam" or "wall"
+                    "index": idx,
+                    "section": item.get("section", ""),
+                    "original": original,
+                    "corrected": [item["x1"], item["y1"], item["x2"], item["y2"]],
+                    "angle_deg": round(math.degrees(angle), 2),
+                    "correction_axis": correction_axis,
+                    "target_grid_label": target_label,
+                    "displacement": round(displacement, 4),
+                })
+
+    return elements, angle_report
+
+
+# ---------------------------------------------------------------------------
+# 3. Beam splitting
+# ---------------------------------------------------------------------------
+
+def segment_intersection(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2):
+    """Compute intersection point of two line segments.
+
+    Returns (x, y, t_a, t_b) where t_a and t_b are parameter values [0,1]
+    on segment A and B respectively, or None if no intersection.
+    """
+    dax = ax2 - ax1
+    day = ay2 - ay1
+    dbx = bx2 - bx1
+    dby = by2 - by1
+
+    denom = dax * dby - day * dbx
+    if abs(denom) < 1e-12:
+        return None  # parallel or coincident
+
+    t_a = ((bx1 - ax1) * dby - (by1 - ay1) * dbx) / denom
+    t_b = ((bx1 - ax1) * day - (by1 - ay1) * dax) / denom
+
+    if t_a < -1e-9 or t_a > 1 + 1e-9 or t_b < -1e-9 or t_b > 1 + 1e-9:
+        return None  # no intersection within segments
+
+    x = ax1 + t_a * dax
+    y = ay1 + t_a * day
+    return x, y, t_a, t_b
+
+
+def find_intermediate_supports(beam, columns, walls, split_tolerance=0.15):
+    """Find intermediate support points (columns/walls) along a beam.
+
+    Parameters
+    ----------
+    beam : dict
+        Beam with x1,y1,x2,y2,floors.
+    columns : list[dict]
+        Column list with grid_x, grid_y, floors.
+    walls : list[dict]
+        Wall list with x1,y1,x2,y2,floors.
+    split_tolerance : float
+        Max perpendicular distance for column projection (default 0.15m).
+
+    Returns
+    -------
+    list[tuple]
+        [(t, x, y, source_label)] sorted by t, where t is parameter [0,1].
+    """
+    bx1, by1 = beam["x1"], beam["y1"]
+    bx2, by2 = beam["x2"], beam["y2"]
+    b_floors = beam.get("floors", [])
+    bdx = bx2 - bx1
+    bdy = by2 - by1
+    b_len_sq = bdx * bdx + bdy * bdy
+    if b_len_sq < 1e-12:
+        return []
+    b_len = math.sqrt(b_len_sq)
+
+    supports = []
+
+    # Check columns
+    for col in columns:
+        if not floors_overlap(b_floors, col.get("floors", [])):
+            continue
+        cx, cy = col["grid_x"], col["grid_y"]
+        # Project column onto beam line
+        t = ((cx - bx1) * bdx + (cy - by1) * bdy) / b_len_sq
+        if t <= 0.02 or t >= 0.98:
+            continue  # at or beyond endpoints
+        # Perpendicular distance
+        proj_x = bx1 + t * bdx
+        proj_y = by1 + t * bdy
+        d = math.hypot(cx - proj_x, cy - proj_y)
+        if d <= split_tolerance:
+            supports.append((t, round(proj_x, 2), round(proj_y, 2),
+                             f"column at ({col['grid_x']},{col['grid_y']})"))
+
+    # Check walls
+    for wall in walls:
+        if not floors_overlap(b_floors, wall.get("floors", [])):
+            continue
+        wx1, wy1 = wall["x1"], wall["y1"]
+        wx2, wy2 = wall["x2"], wall["y2"]
+        # Check parallelism: skip walls parallel to beam
+        wdx = wx2 - wx1
+        wdy = wy2 - wy1
+        w_len = math.hypot(wdx, wdy)
+        if w_len < 1e-6:
+            continue
+        dot = abs((bdx * wdx + bdy * wdy) / (b_len * w_len))
+        if dot > 0.95:
+            continue  # parallel wall, skip
+
+        result = segment_intersection(bx1, by1, bx2, by2, wx1, wy1, wx2, wy2)
+        if result is None:
+            continue
+        x, y, t_beam, t_wall = result
+        if t_beam <= 0.02 or t_beam >= 0.98:
+            continue  # at or beyond endpoints
+        supports.append((t_beam, round(x, 2), round(y, 2),
+                         f"wall ({wx1},{wy1})-({wx2},{wy2})"))
+
+    # Sort by t, deduplicate close points (delta_t < 0.02)
+    supports.sort(key=lambda s: s[0])
+    deduped = []
+    for s in supports:
+        if deduped and abs(s[0] - deduped[-1][0]) < 0.02:
+            continue
+        deduped.append(s)
+
+    return deduped
+
+
+def split_beam(beam, support_points):
+    """Split a beam at support points into N+1 sub-beams.
+
+    Each sub-beam inherits section, floors, and all extra fields.
+
+    Parameters
+    ----------
+    beam : dict
+        Original beam dict.
+    support_points : list[tuple]
+        [(t, x, y, label)] from find_intermediate_supports.
+
+    Returns
+    -------
+    list[dict]
+        List of sub-beam dicts.
+    """
+    if not support_points:
+        return [beam]
+
+    # Collect all split coordinates in order
+    points = [(beam["x1"], beam["y1"])]
+    for _, x, y, _ in support_points:
+        points.append((x, y))
+    points.append((beam["x2"], beam["y2"]))
+
+    # Build sub-beams
+    sub_beams = []
+    # Collect extra fields to inherit
+    skip_keys = {"x1", "y1", "x2", "y2"}
+    extra = {k: v for k, v in beam.items() if k not in skip_keys}
+
+    for i in range(len(points) - 1):
+        p1 = points[i]
+        p2 = points[i + 1]
+        # Skip very short sub-beams (< 0.1m)
+        if math.hypot(p2[0] - p1[0], p2[1] - p1[1]) < 0.1:
+            continue
+        sub = dict(extra)
+        sub["x1"] = p1[0]
+        sub["y1"] = p1[1]
+        sub["x2"] = p2[0]
+        sub["y2"] = p2[1]
+        sub_beams.append(sub)
+
+    return sub_beams if sub_beams else [beam]
+
+
+def split_all_beams(elements, grid_data, split_tolerance=0.15):
+    """Split all beams at intermediate column/wall supports.
+
+    Parameters
+    ----------
+    elements : dict
+        Elements with "beams", "columns", "walls".
+    grid_data : dict
+        Grid data (unused directly, reserved for future).
+    split_tolerance : float
+        Max perpendicular distance for column projection.
+
+    Returns
+    -------
+    tuple[dict, dict]
+        (elements_with_split_beams, split_report)
+    """
+    beams = elements.get("beams", [])
+    columns = elements.get("columns", [])
+    walls = elements.get("walls", [])
+
+    new_beams = []
+    split_details = []
+    split_count = 0
+    new_from_split = 0
+
+    for i, beam in enumerate(beams):
+        supports = find_intermediate_supports(beam, columns, walls, split_tolerance)
+        if supports:
+            sub_beams = split_beam(beam, supports)
+            new_beams.extend(sub_beams)
+            split_count += 1
+            new_from_split += len(sub_beams) - 1
+            split_details.append({
+                "original_index": i,
+                "section": beam.get("section", ""),
+                "original_coords": [beam["x1"], beam["y1"], beam["x2"], beam["y2"]],
+                "split_points": [(s[1], s[2], s[3]) for s in supports],
+                "result_count": len(sub_beams),
+            })
+        else:
+            new_beams.append(beam)
+
+    elements["beams"] = new_beams
+
+    split_report = {
+        "split_beams": split_count,
+        "new_beams_from_split": new_from_split,
+        "total_beams_after_split": len(new_beams),
+        "split_details": split_details,
+    }
+
+    return elements, split_report
+
+
+# ---------------------------------------------------------------------------
+# 4. Single-point snapping
 # ---------------------------------------------------------------------------
 
 def snap_beam_point(px, py, floors, targets, tolerance, grid_data=None):
@@ -189,6 +590,10 @@ def _build_target_info(target, nx, ny, grid_data):
     return f"target at ({nx}, {ny})"
 
 
+# ---------------------------------------------------------------------------
+# 5. Snap helpers
+# ---------------------------------------------------------------------------
+
 def _find_nearest_any(px, py, targets):
     """Find nearest target regardless of floor overlap. For warning messages."""
     best_nx, best_ny, best_dist = None, None, float("inf")
@@ -207,16 +612,18 @@ def _find_nearest_any(px, py, targets):
 
 
 # ---------------------------------------------------------------------------
-# 3. Main validation
+# 6. Main validation
 # ---------------------------------------------------------------------------
 
-def validate_beams(elements, grid_data, tolerance=1.5):
+def validate_beams(elements, grid_data, tolerance=1.5,
+                   split_tolerance=0.15, no_split=False,
+                   angle_threshold_deg=5.0, no_angle_correct=False):
     """Validate and auto-snap major beam endpoints.
 
-    Uses a 3-round snapping strategy:
-      Round 1: Snap to grid intersections + columns + walls only.
-      Round 2: Add fully-snapped beams as segment targets, snap remaining.
-      Round 3: Add newly fully-snapped beams, final pass.
+    Pipeline order:
+      Step 0: Angle correction (correct near-orthogonal beams/walls)
+      Step 1-3: 3-round snap (grid + columns + walls + beams)
+      Step 4: Beam splitting (split at intermediate column/wall supports)
 
     Parameters
     ----------
@@ -226,6 +633,14 @@ def validate_beams(elements, grid_data, tolerance=1.5):
         Grid data with "x" and "y" lists.
     tolerance : float
         Maximum snap distance in meters (default 1.5).
+    split_tolerance : float
+        Max perpendicular distance for beam splitting (default 0.15m).
+    no_split : bool
+        If True, skip beam splitting step.
+    angle_threshold_deg : float
+        Max angle deviation to correct (default 5.0 degrees).
+    no_angle_correct : bool
+        If True, skip angle correction step.
 
     Returns
     -------
@@ -234,6 +649,12 @@ def validate_beams(elements, grid_data, tolerance=1.5):
     """
     # Deep copy to avoid mutating the original
     elements = json.loads(json.dumps(elements))
+
+    # --- Step 0: Angle correction ---
+    angle_corrections = []
+    if not no_angle_correct:
+        elements, angle_corrections = correct_angles(
+            elements, grid_data, angle_threshold_deg)
 
     beams = elements.get("beams", [])
     n = len(beams)
@@ -251,6 +672,13 @@ def validate_beams(elements, grid_data, tolerance=1.5):
             "avg_snap_distance": 0,
             "corrections": [],
             "warnings": [],
+            "angle_corrections": angle_corrections,
+            "angle_corrected_beams": sum(1 for a in angle_corrections if a["element_type"] == "beam"),
+            "angle_corrected_walls": sum(1 for a in angle_corrections if a["element_type"] == "wall"),
+            "split_beams": 0,
+            "new_beams_from_split": 0,
+            "total_beams_after_split": 0,
+            "split_details": [],
         }
         return elements, report
 
@@ -404,6 +832,16 @@ def validate_beams(elements, grid_data, tolerance=1.5):
                 "message": "Zero-length beam after snap — both endpoints at same location",
             })
 
+    # --- Step 4: Beam splitting ---
+    split_report = {
+        "split_beams": 0,
+        "new_beams_from_split": 0,
+        "total_beams_after_split": n,
+        "split_details": [],
+    }
+    if not no_split:
+        elements, split_report = split_all_beams(elements, grid_data, split_tolerance)
+
     # --- Build report ---
     snap_distances = [c["snap_distance"] for c in corrections]
     report = {
@@ -415,13 +853,17 @@ def validate_beams(elements, grid_data, tolerance=1.5):
         "avg_snap_distance": round(sum(snap_distances) / len(snap_distances), 4) if snap_distances else 0,
         "corrections": corrections,
         "warnings": warnings,
+        "angle_corrections": angle_corrections,
+        "angle_corrected_beams": sum(1 for a in angle_corrections if a["element_type"] == "beam"),
+        "angle_corrected_walls": sum(1 for a in angle_corrections if a["element_type"] == "wall"),
+        **split_report,
     }
 
     return elements, report
 
 
 # ---------------------------------------------------------------------------
-# 4. CLI entry point
+# 7. CLI entry point
 # ---------------------------------------------------------------------------
 
 def main():
@@ -435,6 +877,14 @@ def main():
                         help="Path for validated elements output")
     parser.add_argument("--tolerance", type=float, default=1.5,
                         help="Snap tolerance in meters (default: 1.5)")
+    parser.add_argument("--angle-threshold", type=float, default=5.0,
+                        help="Angle correction threshold in degrees (default: 5.0)")
+    parser.add_argument("--no-angle-correct", action="store_true",
+                        help="Skip angle correction step")
+    parser.add_argument("--split-tolerance", type=float, default=0.15,
+                        help="Max perpendicular distance for beam splitting (default: 0.15m)")
+    parser.add_argument("--no-split", action="store_true",
+                        help="Skip beam splitting step")
     parser.add_argument("--report", default=None,
                         help="Path for validation report JSON (optional)")
     parser.add_argument("--dry-run", action="store_true",
@@ -446,6 +896,7 @@ def main():
         elements = json.load(f)
     with open(args.grid_data, encoding="utf-8") as f:
         grid_data = json.load(f)
+    grid_data = _normalize_grid_data_for_bv(grid_data)
 
     n_beams = len(elements.get("beams", []))
     n_cols = len(elements.get("columns", []))
@@ -459,6 +910,10 @@ def main():
     print(f"  x-grids: {x_grids}, y-grids: {y_grids}")
     print(f"  grid intersections: {x_grids * y_grids}")
     print(f"  tolerance: {args.tolerance}m")
+    if not args.no_angle_correct:
+        print(f"  angle threshold: {args.angle_threshold}°")
+    if not args.no_split:
+        print(f"  split tolerance: {args.split_tolerance}m")
 
     if n_beams == 0:
         print("\nNo beams to validate.")
@@ -469,7 +924,14 @@ def main():
         return
 
     # Run validation
-    validated, report = validate_beams(elements, grid_data, tolerance=args.tolerance)
+    validated, report = validate_beams(
+        elements, grid_data,
+        tolerance=args.tolerance,
+        split_tolerance=args.split_tolerance,
+        no_split=args.no_split,
+        angle_threshold_deg=args.angle_threshold,
+        no_angle_correct=args.no_angle_correct,
+    )
 
     # Print summary
     print(f"\n--- Beam Validation Summary ---")
@@ -480,6 +942,19 @@ def main():
     if report["snapped_endpoints"] > 0:
         print(f"  Max snap distance: {report['max_snap_distance']:.4f}m")
         print(f"  Avg snap distance: {report['avg_snap_distance']:.4f}m")
+
+    # Angle correction summary
+    if report.get("angle_corrections"):
+        n_angle = len(report["angle_corrections"])
+        print(f"  Angle corrections: {n_angle} "
+              f"(beams: {report['angle_corrected_beams']}, "
+              f"walls: {report['angle_corrected_walls']})")
+
+    # Split summary
+    if report.get("split_beams", 0) > 0:
+        print(f"  Split beams: {report['split_beams']} → "
+              f"{report['new_beams_from_split']} new sub-beams "
+              f"(total after split: {report['total_beams_after_split']})")
 
     if report["warnings"]:
         print(f"\nWARNINGS ({len(report['warnings'])}):")
@@ -493,12 +968,24 @@ def main():
     if args.dry_run:
         print(f"\n[DRY RUN] No output written.")
         if report["corrections"]:
-            print(f"\nCorrections preview ({len(report['corrections'])}):")
+            print(f"\nSnap corrections preview ({len(report['corrections'])}):")
             for c in report["corrections"]:
                 print(f"  beam[{c['beam_index']}] {c['section']} {c['endpoint']}: "
                       f"({c['original_coord'][0]}, {c['original_coord'][1]}) -> "
                       f"({c['corrected_coord'][0]}, {c['corrected_coord'][1]}) "
                       f"d={c['snap_distance']}m [{c['target_label']}]")
+        if report.get("angle_corrections"):
+            print(f"\nAngle corrections preview ({len(report['angle_corrections'])}):")
+            for a in report["angle_corrections"]:
+                print(f"  {a['element_type']}[{a['index']}] {a['section']}: "
+                      f"{a['angle_deg']}° → {a['correction_axis']} "
+                      f"[{a['target_grid_label']}] Δ={a['displacement']}m")
+        if report.get("split_details"):
+            print(f"\nSplit preview ({len(report['split_details'])}):")
+            for s in report["split_details"]:
+                pts = ", ".join(f"({p[0]},{p[1]})" for p in s["split_points"])
+                print(f"  beam[{s['original_index']}] {s['section']}: "
+                      f"→ {s['result_count']} segments at [{pts}]")
     else:
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(validated, f, ensure_ascii=False, indent=2)

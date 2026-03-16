@@ -14,6 +14,8 @@ from golden_scripts.tools.affine_calibrate import (
     collect_correspondences,
     align_sb_elements,
     find_fallback_transform,
+    _normalize_grid_data_for_affine,
+    compute_grid_transform,
 )
 
 
@@ -223,3 +225,69 @@ class TestFindFallback:
 
     def test_empty(self):
         assert find_fallback_transform({}, 3) is None
+
+
+# ---------------------------------------------------------------------------
+# _normalize_grid_data_for_affine
+# ---------------------------------------------------------------------------
+
+class TestNormalizeGridDataForAffine:
+
+    def test_canonical_format(self):
+        """read_grid.py output: {grids: {x: [{label}], y: [{label}]}}."""
+        raw = {
+            "grids": {
+                "x": [{"label": "A", "coordinate": 0.0}, {"label": "B", "coordinate": 8.5}],
+                "y": [{"label": "1", "coordinate": 0.0}, {"label": "2", "coordinate": 6.0}],
+                "x_bubble": "End",
+                "y_bubble": "Start",
+            }
+        }
+        result = _normalize_grid_data_for_affine(raw)
+        assert "x_grids" in result and "y_grids" in result
+        assert len(result["x_grids"]) == 2
+        assert result["x_grids"][0]["name"] == "A"
+        assert result["x_grids"][0]["coordinate"] == 0.0
+        assert result["y_grids"][1]["name"] == "2"
+        assert result["y_grids"][1]["coordinate"] == 6.0
+
+    def test_flat_format(self):
+        """Flat format: {x: [{label}], y: [{label}]}."""
+        raw = {
+            "x": [{"label": "A", "coordinate": 0.0}, {"label": "B", "coordinate": 8.5}],
+            "y": [{"label": "1", "coordinate": 0.0}],
+        }
+        result = _normalize_grid_data_for_affine(raw)
+        assert result["x_grids"][0]["name"] == "A"
+        assert result["x_grids"][1]["coordinate"] == 8.5
+        assert result["y_grids"][0]["name"] == "1"
+
+    def test_affine_passthrough(self):
+        """Already affine format: {x_grids: [{name}], y_grids: [{name}]} — pass through."""
+        raw = {
+            "x_grids": [{"name": "A", "coordinate": 0.0}],
+            "y_grids": [{"name": "1", "coordinate": 0.0}],
+        }
+        result = _normalize_grid_data_for_affine(raw)
+        assert result is raw  # same object, no conversion
+
+    def test_canonical_works_with_compute_grid_transform(self):
+        """End-to-end: canonical grid_data format works with compute_grid_transform."""
+        grid_data = {
+            "grids": {
+                "x": [{"label": "A", "coordinate": 0.0}, {"label": "B", "coordinate": 8.5}],
+                "y": [{"label": "1", "coordinate": 0.0}, {"label": "2", "coordinate": 6.0}],
+            }
+        }
+        anchors = {
+            "anchors": [
+                {"grid_name": "A", "direction": "X", "ppt_x": 2.0},
+                {"grid_name": "B", "direction": "X", "ppt_x": 10.5},
+                {"grid_name": "1", "direction": "Y", "ppt_y": 1.0},
+                {"grid_name": "2", "direction": "Y", "ppt_y": 7.0},
+            ]
+        }
+        transform = compute_grid_transform(anchors, grid_data)
+        assert transform is not None
+        assert transform["n_x_anchors"] == 2
+        assert transform["n_y_anchors"] == 2

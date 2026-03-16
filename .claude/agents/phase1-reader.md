@@ -27,48 +27,146 @@ maxTurns: 50
 4. **下構樓層（B*F + 1F）的 building_outline 必須一致。** 下構範圍 = 基地範圍。
 5. **必須交叉比對結構配置圖和建築平面圖**，確認實際建物範圍。
 
+## Runtime Parameters (Team Lead 在啟動 prompt 提供)
+
+| 變數 | 說明 |
+|------|------|
+| PPT_PATH | 結構配置圖 PPTX 路徑 |
+| PAGE_FLOOR_MAPPING | 你負責的 --page-floors 子集 |
+| SLIDES_INFO_DIR | per-slide JSON 輸出目錄 |
+| CASE_FOLDER | 案件資料夾絕對路徑 |
+| GRID_DATA | ETABS Grid JSON（ground truth，名稱和座標以此為準） |
+| STORY_TABLE | 已確認的樓層高度 JSON（直接複製到 grid_info.json） |
+| STRENGTH_TABLE | 已確認的強度分配 JSON（直接複製到 grid_info.json） |
+| GROUP_FLOORS | 你負責的樓層範圍 |
+| GROUP_PAGES | 對應的 PDF 頁面 |
+| PAGE_FLOOR_LABELS | 各頁面的樓層範圍標註 |
+| ROLE_NOTE | (optional) READER-B 特殊指示 |
+
 ## 啟動步驟
 
 1. **讀取 Team Lead 提供的 Grid 資料**，作為 Grid 名稱的 ground truth
 2. **執行 Element Extraction Step**（見下方）— 產出構件 JSON
 3. 讀取完整的 Skill 指引：`skills/plan-reader/SKILL.md`
 4. 掃描 `{Case Folder}/結構配置圖/` 中的裁切 PNG
-   - 先看 `*_full.png` 取得全局概覽
-   - 再看 `*_crop_*.png` 取得局部細節
+   - 先看 `*/screenshots/*_full.png` 取得全局概覽
+   - 再看 `*/screenshots/*_crop_*.png` 取得局部細節
 5. 讀取團隊設定：`~/.claude/teams/{team-name}/config.json`
 6. 用 `TaskList` 查看你被指派的任務
 7. **只讀取你被分配的樓層範圍頁面**（Team Lead 在啟動 prompt 指定）
-8. **審閱大梁驗證報告**（如 Team Lead 提供 `beam_validation_report.json` 路徑）
+8. **審閱大梁驗證報告**（Step E3.5 per-slide beam reports）
 
-## Element Extraction Step（必要步驟）
+## Element Extraction + Grid Calibration（必要步驟）
 
-在做任何視覺任務之前，先執行構件提取：
+在做任何視覺任務之前，先執行構件提取和校正：
 
-1. **執行 pptx_to_elements.py**：
-   ```bash
-   python -m golden_scripts.tools.pptx_to_elements \
-     --input "{PPT_PATH}" \
-     --output "{OUTPUT_FILE}" \
-     --page-floors "{PAGE_FLOOR_MAPPING}" \
-     --phase phase1 \
-     --crop --crop-dir "{CASE_FOLDER}/結構配置圖/"
+### Step E1: 構件提取（Per-slide JSON 模式）
+
+```bash
+python -m golden_scripts.tools.pptx_to_elements \
+  --input "{PPT_PATH}" \
+  --page-floors "{PAGE_FLOOR_MAPPING}" \
+  --phase phase1 \
+  --crop \
+  --slides-info-dir "{SLIDES_INFO_DIR}"
+```
+
+其中 `PPT_PATH`、`PAGE_FLOOR_MAPPING`、`SLIDES_INFO_DIR` 由 Team Lead 提供。
+- `SLIDES_INFO_DIR` 通常為 `{CASE_FOLDER}/結構配置圖/SLIDES INFO`
+- 不需要 `--output`：每頁自動輸出為 `{SLIDES_INFO_DIR}/{floor_label}/{floor_label}.json`
+- 截圖自動存到 `{SLIDES_INFO_DIR}/{floor_label}/screenshots/`
+- 如 Team Lead 指定 `--auto-floors`，改用 `--auto-floors` 取代 `--page-floors`
+
+> **grid_data.json 格式統一**：所有工具（affine_calibrate、beam_validate）
+> 都直接接受 read_grid.py 的輸出格式。不需要建立 grid_data_flat.json、
+> grid_data_bv.json、grid_data_affine.json 或 grid_data_calibrate.json 等格式轉換檔。
+> 所有步驟直接使用 `grid_data.json`。
+
+### Step E2: Grid 錨點辨識（AI 視覺）
+
+對你負責的每個 per-slide JSON 和對應截圖：
+
+1. **讀取截圖**：`{SLIDES_INFO_DIR}/{floor_label}/screenshots/{floor_label}_full.png`
+2. **讀取 per-slide JSON**：`{SLIDES_INFO_DIR}/{floor_label}/{floor_label}.json`（PPT-米座標）
+3. **讀取 grid_data.json**：取得 ETABS Grid 名稱和座標
+
+**3.5 確認 Grid Name 順序（MANDATORY — 防止 label 配反）**：
+   - **分析 grid_data.json 座標排序**：
+     - X 方向：列出 label 按 coordinate 遞增的順序（例如 `1(0.00) → 2(8.50) → 3(17.00)`）
+     - Y 方向：列出 label 按 coordinate 遞增的順序（例如 `8(0.00) → 7(8.50) → 6(17.00) → 5(25.50)`）
+     - 明確記下：**座標最小的 label 是什麼、座標最大的 label 是什麼**
+   - **從截圖讀取 Grid Bubble 文字**：
+     - 找到圖面邊緣的 grid bubble（圓圈標註）
+     - 讀取每個 bubble 的實際文字（如 "8", "7", "6", "5"）
+     - 記錄 bubble 在圖面上的相對位置（哪個在左/右/上/下）
+   - **交叉驗證**：
+     - 比對 bubble 文字 ↔ grid_data.json 的 label 集合（應完全一致）
+     - 確認方向：例如 grid_data 顯示 Y 座標最小的是 "8"，截圖底部 bubble 也是 "8" → 一致
+     - 如不一致 → 重新檢查 bubble 讀取是否正確
+   - **❌ 禁止假設 Grid label 由下往上遞增或由左往右遞增**
+   - **✅ 必須以 grid_data.json 座標 + 截圖 bubble 文字為準**
+
+4. **辨識 Grid 線位置**：在截圖上找出至少 2 條 X-方向 + 2 條 Y-方向 Grid 線的 PPT-米座標
+5. **輸出 grid_anchors JSON**：
+   ```json
+   {
+     "anchors": [
+       {"grid_name": "1", "direction": "X", "ppt_x": 2.34},
+       {"grid_name": "5", "direction": "X", "ppt_x": 31.14},
+       {"grid_name": "A", "direction": "Y", "ppt_y": 1.20},
+       {"grid_name": "G", "direction": "Y", "ppt_y": 43.60}
+     ]
+   }
    ```
-   其中 `PPT_PATH`、`CASE_FOLDER`、`PAGE_FLOOR_MAPPING`、`OUTPUT_FILE` 由 Team Lead 提供。
-   輸出檔名通常為 `elements_A.json` 或 `elements_B.json`（各 READER 負責不同頁面子集）。
-   如 Team Lead 指定 `--auto-floors`，改用 `--auto-floors` 取代 `--page-floors`。
+   存到 `{SLIDES_INFO_DIR}/{floor_label}/grid_anchors_{floor_label}.json`
 
-2. **驗證結果**：
-   - 檢查 exit code：非 0 → SendMessage 回報 `EXTRACTION_FAILED` + 完整錯誤訊息
-   - 檢查輸出 summary：構件數量是否合理（每頁至少有數個構件）
-   - 檢查 Legend Validation 報告：所有 legend 項目是否有匹配 shapes
-   - 檢查 wall snap 訊息：牆座標是否對齊到梁軸線
-   - 如有 WARNING 關於 fallback scale，記錄但不中斷
+> **如何取得 PPT-米座標**：per-slide JSON 中的元素座標就是 PPT-米座標。
+> 找到圖面上最靠近某 Grid 線的梁/柱端點，其座標即為該 Grid 線的 PPT-米位置。
 
-3. **回報結果**：
-   - 成功：SendMessage 通知 Team Lead「`EXTRACTION_COMPLETE` — elements.json 已生成」+ 摘要（各頁構件數量、warnings）
-   - 失敗：SendMessage 通知 Team Lead「`EXTRACTION_FAILED`」+ 完整錯誤
+### Step E3: Affine 校正
 
-4. **完成後**：繼續執行視覺任務（building_outline、slab_region_matrix 等）
+對每個 per-slide JSON 執行校正：
+
+```bash
+python -m golden_scripts.tools.affine_calibrate \
+  --mode grid \
+  --per-slide "{SLIDES_INFO_DIR}/{floor_label}/{floor_label}.json" \
+  --grid-data "{CASE_FOLDER}/grid_data.json" \
+  --grid-anchors "{SLIDES_INFO_DIR}/{floor_label}/grid_anchors_{floor_label}.json" \
+  --output "{CASE_FOLDER}/calibrated/{floor_label}/elements.json"
+```
+
+檢查：
+- max_residual < 0.05m → OK
+- max_residual > 0.05m → 重新檢查 Grid 錨點是否正確
+
+### Step E3.5: 大梁驗證 + 分割（per-slide）
+
+對每個校正後的檔案執行驗證和分割：
+
+```bash
+python -m golden_scripts.tools.beam_validate \
+  --elements "{CASE_FOLDER}/calibrated/{floor_label}/elements.json" \
+  --grid-data "{CASE_FOLDER}/grid_data.json" \
+  --output "{CASE_FOLDER}/calibrated/{floor_label}/elements.json" \
+  --tolerance 1.5 \
+  --report "{SLIDES_INFO_DIR}/{floor_label}/beam_report_{floor_label}.json"
+```
+
+- 輸出覆寫 calibrated 檔案（驗證+分割後的梁取代原始資料）
+- Report 存到 SLIDES INFO 供視覺審閱
+- WARNING = 0 → OK；> 0 → 對照 PPT 截圖確認
+- split_beams > 0 → 確認分割位置合理（中間柱/牆）
+- angle_corrections > 0 → 確認角度校正合理（近正交梁/牆被校正，斜梁不動）
+
+### Step E4: 回報結果
+
+- 成功：SendMessage 通知 Team Lead「`EXTRACTION_COMPLETE` — per-slide JSONs + calibrated + validated outputs 已生成」+ 摘要（含 beam validation warnings/splits/angle corrections 數量）
+- 失敗：SendMessage 通知 Team Lead「`EXTRACTION_FAILED`」+ 完整錯誤
+
+### Step E5: 繼續視覺任務
+
+完成校正後，繼續執行 building_outline、core_grid_area 等視覺任務。
 
 ## 你的職責（Reduced — AI-Vision Only）
 
@@ -80,10 +178,12 @@ maxTurns: 50
    - 下構 building_outline 一致性：所有下構樓層（B*F + 1F）共用同一個 building_outline。
 4. **屋突核心區 (core_grid_area)**：從標準層圖面辨識電梯井和樓梯間的 Grid 範圍。即使 PPT 沒有屋突頁面也必須提供。
 5. **強度分配 (strength_map)**：直接使用 Team Lead 提供的 `STRENGTH_TABLE`，不需從圖面掃描強度。將 STRENGTH_TABLE 直接複製到 grid_info.json 的 `strength_map` 欄位。
-6. **大梁驗證報告審閱 (beam validation review)**：審閱 Team Lead 提供的 `beam_validation_report.json`：
-   - 檢視 corrections 摘要（校正數量、最大距離）
+6. **大梁驗證報告審閱 (beam validation review)**：審閱 Step E3.5 產生的 per-slide `{floor_label}/beam_report_{floor_label}.json`：
+   - 檢視 corrections 摘要（snap 校正數量、最大距離）
+   - 檢視 angle_corrections（角度校正數量、哪些梁/牆被校正）
+   - 檢視 split_beams（分割數量、分割位置是否在中間柱/牆）
    - 對 WARNING 項目（浮動大梁端點超過容差），交叉比對 PPT 裁切圖確認：是真實大梁？還是提取錯誤？
-   - SendMessage 回報驗證結果（OK / 有問題需人工調整）
+   - 在 Step E4 回報時包含驗證結果摘要
 
 **你不再需要**：
 - 逐一列出柱/梁/牆的座標和尺寸（`elements.json` 已有）
@@ -139,6 +239,8 @@ maxTurns: 50
 ### Grid 系統說明
 
 Grid 系統只需由一個 Reader 輸出。如果兩個 Reader 分別輸出了 Grid 資訊，CONFIG-BUILDER 會以較完整的為準。
+
+> 至少一個 READER 必須提供 core_grid_area。
 
 ## 完成後動作
 

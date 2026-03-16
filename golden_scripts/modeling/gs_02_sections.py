@@ -1,7 +1,7 @@
 """
 Golden Script 02: Batch Section Generation
 
-- Expands base sections +-20cm/5cm across all concrete grades
+- Creates exact frame sections across all used concrete grades (no size expansion)
 - Creates frame sections with CORRECT D/B mapping (T3=Depth, T2=Width)
 - Creates area sections (Slab=Membrane, Wall=Membrane, Raft=ShellThick)
 - Assigns rebar to all frame section properties
@@ -19,8 +19,7 @@ _dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import (
-    CONCRETE_GRADES, EXPAND_RANGE, EXPAND_STEP,
-    MIN_BEAM_W, MIN_BEAM_D, MIN_COL_DIM,
+    CONCRETE_GRADES,
     SHELL_MEMBRANE, SHELL_THICK,
     SLAB_WALL_MODIFIERS, RAFT_MODIFIERS,
     BEAM_COVER_TOP, BEAM_COVER_BOT, FB_COVER_TOP, FB_COVER_BOT,
@@ -59,26 +58,19 @@ def extract_used_grades(config):
 
 
 def expand_frame_sections(prefix, base_w, base_d, grades=None):
-    """Expand one base section into all size+grade combinations.
+    """Expand one base section across concrete grades (exact size, no ±20cm expansion).
     Returns list of (name, mat_name, depth_m, width_m).
 
     CRITICAL: depth_m goes to T3, width_m goes to T2.
     Name format is {PREFIX}{WIDTH}X{DEPTH}, API is SetRectangle(name, mat, T3=depth, T2=width).
     """
     results = []
-    min_w = MIN_COL_DIM if prefix == 'C' else MIN_BEAM_W
-    min_d = MIN_COL_DIM if prefix == 'C' else MIN_BEAM_D
-
-    for w in range(max(base_w - EXPAND_RANGE, min_w),
-                   base_w + EXPAND_RANGE + 1, EXPAND_STEP):
-        for d in range(max(base_d - EXPAND_RANGE, min_d),
-                       base_d + EXPAND_RANGE + 1, EXPAND_STEP):
-            for fc in (grades or CONCRETE_GRADES):
-                name = f"{prefix}{w}X{d}C{fc}"
-                mat = f"C{fc}"
-                depth_m = d / 100.0  # T3
-                width_m = w / 100.0  # T2
-                results.append((name, mat, depth_m, width_m))
+    for fc in (grades or CONCRETE_GRADES):
+        name = f"{prefix}{base_w}X{base_d}C{fc}"
+        mat = f"C{fc}"
+        depth_m = base_d / 100.0  # T3
+        width_m = base_w / 100.0  # T2
+        results.append((name, mat, depth_m, width_m))
     return results
 
 
@@ -289,7 +281,7 @@ def run(SapModel, config):
             all_frame.append((sec_name, mat, depth_m, width_m))
             print(f"  {sec_name} -> 1 section (single grade C{fc})")
         else:
-            # Base name: expand +-20cm across used grades only
+            # Base name: expand across used grades only (exact size)
             expanded = expand_frame_sections(prefix, w, d, grades=used_grades)
             all_frame.extend(expanded)
             print(f"  {sec_name} -> {len(expanded)} combinations")
@@ -381,7 +373,7 @@ def run(SapModel, config):
     # Summary
     print(f"\n  Created: {n_frame} frame, {n_area} area | Skipped: {len(bad_names)} (bad name)")
 
-    if n_frame == 0 and len(sections.get("frame", [])) > 0:
+    if n_frame == 0 and len(sections.get("frame", [])) > 0 and not existing_sections:
         raise RuntimeError("gs_02: 0 frame sections created. Check sections.frame names and materials.")
 
     SapModel.View.RefreshView(0, False)

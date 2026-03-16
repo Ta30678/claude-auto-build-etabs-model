@@ -1,0 +1,38 @@
+-因為GRID LINE 的設定似乎沒有辦法由AGENT設定(目前測試是這樣，如果錯了告訴我)，所以我會將一個設定好GRID LINE的模型先放置在該CASE 的MODEL FOLDER，不需要將MODEL的GRID LINE SYSTEM 重製。且有些CASE 的結構平面圖，會沒有GRID LINE BUBBLE 標註 GRID LINE 的LINE NAME，所以PHASE 1/2的AGENT可能會去猜測GRID LINE系統的設定，我目前想到在這種情況下(在PPT上找不到GRID LINE NAME的情況)，讓AGENT不搞混的方法有2 : 1.讓TEAM LEAD 先去找到模型上的grid line設定 2.先假設一套GRID LINE NAME，當CONFIG BUILDER AGENT 拿READER、LEAD產出的.JSON去對應模型的GRID LINE，但這必須要讓TEAM LEAD 告知/提醒 CONFIG BUilder AGENT GRID SYSTEM需要轉換。我個人是比較喜歡方案1，因為有些結構平面圖只會寫上部份的grid line設定，有些還是要人為定義；讓agent去找有可能會有誤差，或甚至錯誤(少grid system)-
+
+-根據上面的改動，我想確認reader讀結構圖時，因為PPT版面配置，以及視覺上的問題，有時候結構圖會有部分GRID LINE 會被擋住，這時候直接用截圖的方式看PPT配置會有問題，導致物件被忽視。我目前的想法是將結構配置底圖的.PNG獨立讀取，以免以上的問題發生，還是剛剛的改動已經可以應付這個問題了-
+
+-我想確認目前當使用者的PPT上沒有畫出R1F~PRF，目前在PHASE 1/2會怎麼應對。我的預設是讓PHASE 1/2的AGENT理解到R1F的結構尺寸配置跟頂樓一樣，R2、R3、PRF則是將梯聽/電、樓梯的位置以R1F的配置，再往上建。-
+
+-目前發現PHASE 1/2 的CONFIG BUILDER在處理/整合前面 READER AGENT產出的element.json、model.json，執行gs，會需要大量的時間、tokens，造成資源/效能浪費。我想讓reader將目前自己的步驟做完後，直接執行gs，讓config builder，不用再處理這些資訊，這個可行性如何?-
+
+-我想更新phase 1  。 1.因為在phase 1 不用建板，所以不需要去掃描/計算ppt上的板物件，牆物件還是要做。 2.在建大梁的時候會發現也會有梁物件懸空/未接續的情況，所以我要再phase 1也向phase 2 一樣，做梁的接續確認-
+
+-在phase 1/2 在識別ppt結構配置圖時，只需要將使用者有畫出物件建出即可；我在a21的案子測試，在結構圖上保留兩棟鏡向的結構物，一棟有畫出尺寸配置，一棟沒有畫，但ai會自動補上鏡向的建築物，這是不需要的動作，AI 只需要建立使用者有畫物件的範圍即可-
+
+
+現在建模有幾個原因會導致模型崩潰
+1.我在phase 1時，我會先建立一個空的、設定好grid system的model，但以目前的gs，因為設定new_model=true，所以所有東西都會被重置
+2.在gs 2的建frame sections 時，etabs崩潰，出現com rpc 連線中斷的問題
+
+幫我建立"產後"模型
+
+
+了解，建物並非對稱，是提取遺漏了很多物件。讓我仔細分析遺漏原因。問題在於 Slide 4/5 有大量 unmatched shapes：72 個 #FF0000、14 個 #FFFF00、15 個 #FF80FF。讓我看看 PPT 圖面的 legend 和 pptx_to_elements
+  有什麼選項可以改善。
+
+
+1.我在測試的時候看到 phase 1的reader a/b沒有將ppt讀取的資訊轉換成grid system 座標系統 2.目前看到還是會有遺漏frame           
+  section的問題，我想直接建立一個frame section check list 。在phase 1 check
+  一定要包含以下斷面開頭的關鍵字:"B"、"FB"(基礎層)、"WB"(下構)、"FWB"(基礎層)、"C"； PHASE
+  2要CHECK"SB"、FSB"(基礎層)、"SLAB"、"T"、"S"、"樓板"、"板"、"版"，以上不分大小寫、中英文，READER沒有掃描到的話就要重新掃描  
+  ，一定會有，這些是必要的物件，除非使用者說不用/沒有，否則不能略過 
+
+
+1.我在測試的時候看到 phase 1的reader a/b沒有將ppt讀取的資訊轉換成grid system 座標系統，且每一頁的PPT都要重新轉換座標，不能以一
+  一定要包含以下斷面開頭的關鍵字:"B"、"FB"(基礎層)、"WB"(下構)、"FWB"(基礎層)、"C"； PHASE
+  2要CHECK"SB"、FSB"(基礎層)、"SLAB"、"T"、"S"、"樓板"、"板"、"版"，以上不分大小寫、中英文，READER沒有掃描到的話就要重新掃描，一
+  3.現在還是會自動偵測非USER畫尺寸配置圖外的物件，我想要改成直接考慮ETABS設定的GRID LINE範圍內的物件，其他的都不管，不用理會結構
+
+
+

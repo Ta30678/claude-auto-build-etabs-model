@@ -93,13 +93,13 @@ is_rooftop_story("5F")        # False
 
 | Prefix | Type | 中文 | Shell Type | 相關技能 |
 |--------|------|------|-----------|---------|
-| `B` | Beam | 大梁 | — | plan-reader-elements |
-| `SB` | Small Beam | 小梁 | — | plan-reader-elements |
-| `WB` | Wall Beam | 壁梁 | — | plan-reader-elements |
-| `FB` | Foundation Beam | 基礎梁 | — | plan-reader-elements |
-| `FSB` | Foundation Small Beam | 基礎小梁 | — | plan-reader-elements |
-| `FWB` | Foundation Wall Beam | 基礎壁梁 | — | plan-reader-elements |
-| `C` | Column | 柱 | — | plan-reader-elements |
+| `B` | Beam | 大梁 | — | section-name |
+| `SB` | Small Beam | 小梁 | — | section-name |
+| `WB` | Wall Beam | 壁梁 | — | section-name |
+| `FB` | Foundation Beam | 基礎梁 | — | section-name |
+| `FSB` | Foundation Small Beam | 基礎小梁 | — | section-name |
+| `FWB` | Foundation Wall Beam | 基礎壁梁 | — | section-name |
+| `C` | Column | 柱 | — | section-name |
 | `W` | Wall | 牆 | Membrane | — |
 | `S` | Slab | 樓板 | Membrane | — |
 | `FS` | Foundation Slab | 基礎版 | ShellThick | — |
@@ -112,7 +112,7 @@ is_rooftop_story("5F")        # False
       C90X90C420 = X向90cm, Y向90cm, fc'=420
 ```
 
-詳細命名規則見 `plan-reader-elements` 第一節。
+詳細命名規則見 `section-name` skill。
 
 ---
 
@@ -141,8 +141,9 @@ All agents and skills should:
 | 技能 | 用途 |
 |------|------|
 | `plan-reader` | 結構配置圖核心解讀 |
-| `plan-reader-elements` | 構件辨識與命名規則 |
+| `plan-reader-elements` | 構件辨識規則 |
 | `plan-reader-floors` | 樓層對應與樓板判斷 |
+| `section-name` | 斷面命名與解析規則 |
 | `etabs-modeler` | ETABS API 參考（ad-hoc 腳本） |
 | `e2k-split` / `e2k-merge` | 分棟/合棟工具 |
 

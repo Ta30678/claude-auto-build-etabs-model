@@ -50,7 +50,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from lxml import etree
 from pptx import Presentation
+from pptx.enum.dml import MSO_COLOR_TYPE, MSO_THEME_COLOR_INDEX
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.util import Emu
 
@@ -176,15 +178,99 @@ def parse_page_floors(page_floors_str: str) -> dict[int, list[str]]:
     return result
 
 
-def _iter_text_shapes(slide):
-    """Yield all shapes with text, including inside GROUPs (recursive)."""
-    for shape in slide.shapes:
-        if hasattr(shape, 'has_text_frame') and shape.has_text_frame:
-            yield shape
+class _AbsShape:
+    """Proxy that overrides left/top with absolute slide coordinates."""
+    __slots__ = ('_shape', 'left', 'top')
+
+    def __init__(self, shape, abs_left, abs_top):
+        self._shape = shape
+        self.left = abs_left
+        self.top = abs_top
+
+    def __getattr__(self, name):
+        return getattr(self._shape, name)
+
+
+_NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+
+def _get_group_xfrm(group_shape):
+    """Extract group transform: (off_x, off_y, ext_cx, ext_cy, ch_off_x, ch_off_y, ch_ext_cx, ch_ext_cy)."""
+    sp_tree = group_shape._element
+    # grpSpPr/xfrm is the canonical location for group transforms
+    grp_sp_pr = sp_tree.find(f'{{{_NS_A}}}../grpSpPr') if False else None
+    xfrm_el = None
+    # Search in the group shape's XML element for xfrm under grpSpPr (PowerPoint namespace)
+    _NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    _NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    for ns_prefix in [
+        f'{{{_NS_A}}}',
+        '{http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing}',
+    ]:
+        xfrm_el = sp_tree.find(f'.//grpSpPr/{{{_NS_A}}}xfrm', sp_tree.nsmap if hasattr(sp_tree, 'nsmap') else {})
+        if xfrm_el is not None:
+            break
+    if xfrm_el is None:
+        # Try direct child search with lxml
+        for child in sp_tree:
+            tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+            if tag == 'grpSpPr':
+                for sub in child:
+                    sub_tag = sub.tag.split('}')[-1] if '}' in sub.tag else sub.tag
+                    if sub_tag == 'xfrm':
+                        xfrm_el = sub
+                        break
+                break
+    if xfrm_el is None:
+        # Fallback: use python-pptx properties, assume identity child transform
+        return (group_shape.left, group_shape.top,
+                group_shape.width, group_shape.height,
+                0, 0, group_shape.width, group_shape.height)
+
+    ns = _NS_A
+    off = xfrm_el.find(f'{{{ns}}}off')
+    ext = xfrm_el.find(f'{{{ns}}}ext')
+    ch_off = xfrm_el.find(f'{{{ns}}}chOff')
+    ch_ext = xfrm_el.find(f'{{{ns}}}chExt')
+
+    ox  = int(off.get('x', 0))    if off is not None else 0
+    oy  = int(off.get('y', 0))    if off is not None else 0
+    ecx = int(ext.get('cx', 1))   if ext is not None else 1
+    ecy = int(ext.get('cy', 1))   if ext is not None else 1
+    cox = int(ch_off.get('x', 0)) if ch_off is not None else 0
+    coy = int(ch_off.get('y', 0)) if ch_off is not None else 0
+    cecx = int(ch_ext.get('cx', ecx)) if ch_ext is not None else ecx
+    cecy = int(ch_ext.get('cy', ecy)) if ch_ext is not None else ecy
+
+    return (ox, oy, ecx, ecy, cox, coy, cecx, cecy)
+
+
+def _iter_slide_shapes(container, type_filter=None):
+    """Recursively yield _AbsShape proxies from container, penetrating GROUPs.
+
+    type_filter: tuple of MSO_SHAPE_TYPE to include (None = all non-GROUP).
+    Yields _AbsShape with absolute slide coordinates for left/top.
+    """
+    for shape in container.shapes:
         if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
-            for child in shape.shapes:
-                if hasattr(child, 'has_text_frame') and child.has_text_frame:
-                    yield child
+            ox, oy, ecx, ecy, cox, coy, cecx, cecy = _get_group_xfrm(shape)
+            for child_proxy in _iter_slide_shapes(shape, type_filter):
+                # child_proxy.left/top are in this group's child coord space
+                cx, cy = child_proxy.left, child_proxy.top
+                abs_x = int(ox + (cx - cox) * ecx / cecx) if cecx else ox + cx
+                abs_y = int(oy + (cy - coy) * ecy / cecy) if cecy else oy + cy
+                raw = child_proxy._shape if isinstance(child_proxy, _AbsShape) else child_proxy
+                yield _AbsShape(raw, abs_x, abs_y)
+        else:
+            if type_filter is None or shape.shape_type in type_filter:
+                yield _AbsShape(shape, shape.left, shape.top)
+
+
+def _iter_text_shapes(slide):
+    """Yield all shapes with text (as _AbsShape), including inside GROUPs (recursive)."""
+    for proxy in _iter_slide_shapes(slide):
+        if hasattr(proxy, 'has_text_frame') and proxy.has_text_frame:
+            yield proxy
 
 
 def _conf_rank(confidence: str) -> int:
@@ -606,21 +692,137 @@ MEASUREMENT_RE = re.compile(r"(\d+\.?\d*)\s*m\b")
 _COLUMN_SECTION_RE = re.compile(r"C(\d+)\s*[xX]\s*(\d+)")
 
 
+# ─── Theme Color Resolution ──────────────────────────────────────────────────
+
+_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+# Map theme XML child tag names to MSO_THEME_COLOR_INDEX enum values
+_THEME_TAG_TO_ENUM = {
+    "dk1": MSO_THEME_COLOR_INDEX.DARK_1,
+    "lt1": MSO_THEME_COLOR_INDEX.LIGHT_1,
+    "dk2": MSO_THEME_COLOR_INDEX.DARK_2,
+    "lt2": MSO_THEME_COLOR_INDEX.LIGHT_2,
+    "accent1": MSO_THEME_COLOR_INDEX.ACCENT_1,
+    "accent2": MSO_THEME_COLOR_INDEX.ACCENT_2,
+    "accent3": MSO_THEME_COLOR_INDEX.ACCENT_3,
+    "accent4": MSO_THEME_COLOR_INDEX.ACCENT_4,
+    "accent5": MSO_THEME_COLOR_INDEX.ACCENT_5,
+    "accent6": MSO_THEME_COLOR_INDEX.ACCENT_6,
+    "hlink": MSO_THEME_COLOR_INDEX.HYPERLINK,
+    "folHlink": MSO_THEME_COLOR_INDEX.FOLLOWED_HYPERLINK,
+}
+
+
+def _build_theme_color_map(prs):
+    """Parse PPT theme XML to build theme_color enum → RGB hex mapping.
+
+    Returns dict: {MSO_THEME_COLOR_INDEX.ACCENT_1: "4F81BD", ...}
+    """
+    try:
+        sm = prs.slide_masters[0]
+        theme_part = None
+        for rel in sm.part.rels.values():
+            if "theme" in rel.reltype:
+                theme_part = rel.target_part
+                break
+        if theme_part is None:
+            return {}
+
+        root = etree.fromstring(theme_part.blob)
+        clr_scheme = root.find(f".//{{{_A_NS}}}clrScheme")
+        if clr_scheme is None:
+            return {}
+
+        result = {}
+        for child in clr_scheme:
+            tag_local = etree.QName(child.tag).localname
+            enum_val = _THEME_TAG_TO_ENUM.get(tag_local)
+            if enum_val is None:
+                continue
+            # Read srgbClr or sysClr
+            srgb = child.find(f"{{{_A_NS}}}srgbClr")
+            if srgb is not None:
+                result[enum_val] = srgb.get("val", "").upper()
+            else:
+                sys_clr = child.find(f"{{{_A_NS}}}sysClr")
+                if sys_clr is not None:
+                    result[enum_val] = sys_clr.get("lastClr", "000000").upper()
+        return result
+    except Exception:
+        return {}
+
+
+def _apply_brightness(hex_color, brightness):
+    """Apply brightness adjustment to a hex color string.
+
+    brightness > 0: tint (blend toward white)
+    brightness < 0: shade (blend toward black)
+    """
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    if brightness > 0:
+        # Tint: blend toward 255
+        r = int(r + (255 - r) * brightness)
+        g = int(g + (255 - g) * brightness)
+        b = int(b + (255 - b) * brightness)
+    elif brightness < 0:
+        # Shade: blend toward 0
+        factor = 1 + brightness  # brightness is negative
+        r = int(r * factor)
+        g = int(g * factor)
+        b = int(b * factor)
+    r = max(0, min(255, r))
+    g = max(0, min(255, g))
+    b = max(0, min(255, b))
+    return f"{r:02X}{g:02X}{b:02X}"
+
+
+def _resolve_scheme_color(color_obj, theme_map):
+    """Resolve a python-pptx color object with type==SCHEME to RGB hex string."""
+    try:
+        tc = color_obj.theme_color
+        hex_val = theme_map.get(tc)
+        if hex_val is None:
+            return None
+        brightness = color_obj.brightness
+        if brightness and brightness != 0:
+            hex_val = _apply_brightness(hex_val, brightness)
+        return hex_val
+    except Exception:
+        return None
+
+
 # ─── Scale Detection ─────────────────────────────────────────────────────────
 
-def _get_shape_color(shape, color_type="line"):
-    """Extract RGB hex string from a shape's line or fill color."""
+def _get_shape_color(shape, color_type="line", theme_map=None):
+    """Extract RGB hex string from a shape's line or fill color.
+
+    Handles RGB colors directly and resolves SCHEME (theme) colors
+    via theme_map when provided. SCHEME colors without theme_map are
+    skipped (python-pptx raises on .rgb for scheme colors).
+    """
     try:
         if color_type == "line":
             ln = shape.line
-            if ln and ln.color and ln.color.type is not None and ln.color.rgb:
-                return str(ln.color.rgb)
+            if ln and ln.color and ln.color.type is not None:
+                if ln.color.type == MSO_COLOR_TYPE.SCHEME:
+                    if theme_map:
+                        return _resolve_scheme_color(ln.color, theme_map)
+                    return None  # Can't resolve scheme without theme_map
+                if ln.color.rgb:
+                    return str(ln.color.rgb)
         elif color_type == "fill":
             fill = shape.fill
             if fill.type is not None:
                 fc = fill.fore_color
-                if fc and fc.type is not None and fc.rgb:
-                    return str(fc.rgb)
+                if fc and fc.type is not None:
+                    if fc.type == MSO_COLOR_TYPE.SCHEME:
+                        if theme_map:
+                            return _resolve_scheme_color(fc, theme_map)
+                        return None  # Can't resolve scheme without theme_map
+                    if fc.rgb:
+                        return str(fc.rgb)
     except Exception:
         pass
     return None
@@ -635,9 +837,7 @@ def _find_tick_marks(slide):
       length: in EMU
     """
     ticks = []
-    for shape in slide.shapes:
-        if shape.shape_type != MSO_SHAPE_TYPE.FREEFORM:
-            continue
+    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)):
         w, h = shape.width, shape.height
         if w == 0 and 0 < h <= TICK_MAX_LENGTH_EMU:
             color = _get_shape_color(shape, "line")
@@ -654,9 +854,7 @@ def _find_measurement_texts(slide):
     Returns list of (meters_value, center_x, center_y, text).
     """
     measurements = []
-    for shape in slide.shapes:
-        if shape.shape_type != MSO_SHAPE_TYPE.TEXT_BOX:
-            continue
+    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.TEXT_BOX,)):
         if not shape.has_text_frame:
             continue
         text = shape.text_frame.text.strip()
@@ -938,13 +1136,12 @@ def _parse_text_to_labels(legend_texts):
     return label_entries
 
 
-def _collect_legend_swatches(slide, slide_w, slide_h, side, boundary):
+def _collect_legend_swatches(slide, slide_w, slide_h, side, boundary,
+                             theme_map=None):
     """Collect colored swatches in legend region."""
     swatches = []
-    for shape in slide.shapes:
-        if shape.shape_type not in (MSO_SHAPE_TYPE.FREEFORM,
-                                     MSO_SHAPE_TYPE.AUTO_SHAPE):
-            continue
+    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,
+                                            MSO_SHAPE_TYPE.AUTO_SHAPE)):
         cx = shape.left + shape.width // 2
         if side == "left" and cx > boundary:
             continue
@@ -952,8 +1149,8 @@ def _collect_legend_swatches(slide, slide_w, slide_h, side, boundary):
             continue
         if shape.width > slide_w * 0.5 or shape.height > slide_h * 0.5:
             continue
-        line_color = _get_shape_color(shape, "line")
-        fill_color = _get_shape_color(shape, "fill")
+        line_color = _get_shape_color(shape, "line", theme_map)
+        fill_color = _get_shape_color(shape, "fill", theme_map)
         # Prefer fill color (represents element's actual color);
         # outline is usually just decorative (e.g. black border)
         color = fill_color or line_color
@@ -971,17 +1168,155 @@ def _collect_legend_swatches(slide, slide_w, slide_h, side, boundary):
     return swatches
 
 
-def parse_legend(slide, slide_w, slide_h, phase="all"):
+def _get_cell_bg_color(cell, theme_map=None):
+    """Extract background color hex from a table cell.
+
+    Tries cell.fill.fore_color (RGB or SCHEME).
+    Returns uppercase hex string like "FF0000", or None.
+    """
+    try:
+        fill = cell.fill
+        if fill.type is None:
+            return None
+        fc = fill.fore_color
+        if fc is None or fc.type is None:
+            return None
+        if fc.type == MSO_COLOR_TYPE.SCHEME:
+            if theme_map:
+                return _resolve_scheme_color(fc, theme_map)
+            return None  # Can't resolve scheme without theme_map
+        if fc.rgb:
+            return str(fc.rgb)
+    except Exception:
+        pass
+    return None
+
+
+def _parse_table_legend(slide, slide_w, phase, theme_map=None):
+    """Parse legend from PPT table (2-col: [bg_color | section_name]).
+
+    Returns (legend_dict, diagnostics, boundary, side) or None if no table found.
+    """
+    table_shape = None
+    for shape in _iter_slide_shapes(slide):
+        if hasattr(shape, 'has_table') and shape.has_table and len(shape.table.columns) == 2:
+            table_shape = shape
+            break
+
+    if table_shape is None:
+        return None
+
+    table = table_shape.table
+    mapping = {}
+    entries_diag = []
+
+    for row in table.rows:
+        cell_0 = row.cells[0]
+        cell_1 = row.cells[1]
+
+        # Get background color from first cell
+        color_hex = _get_cell_bg_color(cell_0, theme_map)
+        if not color_hex or color_hex == "FFFFFF":
+            continue
+
+        # Get section text from second cell
+        text = cell_1.text.strip()
+        if not text:
+            continue
+
+        # Parse using existing label parser
+        etype, section, spec, prefix, is_diaphragm = parse_legend_label(text)
+
+        # PPT-specific: handle column section labels
+        if etype == "unknown":
+            cm = _COLUMN_SECTION_RE.search(text)
+            if cm:
+                w_val, d_val = int(cm.group(1)), int(cm.group(2))
+                lo, hi = sorted([w_val, d_val])
+                etype = "column"
+                section = f"C{lo}X{hi}"
+                spec = 1
+                prefix = "C"
+                is_diaphragm = False
+
+        if etype == "unknown":
+            continue
+
+        # Phase filter
+        if phase == "phase1" and etype == "small_beam":
+            continue
+        if phase == "phase2" and etype not in ("small_beam",):
+            continue
+
+        rgb = [int(color_hex[i:i+2], 16) for i in (0, 2, 4)]
+        entry = LegendEntry(
+            element_type=etype,
+            section=section,
+            color_name=color_hex,
+            color_rgb=rgb,
+            specificity=spec,
+            is_diaphragm=is_diaphragm,
+            prefix=prefix,
+            label=text,
+        )
+        mapping.setdefault(color_hex, []).append(entry)
+        entries_diag.append({
+            "label": text,
+            "color": color_hex,
+            "type": etype,
+        })
+
+    if not mapping:
+        return None
+
+    # Sort by specificity descending within each color
+    for c in mapping:
+        mapping[c].sort(key=lambda e: -e.specificity)
+
+    # Determine legend side from table position
+    table_cx = table_shape.left + table_shape.width // 2
+    slide_cx = slide_w // 2
+    if table_cx < slide_cx:
+        side = "left"
+        boundary = table_shape.left + table_shape.width + 200000
+    else:
+        side = "right"
+        boundary = table_shape.left - 200000
+
+    diagnostics = {
+        "legend_source": "table",
+        "table_rows": len(table.rows),
+        "pass1_labels": entries_diag,
+        "pass2_labels": [],
+        "pass3_orphans": [],
+        "all_swatches": [],
+        "unmatched_labels": [],
+        "unmatched_swatches": [],
+    }
+
+    return mapping, diagnostics, boundary, side
+
+
+def parse_legend(slide, slide_w, slide_h, phase="all", theme_map=None):
     """Parse the legend area to build color -> LegendEntry mapping.
 
-    Three-pass strategy:
+    Table-first strategy:
+      Try PPT table legend (2-col) first; fall back to shape-based if no table.
+
+    Shape-based three-pass strategy:
       Pass 1: Standard legend region parsing (keyword-based region + label-swatch match)
       Pass 2: (Phase 2 only) Scan ALL text shapes for SB/FSB/版/板 labels,
               retry unmatched with relaxed tolerances (dy: 500K, RGB: +/-15)
       Pass 3: Orphan swatch retry with relaxed RGB tolerance (+/-15)
 
-    Returns (mapping: dict[color_hex, list[LegendEntry]], diagnostics: dict).
+    Returns (mapping, diagnostics, boundary, side).
     """
+    # ── Try table-based legend first ──
+    table_result = _parse_table_legend(slide, slide_w, phase, theme_map)
+    if table_result is not None:
+        return table_result
+
+    # ── Existing shape-based legend parsing ──
     side, boundary = _detect_legend_region(slide, slide_w, slide_h)
     diagnostics = {
         "pass1_labels": [],
@@ -1013,13 +1348,15 @@ def parse_legend(slide, slide_w, slide_h, phase="all"):
             })
 
     if not legend_texts:
-        return {}, diagnostics
+        diagnostics["legend_source"] = "shape"
+        return {}, diagnostics, boundary, side
 
     # ── Parse labels ──
     label_entries = _parse_text_to_labels(legend_texts)
 
     # ── Collect swatches ──
-    legend_swatches = _collect_legend_swatches(slide, slide_w, slide_h, side, boundary)
+    legend_swatches = _collect_legend_swatches(slide, slide_w, slide_h, side, boundary,
+                                               theme_map)
     diagnostics["all_swatches"] = [
         {"color": sw["color"], "cx": sw["cx"], "cy": sw["cy"]}
         for sw in legend_swatches
@@ -1191,22 +1528,24 @@ def parse_legend(slide, slide_w, slide_h, phase="all"):
     for c in mapping:
         mapping[c].sort(key=lambda e: -e.specificity)
 
-    return mapping, diagnostics
+    diagnostics["legend_source"] = "shape"
+    return mapping, diagnostics, boundary, side
 
 
 # ─── Legend Validation ───────────────────────────────────────────────────────
 
 def _validate_legend(slide, slide_num, legend, slide_w, slide_h,
-                     legend_side, legend_boundary, warnings):
+                     legend_side, legend_boundary, warnings, theme_map=None,
+                     tolerance=15):
     """Validate legend coverage: count matched/unmatched shapes per color.
 
+    tolerance: fuzzy validation tolerance (Chebyshev distance).
+               Use higher values for table-sourced legends.
     Returns validation dict for metadata.
     """
     # Count drawing-area shapes by color
     shape_colors = {}  # color_hex -> count
-    for shape in slide.shapes:
-        if shape.shape_type != MSO_SHAPE_TYPE.FREEFORM:
-            continue
+    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)):
         cx = shape.left + shape.width // 2
         # Skip legend region shapes
         if legend_side == "left" and cx < legend_boundary:
@@ -1218,8 +1557,8 @@ def _validate_legend(slide, slide_num, legend, slide_w, slide_h,
             if (shape.width * shape.height) > slide_w * slide_h * SLIDE_AREA_RATIO_MAX:
                 continue
 
-        line_color = _get_shape_color(shape, "line")
-        fill_color = _get_shape_color(shape, "fill")
+        line_color = _get_shape_color(shape, "line", theme_map)
+        fill_color = _get_shape_color(shape, "fill", theme_map)
         color = line_color or fill_color
         if color and color != "FFFFFF":
             shape_colors[color] = shape_colors.get(color, 0) + 1
@@ -1227,6 +1566,7 @@ def _validate_legend(slide, slide_num, legend, slide_w, slide_h,
     validation = {"slide": slide_num, "entries": []}
 
     # Check each legend entry
+    validate_tolerance = tolerance if tolerance > 15 else 5
     for color_hex, entries in legend.items():
         count = shape_colors.pop(color_hex, 0)
         # Also check fuzzy matches
@@ -1234,7 +1574,7 @@ def _validate_legend(slide, slide_num, legend, slide_w, slide_h,
         for sc in shape_colors:
             r, g, b = int(sc[0:2], 16), int(sc[2:4], 16), int(sc[4:6], 16)
             lr, lg, lb = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
-            if max(abs(r-lr), abs(g-lg), abs(b-lb)) <= 5:
+            if max(abs(r-lr), abs(g-lg), abs(b-lb)) <= validate_tolerance:
                 count += shape_colors[sc]
                 to_remove.append(sc)
         for sc in to_remove:
@@ -1296,7 +1636,8 @@ def _print_legend_validation(validation):
 def _fuzzy_color_match(color_hex, legend, tolerance=15):
     """Find legend entry list with closest color within tolerance.
 
-    Uses Chebyshev distance (max per-channel difference).
+    Uses Chebyshev distance (max per-channel difference) with Manhattan
+    tie-breaking when two legend colors have the same Chebyshev distance.
     Default tolerance=15 to handle PPT color variations (manual color picks,
     theme adjustments, export artifacts). Pass 3 orphan retry already used ±15;
     this unifies the main matching path to the same value.
@@ -1309,45 +1650,70 @@ def _fuzzy_color_match(color_hex, legend, tolerance=15):
         return legend[color_hex]
     # Fuzzy match
     r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
-    best_key, best_dist = None, float('inf')
+    best_key, best_dist, best_manhattan = None, float('inf'), float('inf')
     for key in legend:
         kr = int(key[0:2], 16)
         kg = int(key[2:4], 16)
         kb = int(key[4:6], 16)
         dist = max(abs(r - kr), abs(g - kg), abs(b - kb))
-        if dist <= tolerance and dist < best_dist:
+        manhattan = abs(r - kr) + abs(g - kg) + abs(b - kb)
+        if dist <= tolerance and (dist < best_dist or
+                                   (dist == best_dist and manhattan < best_manhattan)):
             best_dist = dist
+            best_manhattan = manhattan
             best_key = key
     return legend[best_key] if best_key else None
 
 
-def _resolve_pptx_legend(color_hex, geom_type, legend):
+def _resolve_pptx_legend(color_hex, geom_type, legend, tolerance=15):
     """Resolve a shape's color to a legend entry.
 
     geom_type: 'line' | 'rectangle'
-    Uses fuzzy color matching (tolerance ±15 per RGB channel).
+    Uses fuzzy color matching with geometry-aware filtering: tries a
+    geometry-compatible sub-legend first (higher tolerance safe because
+    cross-type mismatches are impossible), then falls back to full legend.
     """
-    entries = _fuzzy_color_match(color_hex, legend)
-    if not entries:
-        return None
-
     compat = {
         "line": ("beam", "small_beam", "wall"),
         "rectangle": ("column",),
     }
-    for e in entries:
-        if e.element_type in compat.get(geom_type, ()):
-            return e
-    return entries[0]
+    compatible_types = compat.get(geom_type, ())
+
+    # Build geometry-filtered legend (only compatible entry types)
+    filtered = {}
+    for key, entries in legend.items():
+        matches = [e for e in entries if e.element_type in compatible_types]
+        if matches:
+            filtered[key] = matches
+
+    # Try geometry-compatible match first
+    match = _fuzzy_color_match(color_hex, filtered, tolerance)
+    if match:
+        return match[0]
+
+    # Fallback: try all entries with geometry preference
+    match = _fuzzy_color_match(color_hex, legend, tolerance)
+    if match:
+        for e in match:
+            if e.element_type in compatible_types:
+                return e
+        return match[0]
+    return None
 
 
 def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
                                 phase, slide_w, slide_h, legend_boundary,
-                                legend_side, warnings):
+                                legend_side, warnings, theme_map=None,
+                                tolerance=15, line_tolerance=None):
     """Extract FREEFORM shapes and classify them into structural elements.
 
+    tolerance: fuzzy color matching tolerance (Chebyshev distance) for rectangles.
+               Use 150 for table-sourced legends (cell bg ≠ shape fill).
+    line_tolerance: override tolerance for LINE shapes. None = use tolerance.
+                    Set to 0 for exact match (LINE colors match legend exactly).
     Returns list of element dicts.
     """
+    _lt = line_tolerance if line_tolerance is not None else tolerance
     elements = []
     slide_area = slide_w * slide_h
 
@@ -1356,10 +1722,7 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
     outline_rects = []
     lines = []
 
-    for shape in slide.shapes:
-        if shape.shape_type != MSO_SHAPE_TYPE.FREEFORM:
-            continue
-
+    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)):
         w, h = shape.width, shape.height
         left, top = shape.left, shape.top
 
@@ -1374,8 +1737,8 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
         if w > 0 and h > 0 and (w * h) > slide_area * SLIDE_AREA_RATIO_MAX:
             continue
 
-        line_color = _get_shape_color(shape, "line")
-        fill_color = _get_shape_color(shape, "fill")
+        line_color = _get_shape_color(shape, "line", theme_map)
+        fill_color = _get_shape_color(shape, "fill", theme_map)
 
         if w == 0 or h == 0:
             # Line shape (beam candidate)
@@ -1411,10 +1774,10 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
     # ── Classify columns ──────────────────────────────────────────────
     if phase in ("phase1", "all"):
         for col in columns:
-            entry = _resolve_pptx_legend(col["color"], "rectangle", legend)
+            entry = _resolve_pptx_legend(col["color"], "rectangle", legend, tolerance)
             # Fallback: try alternate color if primary didn't match column
             if (not entry or entry.element_type != "column") and col.get("alt_color"):
-                alt_entry = _resolve_pptx_legend(col["alt_color"], "rectangle", legend)
+                alt_entry = _resolve_pptx_legend(col["alt_color"], "rectangle", legend, tolerance)
                 if alt_entry and alt_entry.element_type == "column":
                     entry = alt_entry
             if not entry or entry.element_type != "column":
@@ -1448,10 +1811,10 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
         if not color:
             continue
 
-        entry = _resolve_pptx_legend(color, "line", legend)
+        entry = _resolve_pptx_legend(color, "line", legend, _lt)
         # Fallback: try alternate color if primary didn't match
         if not entry and line.get("alt_color"):
-            entry = _resolve_pptx_legend(line["alt_color"], "line", legend)
+            entry = _resolve_pptx_legend(line["alt_color"], "line", legend, _lt)
         if not entry:
             continue
 
@@ -1580,7 +1943,7 @@ def list_slides(prs):
     print()
     for i, slide in enumerate(prs.slides):
         counts = {}
-        for shape in slide.shapes:
+        for shape in _iter_slide_shapes(slide):
             stype = str(shape.shape_type).split(".")[-1].split("(")[0].strip()
             counts[stype] = counts.get(stype, 0) + 1
         parts = [f"{k}={v}" for k, v in sorted(counts.items())]
@@ -1663,7 +2026,7 @@ def _parse_color_map(color_map_args):
 
 
 def process(prs, page_floors, phase, crop=False, crop_dir=None,
-            manual_scale=None, color_map=None):
+            manual_scale=None, color_map=None, slides_info_dir=None):
     """Main processing pipeline: PPTX → elements dict.
 
     Args:
@@ -1680,6 +2043,11 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
     warnings = []
     slide_w = prs.slide_width
     slide_h = prs.slide_height
+
+    # Build theme color map once for the whole presentation
+    theme_map = _build_theme_color_map(prs)
+    if theme_map:
+        print(f"  Theme colors resolved: {len(theme_map)} entries")
 
     # Validate slide references
     num_slides = len(prs.slides)
@@ -1747,13 +2115,17 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
         scale_details.append(scale_info)
 
         # 2) Extract PNG (optional)
-        if crop and crop_dir:
-            floor_label = (f"{floors[0]}~{floors[-1]}" if len(floors) > 1
-                           else floors[0])
-            extract_base_png(slide, sn, floor_label, crop_dir)
+        floor_label = (f"{floors[0]}~{floors[-1]}" if len(floors) > 1
+                       else floors[0])
+        if crop:
+            actual_crop_dir = (str(Path(slides_info_dir) / floor_label / "screenshots")) if slides_info_dir else crop_dir
+            if actual_crop_dir:
+                extract_base_png(slide, sn, floor_label, actual_crop_dir)
 
-        # 3) Parse legend
-        legend, legend_diag = parse_legend(slide, slide_w, slide_h, phase=phase)
+        # 3) Parse legend (table-first, shape fallback)
+        legend, legend_diag, legend_boundary, legend_side = parse_legend(
+            slide, slide_w, slide_h, phase=phase, theme_map=theme_map)
+        legend_source = legend_diag.get("legend_source", "shape")
         # Inject manual color-map entries into legend
         if color_map:
             for cm_color, cm_entries in color_map.items():
@@ -1769,7 +2141,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
             warnings.append(f"Slide {sn}: no legend detected, skipping")
             print(f"  WARNING: no legend detected")
             continue
-        print(f"  Legend: {len(legend)} colors → "
+        print(f"  Legend ({legend_source}): {len(legend)} colors → "
               f"{sum(len(v) for v in legend.values())} entries")
         for color, entries in legend.items():
             for e in entries:
@@ -1783,20 +2155,58 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
             for us in legend_diag["unmatched_swatches"]:
                 warnings.append(f"Slide {sn}: swatch #{us['color']} has no legend label")
 
-        # 4) Detect legend region for exclusion
-        legend_side, legend_boundary = _detect_legend_region(slide, slide_w, slide_h)
+        # Table legend color remap diagnostics
+        if legend_source == "table":
+            # Collect all unique shape colors in the drawing area
+            shape_fill_colors = set()
+            for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)):
+                cx = shape.left + shape.width // 2
+                if legend_side == "left" and cx < legend_boundary:
+                    continue
+                if legend_side == "right" and cx > legend_boundary:
+                    continue
+                lc = _get_shape_color(shape, "line", theme_map)
+                fc = _get_shape_color(shape, "fill", theme_map)
+                if lc and lc != "FFFFFF":
+                    shape_fill_colors.add(lc)
+                if fc and fc != "FFFFFF":
+                    shape_fill_colors.add(fc)
+            if shape_fill_colors:
+                print(f"  Table legend color mapping check (tolerance=150):")
+                for lcolor in legend:
+                    lr = int(lcolor[0:2], 16)
+                    lg_ = int(lcolor[2:4], 16)
+                    lb = int(lcolor[4:6], 16)
+                    best_sc, best_d = None, float('inf')
+                    for sc in shape_fill_colors:
+                        sr = int(sc[0:2], 16)
+                        sg = int(sc[2:4], 16)
+                        sb = int(sc[4:6], 16)
+                        d = max(abs(lr-sr), abs(lg_-sg), abs(lb-sb))
+                        if d < best_d:
+                            best_d = d
+                            best_sc = sc
+                    label = legend[lcolor][0].section or legend[lcolor][0].label
+                    if best_d == 0:
+                        print(f"    #{lcolor} ({label}) → closest shape: #{best_sc} (exact)")
+                    else:
+                        print(f"    #{lcolor} ({label}) → closest shape: #{best_sc} (dist={best_d})")
 
-        # 4b) Legend validation report
+        # 4) Legend validation report
+        legend_tolerance = 150 if legend_source == "table" else 15
         lv = _validate_legend(slide, sn, legend, slide_w, slide_h,
-                              legend_side, legend_boundary, warnings)
+                              legend_side, legend_boundary, warnings,
+                              theme_map=theme_map, tolerance=legend_tolerance)
         _print_legend_validation(lv)
         legend_validations.append(lv)
         legend_diagnostics_all.append({"slide": sn, **legend_diag})
 
         # 5) Extract & classify shapes
+        rect_tolerance = 150 if legend_source == "table" else 15
         slide_elems = extract_and_classify_shapes(
             slide, sn, legend, scale, floors, phase,
-            slide_w, slide_h, legend_boundary, legend_side, warnings)
+            slide_w, slide_h, legend_boundary, legend_side, warnings,
+            theme_map=theme_map, tolerance=rect_tolerance, line_tolerance=0)
         all_elements.extend(slide_elems)
 
         # Per-slide stats
@@ -1807,6 +2217,59 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
                 stats[key] += 1
         per_page_stats[str(sn)] = stats
         print(f"  Elements: {', '.join(f'{k}={v}' for k, v in stats.items() if v > 0) or 'none'}")
+
+        # Per-slide JSON output (when --slides-info-dir is specified)
+        if slides_info_dir:
+            slide_output = {
+                "_metadata": {
+                    "slide_num": sn,
+                    "floors": list(floors),
+                    "floor_label": floor_label,
+                    "scale": scale_info,
+                    "legend": {
+                        color: [{"element_type": e.element_type,
+                                 "section": e.section,
+                                 "label": e.label}
+                                for e in entries]
+                        for color, entries in legend.items()
+                    },
+                    "legend_validation": lv,
+                    "stats": stats,
+                },
+                "columns": [e for e in slide_elems if e["element_type"] == "column"],
+                "beams": [e for e in slide_elems if e["element_type"] == "beam"],
+                "walls": [e for e in slide_elems if e["element_type"] == "wall"],
+                "small_beams": [e for e in slide_elems if e["element_type"] == "small_beam"],
+            }
+            slide_json_path = Path(slides_info_dir) / floor_label / f"{floor_label}.json"
+            slide_json_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(slide_json_path, "w", encoding="utf-8") as f:
+                json.dump(slide_output, f, ensure_ascii=False, indent=2)
+            print(f"  Saved per-slide JSON: {slide_json_path}")
+
+    # When --slides-info-dir is set, skip merge and return summary
+    if slides_info_dir:
+        slide_files = sorted(Path(slides_info_dir).glob("*/*.json"))
+        print(f"\n--- Per-slide JSON output complete ---")
+        print(f"  Directory: {slides_info_dir}")
+        print(f"  Files: {len(slide_files)}")
+        for sf in slide_files:
+            print(f"    {sf.name}")
+        return {
+            "_metadata": {
+                "source": "pptx_to_elements.py",
+                "mode": "per-slide",
+                "slides_info_dir": str(slides_info_dir),
+                "input_file": str(getattr(prs, '_pptx_path', '')),
+                "generated_at": datetime.now(timezone.utc)
+                                .strftime("%Y-%m-%dT%H:%M:%S"),
+                "phase": phase,
+                "page_floors": {str(k): v for k, v in page_floors.items()},
+                "per_page_stats": per_page_stats,
+                "warnings": warnings,
+            },
+            "slide_files": [str(sf) for sf in slide_files],
+        }
 
     # Snap walls to nearest beam axis (post-processing)
     _snap_walls_to_beams(all_elements, tolerance=1.0, warnings=warnings)
@@ -1915,6 +2378,10 @@ def main():
     parser.add_argument(
         "--color-tolerance", type=int, default=None,
         help="Override fuzzy color matching tolerance (default: 15 per RGB channel)")
+    parser.add_argument(
+        "--slides-info-dir",
+        help="Directory for per-slide JSON output (e.g., '結構配置圖/SLIDES INFO'). "
+             "When set, writes per-slide JSONs instead of merged output.")
 
     args = parser.parse_args()
 
@@ -2021,9 +2488,9 @@ def main():
         print("ERROR: --page-floors, --auto-floors, or --confirm-floors is required for processing")
         sys.exit(1)
 
-    # Require --output for processing
-    if not args.output:
-        print("ERROR: --output is required for processing")
+    # Require --output for processing (unless --slides-info-dir is used)
+    if not args.output and not args.slides_info_dir:
+        print("ERROR: --output or --slides-info-dir is required for processing")
         sys.exit(1)
 
     # Parse color-map if provided
@@ -2037,20 +2504,23 @@ def main():
     # Process
     output = process(prs, page_floors, args.phase,
                      crop=args.crop, crop_dir=args.crop_dir,
-                     manual_scale=args.scale, color_map=manual_color_map)
+                     manual_scale=args.scale, color_map=manual_color_map,
+                     slides_info_dir=args.slides_info_dir)
 
-    # Summary
-    print_summary(output)
-
-    # Write
-    if args.dry_run:
-        print("[DRY RUN] No output written.")
+    # Summary and output
+    if args.slides_info_dir:
+        # Per-slide mode: files already written in process(), skip merged output
+        print(f"\nPer-slide output complete. Files in: {args.slides_info_dir}")
     else:
-        out_path = Path(args.output)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(output, f, ensure_ascii=False, indent=2)
-        print(f"Output written to: {out_path}")
+        print_summary(output)
+        if args.dry_run:
+            print("[DRY RUN] No output written.")
+        else:
+            out_path = Path(args.output)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(output, f, ensure_ascii=False, indent=2)
+            print(f"Output written to: {out_path}")
 
 
 if __name__ == "__main__":

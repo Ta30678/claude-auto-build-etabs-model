@@ -110,6 +110,73 @@ def merge_metadata(metadata_list):
     return base
 
 
+def normalize_per_slide_input(slide_data):
+    """Convert per-slide JSON format to standard elements format.
+
+    Per-slide JSONs from pptx_to_elements.py --slides-info-dir have elements
+    grouped by type (columns/beams/walls/small_beams) with element_type field
+    on each element. This function converts to the standard merge format.
+
+    Returns:
+        Standard elements dict compatible with merge_elements().
+    """
+    # Per-slide format already has columns/beams/walls/small_beams keys
+    # Check if it's actually a per-slide format by looking for _metadata.slide_num
+    meta = slide_data.get("_metadata", {})
+    is_per_slide = "slide_num" in meta
+
+    if not is_per_slide:
+        # Already in standard format
+        return slide_data
+
+    # Reconstruct sections from elements
+    frame_set = set()
+    wall_set = set()
+    for cat in ("columns", "beams", "small_beams"):
+        for elem in slide_data.get(cat, []):
+            sec = elem.get("section", "")
+            if sec:
+                frame_set.add(sec)
+    for elem in slide_data.get("walls", []):
+        sec = elem.get("section", "")
+        if sec:
+            # Wall sections are thickness integers like "W25" -> 25
+            import re
+            m = re.match(r"W(\d+)", sec)
+            if m:
+                wall_set.add(int(m.group(1)))
+
+    # Build metadata for merge compatibility
+    floors = meta.get("floors", [])
+    slide_num = meta.get("slide_num", 0)
+    floor_label = meta.get("floor_label", "")
+
+    result = {
+        "columns": slide_data.get("columns", []),
+        "beams": slide_data.get("beams", []),
+        "walls": slide_data.get("walls", []),
+        "small_beams": slide_data.get("small_beams", []),
+        "sections": {
+            "frame": sorted(frame_set),
+            "wall": sorted(wall_set),
+        },
+        "_metadata": {
+            "input_file": meta.get("floor_label", "per-slide"),
+            "phase": "phase1",
+            "per_page_stats": {str(slide_num): meta.get("stats", {})},
+            "page_floors": {str(slide_num): floors},
+            "totals": {
+                "columns": len(slide_data.get("columns", [])),
+                "beams": len(slide_data.get("beams", [])),
+                "walls": len(slide_data.get("walls", [])),
+                "small_beams": len(slide_data.get("small_beams", [])),
+            },
+            "warnings": [],
+        },
+    }
+    return result
+
+
 def merge_elements(*element_files):
     """Main merge function.
 
@@ -242,8 +309,12 @@ def main():
         description="Merge multiple elements.json files into one unified elements.json."
     )
     parser.add_argument(
-        "--inputs", nargs="+", required=True,
+        "--inputs", nargs="+",
         help="Input elements JSON files to merge",
+    )
+    parser.add_argument(
+        "--inputs-dir",
+        help="Directory containing per-slide JSON files to merge (globs *.json)",
     )
     parser.add_argument(
         "--output", required=True,
@@ -255,11 +326,41 @@ def main():
     )
     args = parser.parse_args()
 
+    # Validate: need either --inputs or --inputs-dir
+    if not args.inputs and not args.inputs_dir:
+        print("ERROR: --inputs or --inputs-dir is required")
+        sys.exit(1)
+
+    # Collect input file paths
+    input_paths = []
+    if args.inputs:
+        input_paths.extend(args.inputs)
+    if args.inputs_dir:
+        from pathlib import Path
+        dir_path = Path(args.inputs_dir)
+        if not dir_path.is_dir():
+            print(f"ERROR: --inputs-dir is not a directory: {args.inputs_dir}")
+            sys.exit(1)
+        json_files = sorted(dir_path.glob("*/elements.json"))
+        if not json_files:
+            json_files = sorted(dir_path.glob("*.json"))
+        if not json_files:
+            print(f"ERROR: No .json files found in {args.inputs_dir} (tried */elements.json and *.json)")
+            sys.exit(1)
+        input_paths.extend(str(f) for f in json_files)
+        print(f"Found {len(json_files)} JSON files in {args.inputs_dir}")
+
+    if not input_paths:
+        print("ERROR: No input files specified")
+        sys.exit(1)
+
     # Load input files
     element_files = []
-    for path in args.inputs:
+    for path in input_paths:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        # Normalize per-slide format if needed
+        data = normalize_per_slide_input(data)
         print(f"Loaded {path}:")
         print(f"  columns={len(data.get('columns', []))}"
               f"  beams={len(data.get('beams', []))}"

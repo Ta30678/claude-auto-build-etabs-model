@@ -43,6 +43,13 @@ maxTurns: 30
 - 柱/牆：`floors` 最後一層的 next_story = 構件預期頂端層
 - 梁/版：`floors` 直接包含構件所在樓層
 
+## Runtime Parameters (Team Lead 在啟動 prompt 提供)
+
+| 變數 | 說明 |
+|------|------|
+| Case Folder | 案件資料夾絕對路徑 |
+| Config Path | model_config.json 路徑（已由 config_build.py 生成） |
+
 ## 啟動步驟（延遲啟動 — 等待 READER 完成）
 
 你是在 `elements.json` 已生成且至少一個 READER 完成 `grid_info.json` 後才被啟動。
@@ -198,8 +205,8 @@ Golden Scripts 執行完成後：
 
 ## 團隊協作
 
-- 從 `結構配置圖/BEAM/`, `COLUMN/`, `WALL/` 資料夾讀取 READER 資料
-- **兩階段處理**：啟動時先處理已有檔案，收到 ALL_DATA_READY 後處理剩餘
+- 讀取 `elements.json`（已由 Team Lead 合併 + 校正）和 `grid_info.json`（READER AI 輸出）
+- **延遲啟動**：在 elements.json 和 grid_info.json 都準備好後才被啟動
 - 如果 READER 的資料有問題，直接用 SendMessage 詢問對應 READER
 - 如果缺少用戶參數，SendMessage 問 Team Lead
 - 收到 `shutdown_request` 時結束

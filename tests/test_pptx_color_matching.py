@@ -1,18 +1,31 @@
 """Tests for pptx_to_elements.py color matching improvements.
 
-Tests the fuzzy color matching, fill-priority, and dual-color fallback logic.
-These tests use the internal functions directly with mock legend data.
+Tests the fuzzy color matching, fill-priority, dual-color fallback logic,
+theme color resolution, and table-based legend parsing.
 """
 import pytest
 import sys
 import os
+from unittest.mock import MagicMock, PropertyMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from golden_scripts.tools.pptx_to_elements import (
     _fuzzy_color_match,
     _resolve_pptx_legend,
+    _build_theme_color_map,
+    _resolve_scheme_color,
+    _apply_brightness,
+    _get_shape_color,
+    _parse_table_legend,
+    _get_cell_bg_color,
+    parse_legend_label,
     LegendEntry,
+    _AbsShape,
+    _iter_slide_shapes,
+    _iter_text_shapes,
 )
 
 
@@ -144,3 +157,773 @@ class TestDualColorFallback:
         # Fallback (line_color) = 0000FF (in legend)
         entry = _resolve_pptx_legend("0000FF", "rectangle", legend)
         assert entry is not None
+
+
+class TestBuildThemeColorMap:
+    """Test _build_theme_color_map: parse theme XML to enum→RGB mapping."""
+
+    def test_default_presentation_has_theme_colors(self):
+        """A default python-pptx Presentation should have Office theme colors."""
+        from pptx import Presentation
+        from pptx.enum.dml import MSO_THEME_COLOR_INDEX
+        prs = Presentation()
+        result = _build_theme_color_map(prs)
+        assert len(result) > 0
+        # Office theme: ACCENT_1 = 4F81BD
+        assert MSO_THEME_COLOR_INDEX.ACCENT_1 in result
+        assert result[MSO_THEME_COLOR_INDEX.ACCENT_1] == "4F81BD"
+        # DARK_1 = 000000 (windowText lastClr)
+        assert MSO_THEME_COLOR_INDEX.DARK_1 in result
+        assert result[MSO_THEME_COLOR_INDEX.DARK_1] == "000000"
+
+    def test_returns_empty_on_error(self):
+        """Should return empty dict when given invalid input."""
+        mock_prs = MagicMock()
+        mock_prs.slide_masters = []
+        result = _build_theme_color_map(mock_prs)
+        assert result == {}
+
+    def test_all_12_standard_entries(self):
+        """Default Office theme should have dk1, lt1, dk2, lt2, accent1-6, hlink, folHlink."""
+        from pptx import Presentation
+        prs = Presentation()
+        result = _build_theme_color_map(prs)
+        assert len(result) == 12
+
+
+class TestApplyBrightness:
+    """Test _apply_brightness HSL-style tint/shade."""
+
+    def test_no_brightness(self):
+        assert _apply_brightness("FF0000", 0) == "FF0000"
+
+    def test_positive_tint(self):
+        """Brightness > 0 should lighten (blend toward white)."""
+        result = _apply_brightness("000000", 0.5)
+        # 0 + (255-0)*0.5 = 127 → 7F
+        assert result == "7F7F7F"
+
+    def test_negative_shade(self):
+        """Brightness < 0 should darken (blend toward black)."""
+        result = _apply_brightness("FFFFFF", -0.5)
+        # 255 * (1 + (-0.5)) = 255 * 0.5 = 127
+        assert result == "7F7F7F"
+
+    def test_full_tint(self):
+        result = _apply_brightness("000000", 1.0)
+        assert result == "FFFFFF"
+
+    def test_full_shade(self):
+        result = _apply_brightness("FFFFFF", -1.0)
+        assert result == "000000"
+
+
+class TestResolveSchemeColor:
+    """Test _resolve_scheme_color with mock color objects."""
+
+    def test_basic_resolution(self):
+        from pptx.enum.dml import MSO_THEME_COLOR_INDEX
+        theme_map = {MSO_THEME_COLOR_INDEX.ACCENT_1: "4F81BD"}
+        mock_color = MagicMock()
+        mock_color.theme_color = MSO_THEME_COLOR_INDEX.ACCENT_1
+        mock_color.brightness = 0
+        result = _resolve_scheme_color(mock_color, theme_map)
+        assert result == "4F81BD"
+
+    def test_with_brightness(self):
+        from pptx.enum.dml import MSO_THEME_COLOR_INDEX
+        theme_map = {MSO_THEME_COLOR_INDEX.ACCENT_1: "000000"}
+        mock_color = MagicMock()
+        mock_color.theme_color = MSO_THEME_COLOR_INDEX.ACCENT_1
+        mock_color.brightness = 0.5
+        result = _resolve_scheme_color(mock_color, theme_map)
+        assert result == "7F7F7F"
+
+    def test_unknown_theme_color_returns_none(self):
+        from pptx.enum.dml import MSO_THEME_COLOR_INDEX
+        theme_map = {MSO_THEME_COLOR_INDEX.ACCENT_1: "4F81BD"}
+        mock_color = MagicMock()
+        mock_color.theme_color = MSO_THEME_COLOR_INDEX.ACCENT_6
+        result = _resolve_scheme_color(mock_color, theme_map)
+        assert result is None
+
+
+class TestGetShapeColorTheme:
+    """Test _get_shape_color with SCHEME type + theme_map."""
+
+    def test_line_scheme_color_resolved(self):
+        from pptx.enum.dml import MSO_COLOR_TYPE, MSO_THEME_COLOR_INDEX
+        theme_map = {MSO_THEME_COLOR_INDEX.ACCENT_2: "C0504D"}
+        mock_shape = MagicMock()
+        mock_shape.line.color.type = MSO_COLOR_TYPE.SCHEME
+        mock_shape.line.color.theme_color = MSO_THEME_COLOR_INDEX.ACCENT_2
+        mock_shape.line.color.brightness = 0
+        result = _get_shape_color(mock_shape, "line", theme_map)
+        assert result == "C0504D"
+
+    def test_fill_scheme_color_resolved(self):
+        from pptx.enum.dml import MSO_COLOR_TYPE, MSO_THEME_COLOR_INDEX
+        theme_map = {MSO_THEME_COLOR_INDEX.ACCENT_3: "9BBB59"}
+        mock_shape = MagicMock()
+        mock_shape.fill.type = 1  # Not None
+        mock_shape.fill.fore_color.type = MSO_COLOR_TYPE.SCHEME
+        mock_shape.fill.fore_color.theme_color = MSO_THEME_COLOR_INDEX.ACCENT_3
+        mock_shape.fill.fore_color.brightness = 0
+        result = _get_shape_color(mock_shape, "fill", theme_map)
+        assert result == "9BBB59"
+
+    def test_rgb_color_still_works(self):
+        from pptx.enum.dml import MSO_COLOR_TYPE
+        from pptx.dml.color import RGBColor
+        mock_shape = MagicMock()
+        mock_shape.line.color.type = MSO_COLOR_TYPE.RGB
+        mock_shape.line.color.rgb = RGBColor(0xFF, 0x00, 0x00)
+        result = _get_shape_color(mock_shape, "line", theme_map={})
+        assert result == "FF0000"
+
+    def test_scheme_without_theme_map_returns_none(self):
+        from pptx.enum.dml import MSO_COLOR_TYPE
+        mock_shape = MagicMock()
+        mock_shape.line.color.type = MSO_COLOR_TYPE.SCHEME
+        # No theme_map → should fall through gracefully
+        result = _get_shape_color(mock_shape, "line", theme_map=None)
+        assert result is None
+
+
+class TestGetCellBgColor:
+    """Test _get_cell_bg_color for table cell background extraction."""
+
+    def test_rgb_cell_color(self):
+        from pptx.enum.dml import MSO_COLOR_TYPE
+        from pptx.dml.color import RGBColor
+        mock_cell = MagicMock()
+        mock_cell.fill.type = 1
+        mock_cell.fill.fore_color.type = MSO_COLOR_TYPE.RGB
+        mock_cell.fill.fore_color.rgb = RGBColor(0xFF, 0x00, 0x00)
+        result = _get_cell_bg_color(mock_cell)
+        assert result == "FF0000"
+
+    def test_scheme_cell_color(self):
+        from pptx.enum.dml import MSO_COLOR_TYPE, MSO_THEME_COLOR_INDEX
+        theme_map = {MSO_THEME_COLOR_INDEX.ACCENT_1: "4F81BD"}
+        mock_cell = MagicMock()
+        mock_cell.fill.type = 1
+        mock_cell.fill.fore_color.type = MSO_COLOR_TYPE.SCHEME
+        mock_cell.fill.fore_color.theme_color = MSO_THEME_COLOR_INDEX.ACCENT_1
+        mock_cell.fill.fore_color.brightness = 0
+        result = _get_cell_bg_color(mock_cell, theme_map)
+        assert result == "4F81BD"
+
+    def test_no_fill_returns_none(self):
+        mock_cell = MagicMock()
+        mock_cell.fill.type = None
+        result = _get_cell_bg_color(mock_cell)
+        assert result is None
+
+
+class TestParseTableLegend:
+    """Test _parse_table_legend with mock slides containing tables."""
+
+    def _make_mock_slide_with_table(self, rows_data, slide_w=9144000):
+        """Create mock slide with a 2-column table.
+
+        rows_data: list of (bg_color_hex_or_None, text)
+        """
+        from pptx.enum.dml import MSO_COLOR_TYPE
+        from pptx.dml.color import RGBColor
+
+        mock_table = MagicMock()
+        mock_table.columns = [MagicMock(), MagicMock()]  # 2 columns
+
+        mock_rows = []
+        for bg_hex, text in rows_data:
+            row = MagicMock()
+            cell_0 = MagicMock()
+            cell_1 = MagicMock()
+
+            if bg_hex:
+                cell_0.fill.type = 1
+                cell_0.fill.fore_color.type = MSO_COLOR_TYPE.RGB
+                r = int(bg_hex[0:2], 16)
+                g = int(bg_hex[2:4], 16)
+                b = int(bg_hex[4:6], 16)
+                cell_0.fill.fore_color.rgb = RGBColor(r, g, b)
+            else:
+                cell_0.fill.type = None
+
+            cell_1.text = text
+            row.cells = [cell_0, cell_1]
+            mock_rows.append(row)
+
+        mock_table.rows = mock_rows
+
+        table_shape = MagicMock()
+        table_shape.has_table = True
+        table_shape.table = mock_table
+        table_shape.left = 100000
+        table_shape.width = 1500000
+        table_shape.top = 500000
+        table_shape.height = 2000000
+
+        # Other non-table shapes
+        other_shape = MagicMock()
+        other_shape.has_table = False
+
+        mock_slide = MagicMock()
+        mock_slide.shapes = [other_shape, table_shape]
+
+        return mock_slide
+
+    def test_basic_beam_table(self):
+        """Parse table with beam section entries."""
+        slide = self._make_mock_slide_with_table([
+            ("FF0000", "B55X80"),
+            ("00FF00", "B40X70"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        legend, diag, boundary, side = result
+        assert "FF0000" in legend
+        assert legend["FF0000"][0].section == "B55X80"
+        assert legend["FF0000"][0].element_type == "beam"
+        assert "00FF00" in legend
+        assert legend["00FF00"][0].section == "B40X70"
+        assert diag["legend_source"] == "table"
+
+    def test_mixed_elements(self):
+        """Parse table with columns, beams, walls, and small beams."""
+        slide = self._make_mock_slide_with_table([
+            ("FF0000", "B55X80"),
+            ("00FF00", "C90X90"),
+            ("0000FF", "SB30X60"),
+            ("FFFF00", "25cm壁"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        legend, diag, _, _ = result
+        assert len(legend) == 4
+        assert legend["FF0000"][0].element_type == "beam"
+        assert legend["00FF00"][0].element_type == "column"
+        assert legend["0000FF"][0].element_type == "small_beam"
+        assert legend["FFFF00"][0].element_type == "wall"
+
+    def test_phase1_excludes_small_beams(self):
+        """Phase 1 should filter out small beam entries."""
+        slide = self._make_mock_slide_with_table([
+            ("FF0000", "B55X80"),
+            ("0000FF", "SB30X60"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "phase1")
+        assert result is not None
+        legend, _, _, _ = result
+        assert "FF0000" in legend
+        assert "0000FF" not in legend
+
+    def test_phase2_only_small_beams(self):
+        """Phase 2 should only keep small beam entries."""
+        slide = self._make_mock_slide_with_table([
+            ("FF0000", "B55X80"),
+            ("0000FF", "SB30X60"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "phase2")
+        assert result is not None
+        legend, _, _, _ = result
+        assert "0000FF" in legend
+        assert "FF0000" not in legend
+
+    def test_white_bg_rows_skipped(self):
+        """Rows with white background should be skipped."""
+        slide = self._make_mock_slide_with_table([
+            ("FFFFFF", "Header"),
+            ("FF0000", "B55X80"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        legend, _, _, _ = result
+        assert "FFFFFF" not in legend
+        assert "FF0000" in legend
+
+    def test_no_bg_rows_skipped(self):
+        """Rows with no fill should be skipped."""
+        slide = self._make_mock_slide_with_table([
+            (None, "Header"),
+            ("FF0000", "B55X80"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        legend, _, _, _ = result
+        assert "FF0000" in legend
+
+    def test_unknown_labels_skipped(self):
+        """Rows with unparseable labels should be skipped."""
+        slide = self._make_mock_slide_with_table([
+            ("FF0000", "Random Text"),
+            ("00FF00", "B40X70"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        legend, _, _, _ = result
+        assert "FF0000" not in legend
+        assert "00FF00" in legend
+
+    def test_no_table_returns_none(self):
+        """Slide without tables returns None (triggers shape fallback)."""
+        mock_slide = MagicMock()
+        shape = MagicMock()
+        shape.has_table = False
+        mock_slide.shapes = [shape]
+        result = _parse_table_legend(mock_slide, 9144000, "all")
+        assert result is None
+
+    def test_table_side_detection_left(self):
+        """Table on left side should set boundary correctly."""
+        slide = self._make_mock_slide_with_table([
+            ("FF0000", "B55X80"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        _, _, boundary, side = result
+        assert side == "left"
+        # Table left=100000, width=1500000 → right=1600000 + 200000
+        assert boundary == 1800000
+
+    def test_diaphragm_wall_entry(self):
+        """連續壁 labels should set is_diaphragm=True."""
+        slide = self._make_mock_slide_with_table([
+            ("FF0000", "90CM 連續壁"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        legend, _, _, _ = result
+        assert legend["FF0000"][0].is_diaphragm is True
+        assert legend["FF0000"][0].element_type == "wall"
+
+    def test_all_entries_empty_returns_none(self):
+        """If all rows fail parsing, return None (no valid legend)."""
+        slide = self._make_mock_slide_with_table([
+            ("FF0000", ""),
+            ("00FF00", "Random nonsense"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is None
+
+
+class TestGeometryAwareFuzzyMatch:
+    """Test geometry-aware matching to prevent cross-type mismatches."""
+
+    def test_rectangle_does_not_match_beam_legend(self):
+        """Rectangle shape should not match a beam-only legend color,
+        even within tolerance."""
+        legend = {
+            "FF8040": [_make_entry(element_type="beam", section="WB40X100",
+                                   color="FF8040")],
+        }
+        # FF8000 is close to FF8040 (dist=64), but rectangle should not
+        # match beam
+        entry = _resolve_pptx_legend("FF8000", "rectangle", legend,
+                                     tolerance=150)
+        # No column entries in legend → should return fallback (beam),
+        # but geometry filter means filtered legend is empty
+        assert entry is None or entry.element_type != "column"
+
+    def test_rectangle_matches_column_not_beam(self):
+        """With both column and beam in legend, rectangle must pick column."""
+        legend = {
+            "FFA64D": [_make_entry(element_type="column", section="C100X120",
+                                   color="FFA64D")],
+            "FF8040": [_make_entry(element_type="beam", section="WB40X100",
+                                   color="FF8040")],
+        }
+        # FF8000 shape: dist to FFA64D=77, dist to FF8040=64
+        # Without geometry filtering, would pick FF8040 (beam, closer)
+        # With geometry filtering, should pick FFA64D (column)
+        entry = _resolve_pptx_legend("FF8000", "rectangle", legend,
+                                     tolerance=150)
+        assert entry is not None
+        assert entry.element_type == "column"
+        assert entry.section == "C100X120"
+
+    def test_line_matches_beam_not_column(self):
+        """Line shape should match beam, not column, even if column is closer."""
+        legend = {
+            "FF0000": [_make_entry(element_type="column", section="C90X90",
+                                   color="FF0000")],
+            "FF4D4D": [_make_entry(element_type="beam", section="B55X80",
+                                   color="FF4D4D")],
+        }
+        # FF2020 shape: dist to FF0000=32, dist to FF4D4D=45
+        # Geometry filter: line → beam only → must pick FF4D4D
+        entry = _resolve_pptx_legend("FF2020", "line", legend, tolerance=150)
+        assert entry is not None
+        assert entry.element_type == "beam"
+
+
+class TestManhattanTiebreak:
+    """Test Manhattan distance tie-breaking when Chebyshev distances are equal."""
+
+    def test_same_chebyshev_picks_lower_manhattan(self):
+        """Two legend colors with same Chebyshev but different Manhattan.
+
+        FF8000 (shape) vs:
+        - FFA64D: Chebyshev=max(0,38,77)=77, Manhattan=0+38+77=115
+        - FF4D4D: Chebyshev=max(0,77,77)=77, Manhattan=0+77+77=154
+        Should pick FFA64D (lower Manhattan).
+        """
+        legend = {
+            "FFA64D": [_make_entry(element_type="column", section="C100X120",
+                                   color="FFA64D")],
+            "FF4D4D": [_make_entry(element_type="column", section="C110X140",
+                                   color="FF4D4D")],
+        }
+        result = _fuzzy_color_match("FF8000", legend, tolerance=150)
+        assert result is not None
+        assert result[0].section == "C100X120"
+
+    def test_different_chebyshev_ignores_manhattan(self):
+        """When Chebyshev distances differ, closer Chebyshev wins regardless."""
+        legend = {
+            "FF0000": [_make_entry(section="A", color="FF0000")],
+            "FE0A00": [_make_entry(section="B", color="FE0A00")],
+        }
+        # FF0500: dist to FF0000 = max(0,5,0)=5, dist to FE0A00 = max(1,5,0)=5
+        # Actually same chebyshev=5, manhattan: 5 vs 6 → A wins
+        result = _fuzzy_color_match("FF0500", legend, tolerance=15)
+        assert result is not None
+        assert result[0].section == "A"
+
+
+class TestTableLegendHighTolerance:
+    """Test that table-sourced legends use tolerance=150 correctly."""
+
+    def test_table_legend_column_match_at_dist_77(self):
+        """Table legend color FFA64D should match shape FF8000 at dist=77
+        when tolerance=150."""
+        legend = {
+            "FFA64D": [_make_entry(element_type="column", section="C100X120",
+                                   color="FFA64D")],
+        }
+        # dist = max(0, 38, 77) = 77, within 150
+        result = _fuzzy_color_match("FF8000", legend, tolerance=150)
+        assert result is not None
+        assert result[0].section == "C100X120"
+
+    def test_table_legend_fails_at_default_15(self):
+        """Same color pair should fail with default tolerance=15."""
+        legend = {
+            "FFA64D": [_make_entry(element_type="column", section="C100X120",
+                                   color="FFA64D")],
+        }
+        result = _fuzzy_color_match("FF8000", legend, tolerance=15)
+        assert result is None
+
+    def test_table_legend_geometry_prevents_cross_type(self):
+        """High tolerance + geometry filter prevents beam←→column mismatch.
+
+        FF8000 shape (rectangle):
+        - FFA64D column (dist=77) ← should match
+        - FF8040 beam (dist=64) ← closer but wrong geometry
+        """
+        legend = {
+            "FFA64D": [_make_entry(element_type="column", section="C100X120",
+                                   color="FFA64D")],
+            "FF8040": [_make_entry(element_type="beam", section="WB40X100",
+                                   color="FF8040")],
+        }
+        entry = _resolve_pptx_legend("FF8000", "rectangle", legend,
+                                     tolerance=150)
+        assert entry is not None
+        assert entry.element_type == "column"
+        assert entry.section == "C100X120"
+
+    def test_shape_legend_keeps_low_tolerance(self):
+        """Shape-sourced legends should use tolerance=15 (no change)."""
+        legend = {
+            "FF0000": [_make_entry(element_type="beam", section="B55X80",
+                                   color="FF0000")],
+        }
+        # dist = 77 → should fail at tolerance=15
+        result = _fuzzy_color_match("FF4D4D", legend, tolerance=15)
+        assert result is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GROUP Penetration Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _make_mock_shape(shape_type, left=0, top=0, width=100, height=100,
+                     has_text_frame=False, text=""):
+    """Create a mock shape with given properties."""
+    shape = MagicMock()
+    shape.shape_type = shape_type
+    shape.left = left
+    shape.top = top
+    shape.width = width
+    shape.height = height
+    shape.has_text_frame = has_text_frame
+    if has_text_frame:
+        shape.text_frame.text = text
+    return shape
+
+
+def _make_mock_group(children, left=100, top=200, width=1000, height=800,
+                     ch_off_x=0, ch_off_y=0, ch_ext_cx=None, ch_ext_cy=None):
+    """Create a mock GROUP shape with child shapes and proper XML xfrm.
+
+    Uses lxml to build a real grpSpPr/xfrm element so _get_group_xfrm
+    can parse it correctly.
+    """
+    from lxml import etree
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+    if ch_ext_cx is None:
+        ch_ext_cx = width
+    if ch_ext_cy is None:
+        ch_ext_cy = height
+
+    group = MagicMock()
+    group.shape_type = MSO_SHAPE_TYPE.GROUP
+    group.left = left
+    group.top = top
+    group.width = width
+    group.height = height
+    group.shapes = children
+
+    # Build XML element with grpSpPr/xfrm
+    ns_a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    ns_p = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    nsmap = {'a': ns_a, 'p': ns_p}
+
+    grp_sp = etree.Element(f'{{{ns_p}}}grpSp', nsmap=nsmap)
+    grp_sp_pr = etree.SubElement(grp_sp, f'grpSpPr')
+    xfrm = etree.SubElement(grp_sp_pr, f'{{{ns_a}}}xfrm')
+    etree.SubElement(xfrm, f'{{{ns_a}}}off', x=str(left), y=str(top))
+    etree.SubElement(xfrm, f'{{{ns_a}}}ext', cx=str(width), cy=str(height))
+    etree.SubElement(xfrm, f'{{{ns_a}}}chOff', x=str(ch_off_x), y=str(ch_off_y))
+    etree.SubElement(xfrm, f'{{{ns_a}}}chExt', cx=str(ch_ext_cx), cy=str(ch_ext_cy))
+
+    group._element = grp_sp
+    return group
+
+
+def _make_mock_slide(shapes):
+    """Create a mock slide with given shapes."""
+    slide = MagicMock()
+    slide.shapes = shapes
+    return slide
+
+
+class TestIterSlideShapes:
+    """Test _iter_slide_shapes GROUP penetration and coordinate transform."""
+
+    def test_flat_no_groups(self):
+        """Without GROUPs, all shapes are yielded with original coords."""
+        s1 = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM, left=10, top=20)
+        s2 = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM, left=30, top=40)
+        slide = _make_mock_slide([s1, s2])
+
+        results = list(_iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)))
+        assert len(results) == 2
+        assert results[0].left == 10
+        assert results[0].top == 20
+        assert results[1].left == 30
+        assert results[1].top == 40
+
+    def test_group_penetration(self):
+        """FREEFORM inside a GROUP should be yielded."""
+        child = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM, left=50, top=60,
+                                 width=10, height=10)
+        group = _make_mock_group([child], left=100, top=200,
+                                 width=1000, height=800)
+        slide = _make_mock_slide([group])
+
+        results = list(_iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)))
+        assert len(results) == 1
+        # With chOff=(0,0) and chExt=ext, abs = off + child
+        assert results[0].left == 100 + 50  # 150
+        assert results[0].top == 200 + 60   # 260
+
+    def test_nested_groups(self):
+        """Shapes inside nested GROUPs should be yielded with correct coords."""
+        inner_child = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM,
+                                       left=10, top=20, width=5, height=5)
+        inner_group = _make_mock_group([inner_child], left=50, top=60,
+                                       width=500, height=400)
+        outer_group = _make_mock_group([inner_group], left=100, top=200,
+                                       width=1000, height=800)
+        slide = _make_mock_slide([outer_group])
+
+        results = list(_iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)))
+        assert len(results) == 1
+        # inner child in inner group's child space: (10, 20)
+        # inner group transform: off=(50,60), chOff=(0,0), chExt=ext → abs = 50+10=60, 60+20=80
+        # outer group transform: off=(100,200), chOff=(0,0), chExt=ext → abs = 100+60=160, 200+80=280
+        assert results[0].left == 160
+        assert results[0].top == 280
+
+    def test_abs_coords_with_identity_transform(self):
+        """When chOff=0 and chExt=ext, coords should be off + child."""
+        child = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM,
+                                 left=300, top=400, width=20, height=30)
+        group = _make_mock_group([child], left=1000, top=2000,
+                                 width=5000, height=3000)
+        slide = _make_mock_slide([group])
+
+        results = list(_iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)))
+        assert len(results) == 1
+        assert results[0].left == 1300  # 1000 + 300
+        assert results[0].top == 2400   # 2000 + 400
+
+    def test_offset_group(self):
+        """GROUP with non-zero chOff should shift child coords correctly."""
+        child = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM,
+                                 left=500, top=600, width=10, height=10)
+        # chOff=(200, 300) means child space starts at (200, 300)
+        # abs_x = off_x + (child_x - ch_off_x) * ext_cx / ch_ext_cx
+        # With ext = chExt: abs_x = 1000 + (500 - 200) = 1300
+        group = _make_mock_group([child], left=1000, top=2000,
+                                 width=4000, height=3000,
+                                 ch_off_x=200, ch_off_y=300)
+        slide = _make_mock_slide([group])
+
+        results = list(_iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)))
+        assert len(results) == 1
+        assert results[0].left == 1300  # 1000 + (500 - 200)
+        assert results[0].top == 2300   # 2000 + (600 - 300)
+
+    def test_type_filter(self):
+        """type_filter should exclude non-matching shapes."""
+        s1 = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM, left=10, top=20)
+        s2 = _make_mock_shape(MSO_SHAPE_TYPE.TEXT_BOX, left=30, top=40)
+        slide = _make_mock_slide([s1, s2])
+
+        freeforms = list(_iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)))
+        assert len(freeforms) == 1
+        assert freeforms[0].left == 10
+
+        textboxes = list(_iter_slide_shapes(slide, (MSO_SHAPE_TYPE.TEXT_BOX,)))
+        assert len(textboxes) == 1
+        assert textboxes[0].left == 30
+
+    def test_no_filter_yields_all(self):
+        """type_filter=None should yield all non-GROUP shapes."""
+        s1 = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM, left=10, top=20)
+        s2 = _make_mock_shape(MSO_SHAPE_TYPE.TEXT_BOX, left=30, top=40)
+        slide = _make_mock_slide([s1, s2])
+
+        results = list(_iter_slide_shapes(slide))
+        assert len(results) == 2
+
+    def test_group_not_yielded(self):
+        """GROUP shapes themselves should never be yielded."""
+        child = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM, left=10, top=20)
+        group = _make_mock_group([child], left=100, top=200)
+        slide = _make_mock_slide([group])
+
+        results = list(_iter_slide_shapes(slide))
+        # Only the child, not the group
+        assert len(results) == 1
+        for r in results:
+            assert r.shape_type != MSO_SHAPE_TYPE.GROUP
+
+    def test_mixed_top_level_and_group(self):
+        """Both top-level and GROUP-nested shapes should be yielded."""
+        top_shape = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM,
+                                     left=10, top=20, width=5, height=5)
+        child = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM,
+                                 left=50, top=60, width=5, height=5)
+        group = _make_mock_group([child], left=100, top=200)
+        slide = _make_mock_slide([top_shape, group])
+
+        results = list(_iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)))
+        assert len(results) == 2
+        assert results[0].left == 10   # top-level
+        assert results[1].left == 150  # 100 + 50
+
+
+class TestIterTextShapesInGroup:
+    """Test _iter_text_shapes with GROUP-nested text shapes."""
+
+    def test_text_shape_in_group(self):
+        """Text shapes inside GROUP should be found by _iter_text_shapes."""
+        child = _make_mock_shape(MSO_SHAPE_TYPE.TEXT_BOX, left=50, top=60,
+                                 has_text_frame=True, text="B55X80")
+        group = _make_mock_group([child], left=100, top=200)
+        slide = _make_mock_slide([group])
+
+        results = list(_iter_text_shapes(slide))
+        assert len(results) == 1
+        assert results[0].text_frame.text == "B55X80"
+        assert results[0].left == 150  # 100 + 50
+        assert results[0].top == 260   # 200 + 60
+
+    def test_text_and_non_text_in_group(self):
+        """Only text shapes should be yielded from _iter_text_shapes."""
+        text_child = _make_mock_shape(MSO_SHAPE_TYPE.TEXT_BOX, left=50, top=60,
+                                      has_text_frame=True, text="C90X90")
+        freeform_child = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM,
+                                          left=70, top=80,
+                                          has_text_frame=False)
+        group = _make_mock_group([text_child, freeform_child],
+                                 left=100, top=200)
+        slide = _make_mock_slide([group])
+
+        results = list(_iter_text_shapes(slide))
+        assert len(results) == 1
+        assert results[0].text_frame.text == "C90X90"
+
+
+class TestAbsShapeProxy:
+    """Test _AbsShape proxy attribute forwarding."""
+
+    def test_left_top_overridden(self):
+        """left and top should return the overridden absolute values."""
+        shape = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM,
+                                 left=10, top=20, width=100, height=200)
+        proxy = _AbsShape(shape, 500, 600)
+        assert proxy.left == 500
+        assert proxy.top == 600
+
+    def test_other_attrs_forwarded(self):
+        """width, height, shape_type etc. should be forwarded to underlying shape."""
+        shape = _make_mock_shape(MSO_SHAPE_TYPE.FREEFORM,
+                                 left=10, top=20, width=100, height=200)
+        proxy = _AbsShape(shape, 500, 600)
+        assert proxy.width == 100
+        assert proxy.height == 200
+        assert proxy.shape_type == MSO_SHAPE_TYPE.FREEFORM
+
+
+class TestLineTolerance:
+    """Test split tolerance: LINE shapes use exact match, RECTs keep fuzzy."""
+
+    def test_line_exact_match_succeeds(self):
+        """Line with exact legend color matches at tolerance=0."""
+        legend = {"FF0000": [_make_entry(element_type="beam", section="B55X80",
+                                          color="FF0000")]}
+        entry = _resolve_pptx_legend("FF0000", "line", legend, tolerance=0)
+        assert entry is not None
+        assert entry.section == "B55X80"
+
+    def test_line_near_miss_rejected_at_zero(self):
+        """Line with 1-off color rejected at tolerance=0."""
+        legend = {"FF0000": [_make_entry(element_type="beam", section="B55X80",
+                                          color="FF0000")]}
+        entry = _resolve_pptx_legend("FE0000", "line", legend, tolerance=0)
+        assert entry is None
+
+    def test_line_blue_does_not_match_cyan(self):
+        """THE BUG: B60X80 blue (0080FF) must NOT match SB25X50 cyan (00FFFF)
+        at tolerance=0. Chebyshev distance = 127."""
+        legend = {"00FFFF": [_make_entry(element_type="small_beam",
+                                          section="SB25X50", color="00FFFF")]}
+        entry = _resolve_pptx_legend("0080FF", "line", legend, tolerance=0)
+        assert entry is None
+
+    def test_rectangle_still_uses_high_tolerance(self):
+        """Rectangle column still matches at tolerance=150 (unchanged)."""
+        legend = {"FFA64D": [_make_entry(element_type="column",
+                                          section="C100X120", color="FFA64D")]}
+        # dist = max(0, 38, 77) = 77, within 150
+        entry = _resolve_pptx_legend("FF8000", "rectangle", legend,
+                                     tolerance=150)
+        assert entry is not None
+        assert entry.section == "C100X120"

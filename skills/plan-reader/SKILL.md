@@ -16,9 +16,10 @@ description: "結構配置圖核心解讀器。從結構平面圖讀取柱、梁
            ▼
   辨識構件 → 參考 plan-reader-elements
   樓層對應 → 參考 plan-reader-floors
+  斷面命名 → 參考 section-name
            │
            ▼
-  輸出結構化摘要（第五節格式）
+  輸出結構化摘要（第四節格式）
 ```
 
 **核心原則：從圖面讀取資訊，不做假設。**
@@ -27,18 +28,32 @@ description: "結構配置圖核心解讀器。從結構平面圖讀取柱、梁
 
 ## 一、工作目錄與檔案管理
 
-結構配置圖相關檔案統一存放在 Case Folder 的 **「結構配置圖」** 子資料夾：
+結構配置圖相關檔案統一存放在 Case Folder，Phase 1/2 中間檔案結構如下：
 
 ```
 {Case Folder}/
-├── 結構配置圖/          # 所有結構配置圖相關檔案
-│   ├── 1F.png           # 各樓層結構配置圖截圖
-│   ├── 2F.png
-│   ├── RF.png
-│   └── ...
-├── SPECTRUM.TXT         # 反應譜檔案
-├── EQ_PARAMS.txt        # 地震力參數
-└── ...
+├── 結構配置圖/
+│   ├── SLIDES INFO/             # Phase 1: per-slide extraction output
+│   │   └── {floor_label}/       # Per-floor subdirectory
+│   │       ├── {floor_label}.json       # Per-slide JSON (PPT-米座標)
+│   │       ├── grid_anchors_{fl}.json   # READER Grid anchor positions
+│   │       └── screenshots/             # Cropped PNGs for this floor
+│   ├── grid_info.json           # Phase 1 READER output (outline/stories — AI)
+│   └── SB-BEAM/                 # Phase 2: SB-READER validation results
+├── calibrated/                  # Phase 1: Grid-calibrated per-slide JSONs
+│   └── {floor_label}/
+│       └── elements.json
+├── elements.json                # Phase 1 merged (elements_merge.py --inputs-dir calibrated/)
+├── elements_validated.json      # Phase 1 beam-snapped elements (beam_validate.py)
+├── beam_validation_report.json  # Phase 1 beam endpoint correction report
+├── grid_data.json               # Phase 0.3 ETABS Grid read (ground truth)
+├── sb_elements.json             # Phase 2 script output (small beams — PPTX-meter)
+├── sb_elements_aligned.json     # Phase 2 affine-calibrated (grid-aligned)
+├── model_config.json            # Phase 1 output (no SB/slabs)
+├── sb_patch.json                # Phase 2 output (SB only, no slabs)
+├── merged_config.json           # Merged (base + SB patch)
+├── snapped_config.json          # Snap-corrected config
+└── final_config.json            # Final config with auto-generated slabs
 ```
 
 ---
@@ -57,50 +72,41 @@ description: "結構配置圖核心解讀器。從結構平面圖讀取柱、梁
 
 ## 三、完整解讀流程
 
-依照以下步驟系統性解讀結構配置圖：
+Phase 1 READER 的實際工作流：
 
 ```
-Step 1  辨識圖面基本資訊
-        ├── 樓層（從標題或用戶說明）
-        ├── Grid Line 編號（從圖面圈號讀取，不假設命名規則）
-        │   ⚠️ X方向不一定是數字，Y方向不一定是字母
-        │   ⚠️ Grid 不一定由左至右或由下至上遞增
-        │   ⚠️ 必須從圖面的實際圈號標示確認順序
-        ├── Grid Line 間距（從標註文字讀取）
-        └── 累積座標計算（第一條 Grid = 0）
-        → 詳見 plan-reader-elements 第三節
+Step 0  Prerequisites
+        ├── read_grid.py → grid_data.json（從 ETABS 讀取 Grid 為 ground truth）
+        └── pptx_to_elements.py --scan-floors → PAGE_FLOOR_MAPPING（樓層標籤偵測）
 
-Step 2  讀取圖例 (Legend)
-        ├── 找到圖例位置
-        ├── 逐項記錄「視覺特徵 → 構件名稱」
-        └── 建立本圖專用對照表
-        → 詳見 plan-reader-elements 第二節
+Step 1  Per-slide extraction
+        └── pptx_to_elements.py --slides-info-dir "SLIDES INFO" --page-floors "{floors}"
+            → SLIDES INFO/{floor_label}/{floor_label}.json (PPT-米座標, per-slide)
 
-Step 3  辨識所有柱位
-        ├── Grid 位置 + 柱尺寸 (C{X向寬}X{Y向深})
-        ├── 退縮柱位/斜柱 → 詢問使用者
-        └── ETABS 樓層 = 平面圖樓層 + 1
-        → 詳見 plan-reader-elements 第一、四節
-        → 樓層規則見 plan-reader-floors 第一節
+Step 2  圖例讀取（自動）
+        └── pptx_to_elements.py 自動從 PPT 2-column 表格提取
+        → 詳見 plan-reader-elements 第一節
 
-Step 4  辨識所有大梁
-        ├── 方向（X/Y）、起終點 Grid Line
-        └── 尺寸（從圖例對照）
+Step 3  Grid anchor identification
+        └── READER 識別 PPT 中的 Grid 標記位置
+        → SLIDES INFO/{fl}/grid_anchors_{fl}.json
 
-Step 5  讀取小梁座標
-        ├── 主要：從 pptx_to_elements.py 提取精確座標
-        ├── SB-READER 驗證連接性和合理性
-        └── 備案：從圖面像素量測
-        → 備案流程見 plan-reader-floors 第二節
+Step 4  Affine calibration
+        └── affine_calibrate.py --mode grid
+        → calibrated/{fl}/elements.json (Grid 座標)
 
-Step 6  辨識剪力牆、連續壁和壁梁
-        ├── 連續壁材質 = C280（預設）
-        └── 剪力牆/連續壁 ETABS 樓層 = 平面圖 + 1
+Step 5  Merge + Validate
+        ├── elements_merge.py --inputs-dir calibrated/ → elements.json (auto-globs */elements.json)
+        └── beam_validate.py (per-slide, in Step E3.5)
 
-Step 7  判斷樓板區域
-        → 詳見 plan-reader-floors 第三節
+Step 6  Grid 驗證 + building_outline + core_grid_area
+        └── READER 驗證 Grid 對齊、定義建物外框與屋突核心區
 
-Step 8  輸出結構化摘要（第五節格式）
+Step 7  config_build
+        └── config_build.py → model_config.json
+
+Step 8  輸出 grid_info.json
+        └── READER 輸出 Grid 驗證結果、outline、core_area
 ```
 
 ---
@@ -214,7 +220,7 @@ Step 8  輸出結構化摘要（第五節格式）
 [ ] 讀取圖例中所有構件類型？
 [ ] 所有柱位記錄？（含 X/Y 向尺寸確認）
 [ ] 所有大梁記錄（含方向和跨度）？
-[ ] 小梁位置精確座標（annotation.json 或像素量測）？
+[ ] 小梁位置精確座標（pptx_to_elements.py 或像素量測）？
 [ ] 小梁兩端接觸其他構件？（懸空=可疑）
 [ ] 剪力牆和壁梁辨識？
 [ ] 連續壁標記材質 C280？
