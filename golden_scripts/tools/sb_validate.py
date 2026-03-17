@@ -159,6 +159,9 @@ def correct_sb_angles(sb_data, grid_data, angle_threshold_deg=5.0):
 
     small_beams = sb_data.get("small_beams", [])
     for idx, sb in enumerate(small_beams):
+        direction = sb.get("direction", "").upper()
+        if direction in ("X", "Y"):
+            continue  # PPT extraction confident — skip angle correction
         x1, y1 = sb["x1"], sb["y1"]
         x2, y2 = sb["x2"], sb["y2"]
         dx = x2 - x1

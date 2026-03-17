@@ -228,6 +228,9 @@ def correct_angles(elements, grid_data, angle_threshold_deg=2.0):
     for element_type in ("beams", "walls"):
         items = elements.get(element_type, [])
         for idx, item in enumerate(items):
+            direction = item.get("direction", "").upper()
+            if direction in ("X", "Y"):
+                continue  # PPT extraction confident — skip angle correction
             x1, y1 = item["x1"], item["y1"]
             x2, y2 = item["x2"], item["y2"]
             dx = x2 - x1
@@ -420,6 +423,30 @@ def find_intermediate_supports(beam, columns, walls, split_tolerance=0.15,
     # Check additional segments (other beams, other walls, etc.)
     if segments:
         _check_segments(segments, "segment")
+
+    # Helper: check segment endpoints as point projections (like columns)
+    def _check_endpoints(seg_list, label_prefix):
+        for seg in seg_list:
+            if not floors_overlap(b_floors, seg.get("floors", [])):
+                continue
+            for ep_x, ep_y in [(seg["x1"], seg["y1"]),
+                               (seg["x2"], seg["y2"])]:
+                t = ((ep_x - bx1) * bdx + (ep_y - by1) * bdy) / b_len_sq
+                if t <= 0.02 or t >= 0.98:
+                    continue
+                proj_x = bx1 + t * bdx
+                proj_y = by1 + t * bdy
+                d = math.hypot(ep_x - proj_x, ep_y - proj_y)
+                if d <= split_tolerance:
+                    supports.append((t, round(proj_x, 2), round(proj_y, 2),
+                                     f"{label_prefix}-ep ({ep_x},{ep_y})"))
+
+    # Check wall endpoints
+    _check_endpoints(walls, "wall")
+
+    # Check segment endpoints (beams when called from split_all_walls)
+    if segments:
+        _check_endpoints(segments, "seg")
 
     # Sort by t, deduplicate close points (delta_t < 0.02)
     supports.sort(key=lambda s: s[0])

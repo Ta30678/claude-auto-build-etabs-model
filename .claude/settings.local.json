@@ -22,7 +22,6 @@
       "mcp__etabs__test_connection"
     ]
   },
-  "model": "opus",
   "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true
 }

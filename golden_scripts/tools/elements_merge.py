@@ -304,6 +304,51 @@ def check_section_coverage(merged, stats):
     return True
 
 
+def merge_small_beams_only(*element_files):
+    """Merge only small_beams arrays from multiple files (Phase 2 mode).
+
+    Args:
+        *element_files: Parsed JSON dicts containing small_beams arrays.
+
+    Returns:
+        (merged_dict, stats_dict)
+    """
+    all_small_beams = []
+    all_metadata = []
+
+    for ef in element_files:
+        all_small_beams.extend(ef.get("small_beams", []))
+        if "_metadata" in ef:
+            all_metadata.append(ef["_metadata"])
+
+    sb_raw = len(all_small_beams)
+    all_small_beams, sb_dupes = dedup_elements(all_small_beams, "small_beams")
+
+    # Collect frame sections from SBs
+    frame_set = set()
+    for sb in all_small_beams:
+        sec = sb.get("section", "")
+        if sec:
+            frame_set.add(sec)
+
+    merged = {
+        "small_beams": all_small_beams,
+        "sections": {
+            "frame": sorted(frame_set),
+        },
+    }
+
+    if all_metadata:
+        merged["_metadata"] = merge_metadata(all_metadata)
+
+    stats = {
+        "input_count": len(element_files),
+        "small_beams": {"total": sb_raw, "deduped": len(all_small_beams)},
+    }
+
+    return merged, stats
+
+
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -320,6 +365,10 @@ def main():
     parser.add_argument(
         "--output", required=True,
         help="Output merged elements JSON file",
+    )
+    parser.add_argument(
+        "--phase", choices=["phase1", "phase2"], default="phase1",
+        help="phase1=all element types (default), phase2=small_beams only",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -342,12 +391,22 @@ def main():
         if not dir_path.is_dir():
             print(f"ERROR: --inputs-dir is not a directory: {args.inputs_dir}")
             sys.exit(1)
-        json_files = sorted(dir_path.glob("*/elements.json"))
-        if not json_files:
-            json_files = sorted(dir_path.glob("*.json"))
-        if not json_files:
-            print(f"ERROR: No .json files found in {args.inputs_dir} (tried */elements.json and *.json)")
-            sys.exit(1)
+        if args.phase == "phase2":
+            # Phase 2: scan for sb_elements.json in subdirectories
+            json_files = sorted(dir_path.glob("*/sb_elements.json"))
+            if not json_files:
+                # Fallback: any JSON with "sb" in name
+                json_files = sorted(f for f in dir_path.glob("*/*.json") if "sb" in f.name.lower())
+            if not json_files:
+                print(f"ERROR: No sb_elements.json files found in {args.inputs_dir}")
+                sys.exit(1)
+        else:
+            json_files = sorted(dir_path.glob("*/elements.json"))
+            if not json_files:
+                json_files = sorted(dir_path.glob("*.json"))
+            if not json_files:
+                print(f"ERROR: No .json files found in {args.inputs_dir} (tried */elements.json and *.json)")
+                sys.exit(1)
         input_paths.extend(str(f) for f in json_files)
         print(f"Found {len(json_files)} JSON files in {args.inputs_dir}")
 
@@ -370,25 +429,38 @@ def main():
         element_files.append(data)
 
     # Merge
-    merged, stats = merge_elements(*element_files)
+    if args.phase == "phase2":
+        merged, stats = merge_small_beams_only(*element_files)
 
-    # Summary
-    print(f"\n--- Merge Summary ({stats['input_count']} files) ---")
-    for cat in ("columns", "beams", "walls", "small_beams"):
-        s = stats[cat]
+        # Summary
+        print(f"\n--- Merge Summary ({stats['input_count']} files, phase2: small_beams only) ---")
+        s = stats["small_beams"]
         removed = s["total"] - s["deduped"]
         suffix = f" ({removed} duplicates removed)" if removed else ""
-        print(f"  {cat}: {s['total']} -> {s['deduped']}{suffix}")
+        print(f"  small_beams: {s['total']} -> {s['deduped']}{suffix}")
+        sec = merged.get("sections", {})
+        print(f"  frame sections: {len(sec.get('frame', []))}")
+        ok = True
+    else:
+        merged, stats = merge_elements(*element_files)
 
-    sec = merged.get("sections", {})
-    print(f"  frame sections: {len(sec.get('frame', []))}")
-    print(f"  wall sections:  {len(sec.get('wall', []))}")
+        # Summary
+        print(f"\n--- Merge Summary ({stats['input_count']} files) ---")
+        for cat in ("columns", "beams", "walls", "small_beams"):
+            s = stats[cat]
+            removed = s["total"] - s["deduped"]
+            suffix = f" ({removed} duplicates removed)" if removed else ""
+            print(f"  {cat}: {s['total']} -> {s['deduped']}{suffix}")
 
-    if stats["empty_section_count"] > 0:
-        print(f"  empty sections: {stats['empty_section_count']}")
+        sec = merged.get("sections", {})
+        print(f"  frame sections: {len(sec.get('frame', []))}")
+        print(f"  wall sections:  {len(sec.get('wall', []))}")
 
-    # Coverage check
-    ok = check_section_coverage(merged, stats)
+        if stats["empty_section_count"] > 0:
+            print(f"  empty sections: {stats['empty_section_count']}")
+
+        # Coverage check
+        ok = check_section_coverage(merged, stats)
 
     if args.dry_run:
         print("\n[DRY-RUN] No file written.")

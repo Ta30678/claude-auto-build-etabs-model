@@ -721,6 +721,56 @@ class TestIntegration:
             tolerance=1.0, no_angle_correct=True)
         assert report["angle_corrected_sbs"] == 0
 
+    def test_direction_x_skips_angle_correction(self, simple_grid_data):
+        """SB with direction='X' should NOT be angle-corrected even with deviation."""
+        sb_data = {
+            "small_beams": [
+                {"x1": 0.0, "y1": 5.90, "x2": 8.5, "y2": 6.10,
+                 "section": "SB25X50", "floors": ["1F"], "direction": "X"},
+            ],
+        }
+        sb_data, angle_report = correct_sb_angles(sb_data, simple_grid_data, 5.0)
+        assert len(angle_report) == 0
+        assert sb_data["small_beams"][0]["y1"] == 5.90
+        assert sb_data["small_beams"][0]["y2"] == 6.10
+
+    def test_direction_y_skips_angle_correction(self, simple_grid_data):
+        """SB with direction='Y' should NOT be angle-corrected."""
+        sb_data = {
+            "small_beams": [
+                {"x1": 8.38, "y1": 0.0, "x2": 8.62, "y2": 6.0,
+                 "section": "SB25X50", "floors": ["1F"], "direction": "Y"},
+            ],
+        }
+        sb_data, angle_report = correct_sb_angles(sb_data, simple_grid_data, 5.0)
+        assert len(angle_report) == 0
+        assert sb_data["small_beams"][0]["x1"] == 8.38
+
+    def test_direction_empty_gets_corrected(self, simple_grid_data):
+        """SB with direction='' is corrected (same as before)."""
+        sb_data = {
+            "small_beams": [
+                {"x1": 0.0, "y1": 5.90, "x2": 8.5, "y2": 6.10,
+                 "section": "SB25X50", "floors": ["1F"], "direction": ""},
+            ],
+        }
+        sb_data, angle_report = correct_sb_angles(sb_data, simple_grid_data, 5.0)
+        assert len(angle_report) == 1
+        assert sb_data["small_beams"][0]["y1"] == 6.0
+        assert sb_data["small_beams"][0]["y2"] == 6.0
+
+    def test_direction_missing_gets_corrected(self, simple_grid_data):
+        """SB with no direction field is corrected (backward compat)."""
+        sb_data = {
+            "small_beams": [
+                {"x1": 0.0, "y1": 5.90, "x2": 8.5, "y2": 6.10,
+                 "section": "SB25X50", "floors": ["1F"]},
+            ],
+        }
+        sb_data, angle_report = correct_sb_angles(sb_data, simple_grid_data, 5.0)
+        assert len(angle_report) == 1
+        assert sb_data["small_beams"][0]["y1"] == 6.0
+
     def test_metadata_preserved(self, simple_grid_data, simple_config):
         """Extra fields in sb_data (like _metadata) are preserved."""
         sb_data = {

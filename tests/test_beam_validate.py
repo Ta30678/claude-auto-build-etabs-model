@@ -1208,6 +1208,104 @@ class TestSplitAllWalls:
         assert report["wall_split_walls"] == 0
         assert len(elements["walls"]) == 1
 
+    def test_wall_split_at_parallel_beam_endpoint(self):
+        """FWB beam runs parallel along a wall → wall split at FWB endpoints.
+
+        Mimics A21: Wall at y=35.35 from x=-5 to x=40.
+        FWB segment at y=35.35 from x=0 to x=8.5 (parallel to wall).
+        Segment intersection finds nothing (parallel filter, dot>0.95).
+        Endpoint projection should split wall at x=0 and x=8.5.
+        """
+        elements = {
+            "walls": [
+                {"x1": -5.0, "y1": 35.35, "x2": 40.0, "y2": 35.35,
+                 "section": "W100", "floors": ["B3F"]},
+            ],
+            "beams": [
+                # FWB running parallel along the wall
+                {"x1": 0.0, "y1": 35.35, "x2": 8.5, "y2": 35.35,
+                 "section": "FWB80X200", "floors": ["B3F"]},
+            ],
+            "columns": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_walls(elements, grid_data, 0.15)
+        # Wall should be split at x=0 and x=8.5 → 3 sub-walls
+        assert report["wall_split_walls"] == 1
+        assert len(elements["walls"]) == 3
+        # Verify sub-wall x1/x2 coordinates cover original range
+        x_coords = sorted(
+            set(w["x1"] for w in elements["walls"])
+            | set(w["x2"] for w in elements["walls"])
+        )
+        assert abs(x_coords[0] - (-5.0)) < 0.01
+        assert abs(x_coords[-1] - 40.0) < 0.01
+        # Split points at 0 and 8.5
+        assert any(abs(x - 0.0) < 0.01 for x in x_coords)
+        assert any(abs(x - 8.5) < 0.01 for x in x_coords)
+
+    def test_wall_split_at_perpendicular_beam_endpoint(self):
+        """Perpendicular beam endpoint is ON the wall → wall split.
+
+        Beam from (5, 0) to (5, 10). Wall from (0, 10) to (10, 10).
+        Beam endpoint (5, 10) is at t_seg=1.0 for the beam (skipped by
+        segment intersection), but projects onto wall at t=0.5.
+        """
+        elements = {
+            "walls": [
+                {"x1": 0.0, "y1": 10.0, "x2": 10.0, "y2": 10.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "beams": [
+                {"x1": 5.0, "y1": 0.0, "x2": 5.0, "y2": 10.0,
+                 "section": "B40X60", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_walls(elements, grid_data, 0.15)
+        assert report["wall_split_walls"] == 1
+        assert len(elements["walls"]) == 2
+
+    def test_wall_no_split_beam_endpoint_far(self):
+        """Beam endpoint is >split_tolerance from wall → no split."""
+        elements = {
+            "walls": [
+                {"x1": 0.0, "y1": 5.0, "x2": 10.0, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "beams": [
+                # Beam endpoint at (5, 4.5) — 0.5m from wall, > 0.15 tolerance
+                {"x1": 5.0, "y1": 0.0, "x2": 5.0, "y2": 4.5,
+                 "section": "B40X60", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_walls(elements, grid_data, 0.15)
+        assert report["wall_split_walls"] == 0
+        assert len(elements["walls"]) == 1
+
+    def test_wall_no_split_beam_endpoint_at_wall_end(self):
+        """Beam endpoint projects near wall's own endpoint (t ≤ 0.02) → no split."""
+        elements = {
+            "walls": [
+                # Wall from x=0 to x=10
+                {"x1": 0.0, "y1": 5.0, "x2": 10.0, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "beams": [
+                # Beam endpoint at (0.1, 5) → t = 0.01 ≤ 0.02 → skip
+                {"x1": 0.1, "y1": 0.0, "x2": 0.1, "y2": 5.0,
+                 "section": "B40X60", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_walls(elements, grid_data, 0.15)
+        assert report["wall_split_walls"] == 0
+        assert len(elements["walls"]) == 1
+
 
 # ---------------------------------------------------------------------------
 # TestNewPipelineOrder
@@ -1252,6 +1350,84 @@ class TestNewPipelineOrder:
         assert beam["y1"] == 3.2
         assert beam["x2"] == 8.5
         assert beam["y2"] == 3.2
+
+    def test_direction_x_skips_angle_correction(self):
+        """Beam with direction='X' should NOT be angle-corrected even with deviation."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 8.50}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 6.00}],
+        }
+        elements = {
+            "beams": [
+                # ~1° deviation from horizontal, but direction="X"
+                {"x1": 0.0, "y1": 5.90, "x2": 8.5, "y2": 6.10,
+                 "section": "B50X80", "floors": ["1F"], "direction": "X"},
+            ],
+            "walls": [],
+        }
+        elements, angle_report = correct_angles(elements, grid_data, 2.0)
+        assert len(angle_report) == 0
+        # Coordinates unchanged
+        assert elements["beams"][0]["y1"] == 5.90
+        assert elements["beams"][0]["y2"] == 6.10
+
+    def test_direction_y_skips_angle_correction(self):
+        """Wall with direction='Y' should NOT be angle-corrected."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0}],
+            "y": [{"label": "1", "coordinate": 0.0}],
+        }
+        elements = {
+            "beams": [],
+            "walls": [
+                {"x1": 0.10, "y1": 0.0, "x2": -0.10, "y2": 6.0,
+                 "section": "W25", "floors": ["1F"], "direction": "Y"},
+            ],
+        }
+        elements, angle_report = correct_angles(elements, grid_data, 2.0)
+        assert len(angle_report) == 0
+        assert elements["walls"][0]["x1"] == 0.10
+
+    def test_direction_empty_gets_corrected(self):
+        """Beam with direction='' is corrected (same as before)."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 8.50}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 6.00}],
+        }
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 5.90, "x2": 8.5, "y2": 6.10,
+                 "section": "B50X80", "floors": ["1F"], "direction": ""},
+            ],
+            "walls": [],
+        }
+        elements, angle_report = correct_angles(elements, grid_data, 2.0)
+        assert len(angle_report) == 1
+        assert elements["beams"][0]["y1"] == 6.0
+        assert elements["beams"][0]["y2"] == 6.0
+
+    def test_direction_missing_gets_corrected(self):
+        """Beam with no direction field is corrected (backward compat)."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 8.50}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 6.00}],
+        }
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 5.90, "x2": 8.5, "y2": 6.10,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [],
+        }
+        elements, angle_report = correct_angles(elements, grid_data, 2.0)
+        assert len(angle_report) == 1
+        assert elements["beams"][0]["y1"] == 6.0
 
     def test_wall_split_in_pipeline(self):
         """Full pipeline includes wall splitting."""

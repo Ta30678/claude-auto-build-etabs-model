@@ -62,13 +62,13 @@ claude-auto-build-etabs-model/
 │       ├── unit_converter.py              # Unit detection & conversion
 │       ├── pptx_to_elements.py            # PPT structural plan → elements JSON (per-slide or merged output)
 │       ├── config_build.py                # Phase 1: elements.json + grid_info.json → model_config.json (deterministic merge)
-│       ├── elements_merge.py              # Phase 1: merge per-slide/elements JSONs → elements.json
+│       ├── elements_merge.py              # Merge per-slide/elements JSONs (Phase 1: all types, Phase 2: small_beams only)
 │       ├── beam_validate.py               # Phase 1: beam endpoint connectivity validation + auto-snap
-│       ├── sb_patch_build.py              # Phase 2: sb_elements_aligned.json → sb_patch.json (deterministic extraction)
+│       ├── sb_patch_build.py              # Phase 2: sb_elements_validated.json → sb_patch.json (deterministic extraction)
 │       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
 │       ├── sb_validate.py                 # Phase 2 SB angle correction + snap + split (replaces config_snap in pipeline)
 │       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls (legacy, imported by sb_validate)
-│       ├── affine_calibrate.py            # Transform PPTX-meter coords to grid-aligned (Phase 1 grid mode + Phase 2 elements mode)
+│       ├── affine_calibrate.py            # Transform PPTX-meter coords to grid-aligned (--mode grid for both Phase 1 & Phase 2)
 │       ├── slab_generator.py              # Graph-based slab polygon generation from beam layout
 │       ├── read_grid.py                   # Read Grid System from ETABS → grid_data.json
 │       ├── gs_split.py                    # Split multi-building → single-building e2k
@@ -107,7 +107,7 @@ claude-auto-build-etabs-model/
 │   ├── agents/                            # BTS agent definitions
 │   │   ├── phase1-reader.md               # Phase 1 READER: extraction + grid/outline/core_area → grid_info.json
 │   │   ├── phase1-config-builder.md       # Phase 1 CONFIG-BUILDER: GS execution only (steps 1-6)
-│   │   ├── phase2-sb-reader.md            # Phase 2 SB-READER: SB validation + SB pipeline execution
+│   │   ├── phase2-sb-reader.md            # Phase 2 SB-READER: per-slide affine calibration + SB validation
 │   │   ├── phase2-config-builder.md       # Phase 2 CONFIG-BUILDER: GS execution only (steps 2,7,8)
 │   │   ├── reader.md                      # READER: reads structural plan images (bts-gs)
 │   │   ├── sb-reader.md                   # SB-READER: small beam coordinate validation (bts-gs)
@@ -187,7 +187,14 @@ python -m golden_scripts.tools.pptx_to_elements \
     --phase phase1 \
     --crop --crop-dir "結構配置圖/"
 
-# Phase 2: small beams only
+# Phase 2 (per-slide mode): per-slide SB JSONs to SB SLIDES INFO/
+python -m golden_scripts.tools.pptx_to_elements \
+    --input 結構配置圖/plan.pptx \
+    --page-floors "3=1F~2F, 4=3F~14F" \
+    --phase phase2 \
+    --slides-info-dir "結構配置圖/SB SLIDES INFO"
+
+# Phase 2 (legacy merged mode): single merged output
 python -m golden_scripts.tools.pptx_to_elements \
     --input 結構配置圖/plan.pptx \
     --output sb_elements.json \
@@ -215,12 +222,13 @@ python -m golden_scripts.tools.affine_calibrate \
     --grid-anchors "SLIDES INFO/1F~2F/grid_anchors_1F~2F.json" \
     --output "calibrated/1F~2F/elements.json"
 
-# Phase 2 (elements mode, default): elements + config → aligned SB
+# Phase 2 (grid mode): per-slide SB JSON + Phase 1 grid anchors → calibrated SB
 python -m golden_scripts.tools.affine_calibrate \
-    --elements elements.json \
-    --config model_config.json \
-    --sb-elements sb_elements.json \
-    --output sb_elements_aligned.json
+    --mode grid \
+    --per-slide "SB SLIDES INFO/1F~2F/sb_1F~2F.json" \
+    --grid-data grid_data.json \
+    --grid-anchors "SLIDES INFO/1F~2F/grid_anchors_1F~2F.json" \
+    --output "sb_calibrated/1F~2F/sb_elements.json"
 ```
 
 ### SB Validate Tool (Phase 2 — angle correction + snap + split)
@@ -263,12 +271,18 @@ python -m golden_scripts.tools.slab_generator \
     --output final_config.json
 ```
 
-### Elements Merge Tool (Phase 1 — parallel extraction merge)
+### Elements Merge Tool (Phase 1 + Phase 2)
 ```bash
-# Merge per-slide JSONs from a directory (preferred for --slides-info-dir workflow)
+# Phase 1: Merge per-slide JSONs from calibrated/ directory
 python -m golden_scripts.tools.elements_merge \
     --inputs-dir calibrated/ \
     --output elements.json
+
+# Phase 2: Merge per-slide SB JSONs from sb_calibrated/ (small_beams only)
+python -m golden_scripts.tools.elements_merge \
+    --inputs-dir sb_calibrated/ \
+    --phase phase2 \
+    --output sb_elements_validated.json
 
 # Merge individual elements files
 python -m golden_scripts.tools.elements_merge \
@@ -324,9 +338,9 @@ python -m golden_scripts.tools.config_build ... --dry-run
 
 ### SB Patch Build Tool (Phase 2 — deterministic extraction)
 ```bash
-# Extract small beams from sb_elements_aligned.json → sb_patch.json
+# Extract small beams from sb_elements_validated.json → sb_patch.json
 python -m golden_scripts.tools.sb_patch_build \
-    --sb-elements sb_elements_aligned.json \
+    --sb-elements sb_elements_validated.json \
     --config model_config.json \
     --output sb_patch.json
 
@@ -482,12 +496,17 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 - **Output**: `model_config.json` (small_beams=[], slabs=[]) + ETABS model with Grid+Story+柱+牆+大梁
 
 ### Phase 2: `/bts-sb`
-- **Team**: 2 SB-Readers (validation only) + 1 Config-Builder
+- **Team**: 2 SB-Readers (calibration + validation) + 1 Config-Builder
 - **Builds**: Small Beams (SB/FSB) + Slabs (S/FS)
-- **Pre-steps**:
-  1. `pptx_to_elements.py --phase phase2` → `sb_elements.json` (deterministic SB extraction, enhanced legend + floor detection)
-  2. `affine_calibrate.py` → `sb_elements_aligned.json` (per-slide PPTX-meter → grid coordinate transform)
-- **Data flow**: SB-Readers validate `sb_elements_aligned.json` → SB-Reader runs pipeline: `sb_validate.py` → `sb_elements_validated.json` → `sb_patch_build.py` → `config_merge` → `slab_generator.py` → `final_config.json` → **Config-Builder executes** `run_all.py --steps 2,7,8` → ETABS model
+- **Pre-steps** (Team Lead):
+  1. Verify Phase 1 outputs: `model_config.json`, `grid_data.json`, `SLIDES INFO/` (grid_anchors + screenshots)
+  2. `pptx_to_elements.py --phase phase2 --slides-info-dir "SB SLIDES INFO"` → per-slide SB JSONs
+- **Data flow**:
+  SB-READER-A ∥ SB-READER-B: per-slide `affine_calibrate.py --mode grid` (reusing Phase 1 grid_anchors) → `sb_calibrated/{fl}/sb_elements.json`
+  SB-READERs: per-slide `sb_validate.py` → overwrite `sb_calibrated/{fl}/sb_elements.json` + AI validation → `sb_validation_{fl}.json`
+  Team Lead: `elements_merge.py --phase phase2 --inputs-dir sb_calibrated/` → `sb_elements_validated.json`
+  Team Lead: `sb_patch_build.py` → `config_merge` → `slab_generator.py` → `final_config.json`
+  CONFIG-BUILDER: `run_all.py --steps 2,7,8` → ETABS model
 - **Output**: `final_config.json` (complete config with validated SB + auto-generated slabs) + ETABS model with +小梁+版
 
 ### Phase 3: `/bts-props`
@@ -501,26 +520,36 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 ```
 {Case Folder}/
 ├── 結構配置圖/
-│   ├── SLIDES INFO/             # Phase 1: per-slide extraction output
-│   │   └── {floor_label}/       # Per-floor subdirectory
-│   │       ├── {floor_label}.json       # Per-slide JSON (PPT-米座標)
-│   │       ├── grid_anchors_{fl}.json   # READER Grid anchor positions
-│   │       ├── beam_report_{fl}.json    # READER per-slide beam validation report
-│   │       └── screenshots/             # Cropped PNGs for this floor
-│   ├── grid_info.json           # Phase 1 READER output (outline/stories — AI)
-│   └── SB-BEAM/                 # Phase 2: SB-READER validation results
-├── calibrated/                  # Phase 1: Grid-calibrated + validated per-slide JSONs
+│   ├── SLIDES INFO/                        # ═══ Phase 1 專用 ═══
+│   │   └── {floor_label}/
+│   │       ├── {floor_label}.json          # Phase 1: 大梁/柱/牆 (PPT-meter)
+│   │       ├── grid_anchors_{fl}.json      # Phase 1: grid anchors (Phase 2 讀取複用)
+│   │       ├── beam_report_{fl}.json       # Phase 1: beam validation report
+│   │       └── screenshots/                # Phase 1: 截圖 (Phase 2 讀取複用)
+│   │
+│   ├── SB SLIDES INFO/                     # ═══ Phase 2 專用 ═══
+│   │   └── {floor_label}/
+│   │       ├── sb_{floor_label}.json       # Phase 2: 小梁 (PPT-meter)
+│   │       ├── sb_report_{fl}.json         # Phase 2: sb_validate report
+│   │       └── sb_validation_{fl}.json     # Phase 2: AI validation result (OK/WARN/REJECT)
+│   │
+│   └── grid_info.json                      # Phase 1 READER output (outline/stories — AI)
+│
+├── calibrated/                             # ═══ Phase 1 專用 ═══
 │   └── {floor_label}/
-│       └── elements.json
-├── elements.json                # Phase 1 merged (elements_merge.py --inputs-dir calibrated/)
-├── grid_data.json               # Phase 0.3 ETABS Grid read (ground truth)
-├── sb_elements.json             # Phase 2 script output (small beams — PPTX-meter)
-├── sb_elements_aligned.json     # Phase 2 affine-calibrated (grid-aligned)
-├── sb_elements_validated.json   # Phase 2 sb_validate.py output (angle+snap+split)
-├── model_config.json            # Phase 1 output (no SB/slabs)
-├── sb_patch.json                # Phase 2 output (SB only, no slabs)
-├── merged_config.json           # Merged (base + SB patch)
-└── final_config.json            # Final config with auto-generated slabs
+│       └── elements.json                   # Phase 1: calibrated beams/columns/walls
+│
+├── sb_calibrated/                          # ═══ Phase 2 專用 ═══
+│   └── {floor_label}/
+│       └── sb_elements.json                # Phase 2: calibrated + validated SBs
+│
+├── elements.json                           # Phase 1 merged
+├── grid_data.json                          # Phase 0.3 ETABS Grid (ground truth)
+├── model_config.json                       # Phase 1 output (no SB/slabs)
+├── sb_elements_validated.json              # Phase 2 merged SBs (elements_merge --phase phase2)
+├── sb_patch.json                           # Phase 2 SB patch
+├── merged_config.json                      # Phase 2 merged (base + SB patch)
+└── final_config.json                       # Phase 2 final (含自動生成的板)
 ```
 
 ---

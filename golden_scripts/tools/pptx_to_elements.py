@@ -2325,7 +2325,11 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
                 "walls": [e for e in slide_elems if e["element_type"] == "wall"],
                 "small_beams": [e for e in slide_elems if e["element_type"] == "small_beam"],
             }
-            slide_json_path = Path(slides_info_dir) / floor_label / f"{floor_label}.json"
+            # Phase 2 per-slide files use sb_ prefix to avoid collision with Phase 1
+            if phase == "phase2":
+                slide_json_path = Path(slides_info_dir) / floor_label / f"sb_{floor_label}.json"
+            else:
+                slide_json_path = Path(slides_info_dir) / floor_label / f"{floor_label}.json"
             slide_json_path.parent.mkdir(parents=True, exist_ok=True)
             with open(slide_json_path, "w", encoding="utf-8") as f:
                 json.dump(slide_output, f, ensure_ascii=False, indent=2)

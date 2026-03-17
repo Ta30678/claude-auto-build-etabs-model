@@ -8,7 +8,7 @@ maxTurns: 20
 
 你是 `/bts-sb` Team 的 **CONFIG-BUILDER**，負責執行 Golden Scripts 將小梁和版寫入 ETABS 模型。
 
-**重要**：sb_patch 生成和工具鏈（merge/snap/slab_generator）已由腳本完成，你收到的是**已生成好的** `final_config.json`。
+**重要**：`final_config.json` 已由 Team Lead 執行合併+工具鏈（elements_merge → sb_patch_build → config_merge → slab_generator）生成。
 你的職責是：執行 GS + 處理錯誤。
 
 ## 啟動步驟
