@@ -23,7 +23,7 @@ Usage:
         --grid-data grid_data.json \
         --output sb_elements_validated.json \
         --tolerance 1.0 \
-        --split-tolerance 0.15
+        --split-tolerance 0.30
 
     # Disable angle correction or splitting:
     python -m golden_scripts.tools.sb_validate \
@@ -257,7 +257,7 @@ def _compute_section_area(section_name):
 # ---------------------------------------------------------------------------
 
 def find_sb_intermediate_supports(sb, columns, walls, beams, larger_sbs,
-                                  split_tolerance=0.15):
+                                  split_tolerance=0.30):
     """Find intermediate support points along a small beam.
 
     Extended version of beam_validate.find_intermediate_supports that also
@@ -390,7 +390,7 @@ def find_sb_intermediate_supports(sb, columns, walls, beams, larger_sbs,
     return deduped
 
 
-def split_all_sbs(sb_data, config, grid_data, split_tolerance=0.15):
+def split_all_sbs(sb_data, config, grid_data, split_tolerance=0.30):
     """Split all small beams at intermediate supports, processing larger SBs first.
 
     SB-to-SB rule: ordered by width*depth descending. Larger SBs are processed
@@ -466,17 +466,113 @@ def split_all_sbs(sb_data, config, grid_data, split_tolerance=0.15):
 
 
 # ---------------------------------------------------------------------------
-# 5. Main validation
+# 5. Endpoint clustering
+# ---------------------------------------------------------------------------
+
+def cluster_free_endpoints(small_beams, snapped_state, cluster_tolerance=0.30):
+    """Cluster free endpoints of half-snapped SBs within tolerance.
+
+    Collects free endpoints from SBs where exactly one endpoint is snapped,
+    then groups nearby endpoints (direct radius search, no transitive BFS)
+    that share at least one overlapping floor. Moves all members to the
+    cluster centroid and marks them as snapped.
+
+    Parameters
+    ----------
+    small_beams : list[dict]
+        The small_beams list (mutated in place).
+    snapped_state : list[list[bool]]
+        Per-SB [start_snapped, end_snapped] (mutated in place).
+    cluster_tolerance : float
+        Max distance between endpoints to form a cluster (default 0.30m).
+
+    Returns
+    -------
+    list[dict]
+        Cluster correction records.
+    """
+    # 1. Collect half-snapped free endpoints
+    free_eps = []  # [(sb_idx, ep_idx, x, y, floors)]
+    for i, sb in enumerate(small_beams):
+        s0, s1 = snapped_state[i]
+        if s0 and not s1:
+            free_eps.append((i, 1, sb["x2"], sb["y2"], sb.get("floors", [])))
+        elif s1 and not s0:
+            free_eps.append((i, 0, sb["x1"], sb["y1"], sb.get("floors", [])))
+
+    if len(free_eps) < 2:
+        return []
+
+    # 2. Direct radius clustering (no transitive)
+    visited = [False] * len(free_eps)
+    corrections = []
+
+    for seed_idx in range(len(free_eps)):
+        if visited[seed_idx]:
+            continue
+        seed_sb, seed_ep, sx, sy, s_floors = free_eps[seed_idx]
+
+        # Find all unvisited endpoints within tolerance with floor overlap
+        members = [seed_idx]
+        for j in range(seed_idx + 1, len(free_eps)):
+            if visited[j]:
+                continue
+            _, _, jx, jy, j_floors = free_eps[j]
+            dist = math.hypot(jx - sx, jy - sy)
+            if dist <= cluster_tolerance and floors_overlap(s_floors, j_floors):
+                members.append(j)
+
+        if len(members) < 2:
+            continue
+
+        # 3. Compute centroid
+        cx = sum(free_eps[m][2] for m in members) / len(members)
+        cy = sum(free_eps[m][3] for m in members) / len(members)
+        cx = round(cx, 2)
+        cy = round(cy, 2)
+
+        # 4. Move all members to centroid and mark snapped
+        member_details = []
+        for m in members:
+            visited[m] = True
+            sb_idx, ep_idx, ox, oy, fl = free_eps[m]
+            d = math.hypot(ox - cx, oy - cy)
+            if ep_idx == 0:
+                small_beams[sb_idx]["x1"] = cx
+                small_beams[sb_idx]["y1"] = cy
+            else:
+                small_beams[sb_idx]["x2"] = cx
+                small_beams[sb_idx]["y2"] = cy
+            snapped_state[sb_idx][ep_idx] = True
+            member_details.append({
+                "sb_index": sb_idx,
+                "endpoint": "start" if ep_idx == 0 else "end",
+                "original_coord": [ox, oy],
+                "snap_distance": round(d, 4),
+            })
+
+        corrections.append({
+            "centroid": [cx, cy],
+            "member_count": len(members),
+            "members": member_details,
+        })
+
+    return corrections
+
+
+# ---------------------------------------------------------------------------
+# 6. Main validation
 # ---------------------------------------------------------------------------
 
 def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
-                         split_tolerance=0.15, no_split=False,
-                         angle_threshold_deg=5.0, no_angle_correct=False):
+                         split_tolerance=0.30, no_split=False,
+                         angle_threshold_deg=5.0, no_angle_correct=False,
+                         cluster_tolerance=0.30, no_cluster=False):
     """Validate and auto-snap small beam endpoints.
 
     Pipeline order:
       Step 0: Angle correction (correct near-orthogonal SBs)
-      Step 1-3: 3-round snap (grid + columns + walls + major beams + SBs)
+      Step 1-3: 3-round snap with post-round clustering
       Step 4: Post-validation (zero-length, direction changes, unsnapped)
       Step 5: SB splitting (at columns, walls, major beams, larger SBs)
 
@@ -491,13 +587,18 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
     tolerance : float
         Maximum snap distance in meters (default 1.0).
     split_tolerance : float
-        Max perpendicular distance for split detection (default 0.15m).
+        Max perpendicular distance for split detection (default 0.30m).
     no_split : bool
         If True, skip splitting step.
     angle_threshold_deg : float
         Max angle deviation to correct (default 5.0 degrees).
     no_angle_correct : bool
         If True, skip angle correction step.
+    cluster_tolerance : float
+        Max distance for clustering free endpoints of half-snapped SBs
+        (default 0.30m).
+    no_cluster : bool
+        If True, skip endpoint clustering.
 
     Returns
     -------
@@ -531,6 +632,8 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
             "warnings": [],
             "angle_corrections": angle_corrections,
             "angle_corrected_sbs": len(angle_corrections),
+            "clustered_endpoints": 0,
+            "cluster_count": 0,
             "split_sbs": 0,
             "new_sbs_from_split": 0,
             "total_sbs_after_split": 0,
@@ -626,16 +729,27 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
                     added += 1
         return added
 
+    all_cluster_corrections = []
+
+    def _post_round_cluster():
+        """After each snap round: promote fully-snapped → cluster → promote again."""
+        _add_fully_snapped_sbs()
+        if not no_cluster:
+            cc = cluster_free_endpoints(small_beams, snapped_state, cluster_tolerance)
+            all_cluster_corrections.extend(cc)
+            _add_fully_snapped_sbs()
+
     # Round 1: grid + columns + walls + major beams
     _snap_round(base_targets)
-    _add_fully_snapped_sbs()
+    _post_round_cluster()
 
     # Round 2: + snapped SBs
     _snap_round(base_targets + sb_snap_targets)
-    _add_fully_snapped_sbs()
+    _post_round_cluster()
 
     # Round 3: final pass
     _snap_round(base_targets + sb_snap_targets)
+    _post_round_cluster()
 
     # --- Post-validation: unsnapped endpoints ---
     all_targets = base_targets + sb_snap_targets
@@ -723,6 +837,7 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
     snap_distances = [c["snap_distance"] for c in corrections]
     unsnapped_count = sum(
         1 for w in warnings if w["message"].startswith("No target"))
+    clustered_eps = sum(c["member_count"] for c in all_cluster_corrections)
     report = {
         "total_sbs": n,
         "total_endpoints": n * 2,
@@ -735,6 +850,8 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
         "warnings": warnings,
         "angle_corrections": angle_corrections,
         "angle_corrected_sbs": len(angle_corrections),
+        "clustered_endpoints": clustered_eps,
+        "cluster_count": len(all_cluster_corrections),
         **split_report,
     }
 
@@ -762,11 +879,16 @@ def main():
                         help="Angle correction threshold in degrees (default: 5.0)")
     parser.add_argument("--no-angle-correct", action="store_true",
                         help="Skip angle correction step")
-    parser.add_argument("--split-tolerance", type=float, default=0.15,
+    parser.add_argument("--split-tolerance", type=float, default=0.30,
                         help="Max perpendicular distance for SB splitting "
-                        "(default: 0.15m)")
+                        "(default: 0.30m)")
     parser.add_argument("--no-split", action="store_true",
                         help="Skip SB splitting step")
+    parser.add_argument("--cluster-tolerance", type=float, default=0.30,
+                        help="Max distance for clustering free endpoints of "
+                        "half-snapped SBs (default: 0.30m)")
+    parser.add_argument("--no-cluster", action="store_true",
+                        help="Skip endpoint clustering step")
     parser.add_argument("--report", default=None,
                         help="Path for validation report JSON (optional)")
     parser.add_argument("--dry-run", action="store_true",
@@ -801,6 +923,8 @@ def main():
         print(f"  angle threshold: {args.angle_threshold}\u00b0")
     if not args.no_split:
         print(f"  split tolerance: {args.split_tolerance}m")
+    if not args.no_cluster:
+        print(f"  cluster tolerance: {args.cluster_tolerance}m")
 
     if n_sbs == 0:
         print("\nNo small beams to validate.")
@@ -818,6 +942,8 @@ def main():
         no_split=args.no_split,
         angle_threshold_deg=args.angle_threshold,
         no_angle_correct=args.no_angle_correct,
+        cluster_tolerance=args.cluster_tolerance,
+        no_cluster=args.no_cluster,
     )
 
     # Print summary
@@ -832,6 +958,10 @@ def main():
 
     if report.get("angle_corrections"):
         print(f"  Angle corrections: {report['angle_corrected_sbs']}")
+
+    if report.get("cluster_count", 0) > 0:
+        print(f"  Endpoint clusters: {report['cluster_count']} "
+              f"({report['clustered_endpoints']} endpoints)")
 
     if report.get("split_sbs", 0) > 0:
         print(f"  Split SBs: {report['split_sbs']} \u2192 "

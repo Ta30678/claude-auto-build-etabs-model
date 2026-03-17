@@ -135,7 +135,7 @@ def run(SapModel, config, elev_map=None, strength_lookup=None):
         elev_map = define_stories(SapModel, config)
 
     if strength_lookup is None:
-        all_stories = [s["name"] for s in config.get("stories", [])]
+        all_stories = [s["name"] for s in reversed(config.get("stories", []))]
         strength_lookup = build_strength_lookup(
             config.get("strength_map", {}), all_stories)
 

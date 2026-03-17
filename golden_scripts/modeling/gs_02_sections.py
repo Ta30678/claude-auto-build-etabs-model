@@ -54,6 +54,11 @@ def extract_used_grades(config):
         m = re.search(r'C(\d+)$', sec_name)
         if m:
             grades.add(int(m.group(1)))
+    # Diaphragm walls always use C280 (gs_05 hardcodes fc=280)
+    for wall in config.get("walls", []):
+        if wall.get("is_diaphragm_wall", False):
+            grades.add(280)
+            break
     return sorted(grades) if grades else CONCRETE_GRADES
 
 

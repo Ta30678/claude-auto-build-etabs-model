@@ -93,8 +93,10 @@ def run_all(config, steps_to_run=None, dry_run=False):
     SapModel.SetModelIsLocked(False)
 
     # Prepare shared data (skip if config=None, step 12 handles it internally)
+    # Config stores stories top-to-bottom (ETABS convention); reverse to
+    # bottom-to-top order required by next_story() and build_strength_lookup().
     if config is not None:
-        all_stories = [s["name"] for s in config.get("stories", [])]
+        all_stories = [s["name"] for s in reversed(config.get("stories", []))]
         strength_lookup = build_strength_lookup(
             config.get("strength_map", {}), all_stories)
     else:
@@ -104,6 +106,8 @@ def run_all(config, steps_to_run=None, dry_run=False):
     # Pre-build elev_map from config (no ETABS side effects).
     # This allows steps 7,8 to work without step 3 running first.
     # Each story name maps to its TOP elevation (= floor slab elevation).
+    # Config stores stories top-to-bottom (ETABS convention), so reverse
+    # before accumulating heights from base_elevation upward.
     elev_map = None
     if config is not None:
         stories = config.get("stories", [])
@@ -112,7 +116,7 @@ def run_all(config, steps_to_run=None, dry_run=False):
             elev_map = {}
             elev_map["BASE"] = base_elev
             current_elev = base_elev
-            for s in stories:
+            for s in reversed(stories):
                 current_elev += s["height"]
                 elev_map[s["name"]] = current_elev
 

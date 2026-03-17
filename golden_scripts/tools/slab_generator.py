@@ -1,34 +1,34 @@
 """
-Slab Generator — Graph-based slab polygon generation from beam layout.
+Slab Generator — Pure-generate slab polygon generation from beam intersections.
 
-Reads a snapped_config.json (containing all beams including small beams) and
-generates slab polygons using half-edge face enumeration on the planar beam graph.
-
-This replaces the Cartesian cutting-line approach with a proper planar subdivision
-that handles T-intersections, non-rectangular panels, and complex beam layouts.
+Reads a config.json (containing all beams including small beams) and
+generates slab polygons by walking along beams clockwise through exact
+intersection points.  No space division, no node clustering.
 
 Algorithm:
-  Step 1: Collect all structural nodes (beam endpoints, column positions, intersections)
-  Step 2: Build planar graph (split beams at intersections)
-  Step 3: Half-edge face enumeration (find minimal enclosed faces)
-  Step 4: Filter faces (building outline, slab region, minimum area)
-  Step 5: Assign floors to each face
+  Step 1: Collect all structural segments (beams, small_beams, walls)
+  Step 2: Compute ALL pairwise intersections (exact) + T-junctions (15cm)
+  Step 3: Build beam segments between consecutive intersection points
+  Step 4: Build adjacency at each intersection point (angle-sorted)
+  Step 5: Walk clockwise to generate slab polygons
+  Step 6: Filter (outline, region, min area)
+  Step 7: Assign floors and sections
 
 Usage:
     python -m golden_scripts.tools.slab_generator \
-        --config snapped_config.json \
+        --config merged_config.json \
         --output final_config.json
 
     # Custom thicknesses:
     python -m golden_scripts.tools.slab_generator \
-        --config snapped_config.json \
+        --config merged_config.json \
         --slab-thickness 15 \
         --raft-thickness 100 \
         --output final_config.json
 
     # Preview without writing:
     python -m golden_scripts.tools.slab_generator \
-        --config snapped_config.json \
+        --config merged_config.json \
         --output final_config.json \
         --dry-run
 """
@@ -39,275 +39,251 @@ import math
 import sys
 from pathlib import Path
 
+from golden_scripts.tools.beam_validate import segment_intersection
+
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-NODE_CLUSTER_TOL = 0.02      # 2cm: merge nodes within this distance
-INTERSECTION_TOL = 1e-6      # numerical tolerance for segment intersection
-MIN_FACE_AREA = 0.25         # m²: discard faces smaller than this
-COLLINEAR_TOL = 0.01         # 1cm: tolerance for collinear point check
+T_JUNCTION_TOL = 0.15    # 15cm: snap endpoint to nearby beam interior
+MIN_FACE_AREA = 0.25     # m²: discard faces smaller than this
+COORD_DECIMALS = 4       # round to 0.1mm for deterministic point identity
+DEDUP_DIST = 0.005       # 5mm: minimum distance between consecutive splits
 
 
 # ---------------------------------------------------------------------------
-# 1. Node collection and clustering
+# Utility functions
 # ---------------------------------------------------------------------------
 
-class NodePool:
-    """Manages a pool of 2D nodes with automatic clustering."""
-
-    def __init__(self, tolerance=NODE_CLUSTER_TOL):
-        self.nodes = []  # list of (x, y)
-        self.tolerance = tolerance
-
-    def add(self, x, y):
-        """Add a point, returning its index (merging if close to existing)."""
-        for i, (nx, ny) in enumerate(self.nodes):
-            if math.hypot(x - nx, y - ny) <= self.tolerance:
-                return i
-        idx = len(self.nodes)
-        self.nodes.append((round(x, 2), round(y, 2)))
-        return idx
-
-    def __len__(self):
-        return len(self.nodes)
+def _coord_key(x, y):
+    """Deterministic point identity — no clustering, no drift."""
+    return (round(x, COORD_DECIMALS), round(y, COORD_DECIMALS))
 
 
-def _seg_intersection(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2):
-    """Compute intersection point of two line segments (if any).
+def _project_point_on_segment(px, py, ax, ay, bx, by):
+    """Project point (px, py) onto segment (ax, ay)→(bx, by).
 
-    Returns (x, y) or None. Only returns interior intersections
-    (both-interior, i.e. crossing points not at any endpoint).
-    """
-    dx1 = ax2 - ax1
-    dy1 = ay2 - ay1
-    dx2 = bx2 - bx1
-    dy2 = by2 - by1
-
-    denom = dx1 * dy2 - dy1 * dx2
-    if abs(denom) < INTERSECTION_TOL:
-        return None  # Parallel or collinear
-
-    t = ((bx1 - ax1) * dy2 - (by1 - ay1) * dx2) / denom
-    u = ((bx1 - ax1) * dy1 - (by1 - ay1) * dx1) / denom
-
-    # Check if intersection is strictly interior to both segments
-    eps = 0.001  # Small margin to avoid endpoint duplicates
-    if eps < t < 1 - eps and eps < u < 1 - eps:
-        ix = ax1 + t * dx1
-        iy = ay1 + t * dy1
-        return (round(ix, 2), round(iy, 2))
-    return None
-
-
-def _point_on_segment_interior(px, py, ax, ay, bx, by, tol=NODE_CLUSTER_TOL):
-    """Check if point (px,py) lies on the interior of segment A->B.
-
-    Returns True if the point projects onto the segment interior
-    (not at endpoints) within tolerance.
+    Returns (t, proj_x, proj_y, distance).
     """
     dx, dy = bx - ax, by - ay
     len_sq = dx * dx + dy * dy
     if len_sq < 1e-12:
-        return False
+        return 0.5, ax, ay, math.hypot(px - ax, py - ay)
     t = ((px - ax) * dx + (py - ay) * dy) / len_sq
-    if t < 0.01 or t > 0.99:  # Must be interior
-        return False
-    proj_x = ax + t * dx
-    proj_y = ay + t * dy
+    t_clamped = max(0.0, min(1.0, t))
+    proj_x = ax + t_clamped * dx
+    proj_y = ay + t_clamped * dy
     dist = math.hypot(px - proj_x, py - proj_y)
-    return dist <= tol
+    return t_clamped, proj_x, proj_y, dist
 
 
-def collect_nodes_and_edges(config, pool):
-    """Collect nodes from all structural elements and build edge list.
+# ---------------------------------------------------------------------------
+# Step 1-2: Compute intersections
+# ---------------------------------------------------------------------------
 
-    Returns list of (node_idx_1, node_idx_2, floors_set) tuples.
+def compute_intersections(segments, t_junction_tol=T_JUNCTION_TOL):
+    """Compute all intersection and T-junction points along each segment.
+
+    For each segment, returns an ordered list of split points (including
+    endpoints) with exact analytical coordinates.
+
+    T-junction: if a segment endpoint is within *t_junction_tol* of another
+    segment's interior (but does not intersect exactly), the endpoint is
+    snapped to the projection point on that segment.
+
+    Args:
+        segments: list of (x1, y1, x2, y2, floors_set)
+        t_junction_tol: max perpendicular distance for T-junction snap
+
+    Returns:
+        seg_points: dict[seg_idx] → sorted list of (t, x, y)
     """
-    raw_segments = []  # (x1, y1, x2, y2, floors)
+    n = len(segments)
+    # Interior intersection points per segment: [(t, x, y), ...]
+    raw_splits = {i: [] for i in range(n)}
+    # Endpoint snaps from T-junctions: (seg_idx, 0_or_1) → (x, y)
+    endpoint_snaps = {}
 
-    # Columns → nodes only (no edges)
-    for col in config.get("columns", []):
-        pool.add(col["grid_x"], col["grid_y"])
-
-    # Beams → segments
-    for beam in config.get("beams", []):
-        raw_segments.append((
-            beam["x1"], beam["y1"], beam["x2"], beam["y2"],
-            set(beam.get("floors", [])),
-        ))
-
-    # Small beams → segments
-    for sb in config.get("small_beams", []):
-        raw_segments.append((
-            sb["x1"], sb["y1"], sb["x2"], sb["y2"],
-            set(sb.get("floors", [])),
-        ))
-
-    # Walls → segments
-    for wall in config.get("walls", []):
-        raw_segments.append((
-            wall["x1"], wall["y1"], wall["x2"], wall["y2"],
-            set(wall.get("floors", [])),
-        ))
-
-    # Compute all pairwise intersections and add as nodes
-    n_seg = len(raw_segments)
-    seg_splits = {i: [] for i in range(n_seg)}  # segment_idx -> [intersection_points]
-
-    for i in range(n_seg):
-        for j in range(i + 1, n_seg):
-            ax1, ay1, ax2, ay2, _ = raw_segments[i]
-            bx1, by1, bx2, by2, _ = raw_segments[j]
-            pt = _seg_intersection(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2)
-            if pt:
-                pool.add(pt[0], pt[1])
-                seg_splits[i].append(pt)
-                seg_splits[j].append(pt)
-
-    # T-junction detection: segment endpoint lying on another segment's interior
-    for i in range(n_seg):
-        ax1, ay1, ax2, ay2, _ = raw_segments[i]
-        for j in range(n_seg):
-            if i == j:
+    # --- 1. Exact pairwise intersections ---
+    for i in range(n):
+        ax1, ay1, ax2, ay2, _ = segments[i]
+        for j in range(i + 1, n):
+            bx1, by1, bx2, by2, _ = segments[j]
+            result = segment_intersection(ax1, ay1, ax2, ay2,
+                                          bx1, by1, bx2, by2)
+            if result is None:
                 continue
-            bx1, by1, bx2, by2, _ = raw_segments[j]
-            # Check if endpoint of segment i lies on interior of segment j
-            for px, py in [(ax1, ay1), (ax2, ay2)]:
-                if _point_on_segment_interior(px, py, bx1, by1, bx2, by2):
-                    pool.add(px, py)
-                    seg_splits[j].append((round(px, 2), round(py, 2)))
+            x, y, ta, tb = result
+            ta = max(0.0, min(1.0, ta))
+            tb = max(0.0, min(1.0, tb))
+            raw_splits[i].append((ta, x, y))
+            raw_splits[j].append((tb, x, y))
 
-    # Build edges: split each segment at intersection points
-    edges = []  # (node_idx_1, node_idx_2, floors_set)
+    # --- 2. T-junction detection (imperfect endpoints near other beams) ---
+    for i in range(n):
+        x1, y1, x2, y2, _ = segments[i]
+        for end_idx, (px, py) in enumerate([(x1, y1), (x2, y2)]):
+            t_end = float(end_idx)  # 0.0 or 1.0
+            # Skip if this endpoint already has a nearby crossing
+            has_nearby = any(
+                abs(t - t_end) < 0.05
+                for t, _, _ in raw_splits[i]
+            )
+            if has_nearby:
+                continue
 
-    for i, (x1, y1, x2, y2, floors) in enumerate(raw_segments):
-        # Collect all points along this segment (endpoints + splits)
-        points = [(x1, y1), (x2, y2)]
-        for pt in seg_splits[i]:
-            points.append(pt)
+            # Find closest segment interior within tolerance
+            best_dist = t_junction_tol
+            best_match = None
+            for j in range(n):
+                if i == j:
+                    continue
+                bx1, by1, bx2, by2, _ = segments[j]
+                t_j, proj_x, proj_y, dist = _project_point_on_segment(
+                    px, py, bx1, by1, bx2, by2)
+                if dist < best_dist and 0.01 < t_j < 0.99:
+                    best_dist = dist
+                    best_match = (j, t_j, proj_x, proj_y)
 
-        # Sort points along segment direction
-        if abs(x2 - x1) >= abs(y2 - y1):
-            points.sort(key=lambda p: p[0] if x2 >= x1 else -p[0])
-        else:
-            points.sort(key=lambda p: p[1] if y2 >= y1 else -p[1])
+            if best_match is not None:
+                j, t_j, proj_x, proj_y = best_match
+                raw_splits[j].append((t_j, proj_x, proj_y))
+                endpoint_snaps[(i, end_idx)] = (proj_x, proj_y)
 
-        # Deduplicate consecutive points
+    # --- 3. Build final sorted points per segment (endpoints + splits) ---
+    seg_points = {}
+    for i, (x1, y1, x2, y2, _) in enumerate(segments):
+        # Use snapped endpoints if available
+        sx, sy = endpoint_snaps.get((i, 0), (x1, y1))
+        ex, ey = endpoint_snaps.get((i, 1), (x2, y2))
+
+        points = [(0.0, sx, sy)]
+        for t, x, y in raw_splits[i]:
+            # Only interior points (endpoints handled above)
+            if 0.001 < t < 0.999:
+                points.append((t, x, y))
+        points.append((1.0, ex, ey))
+
+        # Sort by parameter t
+        points.sort(key=lambda p: p[0])
+
+        # Deduplicate consecutive points too close together
         deduped = [points[0]]
         for p in points[1:]:
-            if math.hypot(p[0] - deduped[-1][0], p[1] - deduped[-1][1]) > COLLINEAR_TOL:
+            dist = math.hypot(p[1] - deduped[-1][1], p[2] - deduped[-1][2])
+            if dist > DEDUP_DIST:
                 deduped.append(p)
 
-        # Create sub-edges
-        for k in range(len(deduped) - 1):
-            n1 = pool.add(deduped[k][0], deduped[k][1])
-            n2 = pool.add(deduped[k + 1][0], deduped[k + 1][1])
-            if n1 != n2:
-                edges.append((n1, n2, floors))
+        seg_points[i] = deduped
 
-    return edges
+    return seg_points
 
 
 # ---------------------------------------------------------------------------
-# 2. Build planar graph (adjacency with angular ordering)
+# Step 3: Build beam segments
 # ---------------------------------------------------------------------------
 
-def build_adjacency(edges, nodes):
-    """Build adjacency list with edges sorted by angle at each node.
+def build_beam_segments(segments, seg_points):
+    """Create directed segments between consecutive intersection points.
 
-    Returns adj: {node_idx: [(neighbor_idx, edge_idx), ...]} sorted CW by angle.
+    Returns list of (coord_key_start, coord_key_end, floors_set).
     """
-    # Build bidirectional edge list
-    adj = {}
-    edge_floors = {}  # edge_key -> floors_set
+    beam_segments = []
+    for i, (x1, y1, x2, y2, floors) in enumerate(segments):
+        points = seg_points[i]
+        for k in range(len(points) - 1):
+            _, sx, sy = points[k]
+            _, ex, ey = points[k + 1]
+            ks = _coord_key(sx, sy)
+            ke = _coord_key(ex, ey)
+            if ks != ke:
+                beam_segments.append((ks, ke, floors))
+    return beam_segments
 
-    for idx, (n1, n2, floors) in enumerate(edges):
-        adj.setdefault(n1, []).append(n2)
-        adj.setdefault(n2, []).append(n1)
-        edge_key = (min(n1, n2), max(n1, n2))
-        if edge_key in edge_floors:
-            edge_floors[edge_key] |= floors
+
+# ---------------------------------------------------------------------------
+# Step 4: Build adjacency
+# ---------------------------------------------------------------------------
+
+def build_point_adjacency(beam_segments):
+    """Build angle-sorted adjacency at each intersection point.
+
+    Returns:
+        adj: dict[coord_key] → [neighbor_key, ...] sorted by angle
+        edge_floors: dict[(min_key, max_key)] → floors_set
+    """
+    adj_set = {}  # coord_key → set of neighbor keys
+    edge_floors = {}
+
+    for ks, ke, floors in beam_segments:
+        adj_set.setdefault(ks, set()).add(ke)
+        adj_set.setdefault(ke, set()).add(ks)
+        ekey = (min(ks, ke), max(ks, ke))
+        if ekey in edge_floors:
+            edge_floors[ekey] |= floors
         else:
-            edge_floors[edge_key] = set(floors)
+            edge_floors[ekey] = set(floors)
 
-    # Sort neighbors by angle (clockwise from +X axis)
-    for node_idx in adj:
-        nx, ny = nodes[node_idx]
-        neighbors = adj[node_idx]
-        # Remove duplicates
-        neighbors = list(set(neighbors))
-
-        def angle_key(nb):
-            nbx, nby = nodes[nb]
-            return math.atan2(nby - ny, nbx - nx)
-
-        neighbors.sort(key=angle_key)
-        adj[node_idx] = neighbors
+    # Sort neighbors by angle at each node
+    adj = {}
+    for pt, neighbors in adj_set.items():
+        px, py = pt
+        nb_list = list(neighbors)
+        nb_list.sort(key=lambda nb: math.atan2(nb[1] - py, nb[0] - px))
+        adj[pt] = nb_list
 
     return adj, edge_floors
 
 
 # ---------------------------------------------------------------------------
-# 3. Half-edge face enumeration
+# Step 5: Walk clockwise to generate slab polygons
 # ---------------------------------------------------------------------------
 
-def enumerate_faces(adj, nodes):
-    """Find all minimal faces in the planar graph using half-edge traversal.
+def walk_slab_polygons(adj):
+    """Walk along beams clockwise to generate slab polygons.
 
-    For each directed edge (u→v), find the "next" edge by taking the first
-    neighbor of v that is clockwise from the direction v→u.
+    For each unvisited directed half-edge (A→B), at B find the next
+    edge by taking the smallest CW turn from the incoming direction.
+    Continue until returning to start.
 
-    Returns list of faces, each face = [node_idx, ...] (ordered vertices).
+    Returns list of polygons, each = [coord_key, ...] (ordered vertices).
     """
-    if not adj:
-        return []
-
-    # Build next-edge mapping
-    # For directed edge u→v, "next" is the edge v→w where w is the first
-    # neighbor of v clockwise after the direction v→u
-    used_half_edges = set()
-    faces = []
+    used = set()  # visited half-edges: (key_from, key_to)
+    polygons = []
 
     for start_u in adj:
         for start_v in adj[start_u]:
-            he = (start_u, start_v)
-            if he in used_half_edges:
+            if (start_u, start_v) in used:
                 continue
 
-            # Trace face
             face = []
             u, v = start_u, start_v
-            max_steps = len(nodes) * 2 + 10  # Safety limit
+            max_steps = len(adj) * 2 + 10
 
             for _ in range(max_steps):
-                if (u, v) in used_half_edges:
+                if (u, v) in used:
                     break
-                used_half_edges.add((u, v))
+                used.add((u, v))
                 face.append(u)
 
-                # Find next edge: at node v, incoming from u
-                # We want the first neighbor of v that is CW from direction v→u
                 neighbors = adj.get(v, [])
                 if not neighbors:
                     break
 
-                # Direction from v back to u
-                vx, vy = nodes[v]
-                ux, uy = nodes[u]
+                # Incoming angle: direction from v back to u
+                vx, vy = v
+                ux, uy = u
                 incoming_angle = math.atan2(uy - vy, ux - vx)
 
-                # Find the neighbor with the smallest positive CW rotation
+                # Find CW-nearest neighbor (smallest positive CW rotation)
                 best_w = None
                 best_delta = float("inf")
                 for w in neighbors:
                     if w == u and len(neighbors) > 1:
-                        # Avoid going back on degree-2+ nodes
-                        continue
-                    wx, wy = nodes[w]
+                        continue  # avoid backtrack on degree≥2 nodes
+                    wx, wy = w
                     outgoing_angle = math.atan2(wy - vy, wx - vx)
-                    # CW delta: how much to rotate CW from incoming to outgoing
                     delta = incoming_angle - outgoing_angle
                     if delta <= 0:
                         delta += 2 * math.pi
@@ -319,38 +295,43 @@ def enumerate_faces(adj, nodes):
                     break
 
                 u, v = v, best_w
-
                 if u == start_u and v == start_v:
                     break
 
             if len(face) >= 3:
-                faces.append(face)
+                polygons.append(face)
 
-    return faces
+    return polygons
 
 
-def face_area_signed(face, nodes):
-    """Compute signed area of a face (positive = CCW, negative = CW)."""
-    n = len(face)
+# ---------------------------------------------------------------------------
+# Geometry utilities
+# ---------------------------------------------------------------------------
+
+def face_area_signed(polygon):
+    """Compute signed area of a polygon. Positive = CCW, negative = CW.
+
+    polygon: list of (x, y) tuples.
+    """
+    n = len(polygon)
     area = 0.0
     for i in range(n):
-        x1, y1 = nodes[face[i]]
-        x2, y2 = nodes[face[(i + 1) % n]]
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
         area += x1 * y2 - x2 * y1
     return area / 2.0
 
 
-def face_centroid(face, nodes):
-    """Compute centroid of a face."""
-    n = len(face)
-    cx = sum(nodes[idx][0] for idx in face) / n
-    cy = sum(nodes[idx][1] for idx in face) / n
+def face_centroid(polygon):
+    """Compute centroid of a polygon.
+
+    polygon: list of (x, y) tuples.
+    """
+    n = len(polygon)
+    cx = sum(x for x, y in polygon) / n
+    cy = sum(y for x, y in polygon) / n
     return cx, cy
 
-
-# ---------------------------------------------------------------------------
-# 4. Face filtering
-# ---------------------------------------------------------------------------
 
 def point_in_polygon(px, py, polygon):
     """Ray casting point-in-polygon test.
@@ -369,44 +350,44 @@ def point_in_polygon(px, py, polygon):
     return inside
 
 
-def filter_faces(faces, nodes, config, edge_floors):
-    """Filter faces to keep only valid slab regions.
+# ---------------------------------------------------------------------------
+# Step 6: Filter
+# ---------------------------------------------------------------------------
+
+def filter_slabs(polygons, config):
+    """Filter polygons to keep only valid slab regions.
 
     Removes:
-    - Outer face (largest area or CW winding)
+    - Outer boundary (CW winding = negative area)
+    - Largest face (safety check)
     - Faces with centroid outside building_outline
     - Faces in slab_region_matrix no-slab zones
     - Degenerate faces (area < MIN_FACE_AREA)
 
-    Returns list of (face, area, is_foundation) tuples.
+    Returns list of (polygon, abs_area) tuples.
     """
-    if not faces:
+    if not polygons:
         return []
 
-    # Build building outline polygon
     outline = config.get("building_outline")
-    outline_poly = None
-    if outline:
-        outline_poly = [(pt[0], pt[1]) for pt in outline]
+    outline_poly = [(pt[0], pt[1]) for pt in outline] if outline else None
 
-    # Compute areas
     face_data = []
-    for face in faces:
-        area = face_area_signed(face, nodes)
-        face_data.append((face, area))
+    for poly in polygons:
+        area = face_area_signed(poly)
+        face_data.append((poly, area))
 
-    # Find outer face (largest absolute area, or CW winding = negative area)
     max_abs_area = max(abs(a) for _, a in face_data) if face_data else 0
 
-    valid_faces = []
-    for face, area in face_data:
+    valid = []
+    for poly, area in face_data:
         abs_area = abs(area)
 
         # Skip outer face (largest area)
         if abs_area > max_abs_area * 0.95 and abs_area > 100:
             continue
 
-        # Skip CW faces (negative area = exterior face in CCW convention)
+        # Skip CW faces (negative area = exterior)
         if area < 0:
             continue
 
@@ -415,33 +396,26 @@ def filter_faces(faces, nodes, config, edge_floors):
             continue
 
         # Check centroid inside building outline
-        cx, cy = face_centroid(face, nodes)
+        cx, cy = face_centroid(poly)
         if outline_poly and not point_in_polygon(cx, cy, outline_poly):
             continue
 
-        # Check slab_region_matrix if available
+        # Check slab_region_matrix
         srm = config.get("slab_region_matrix")
         if srm and not _in_slab_region(cx, cy, srm, config):
             continue
 
-        valid_faces.append((face, abs_area))
+        valid.append((poly, abs_area))
 
-    return valid_faces
+    return valid
 
 
 def _in_slab_region(cx, cy, srm, config):
-    """Check if point is in a slab region according to slab_region_matrix.
-
-    The matrix maps grid zones to slab/no-slab. Simple heuristic:
-    if the zone is explicitly marked as no-slab, return False.
-    """
-    # slab_region_matrix format varies; try common format
-    # If it's a list of dicts with "zone" and "build" fields
+    """Check if point is in a slab region according to slab_region_matrix."""
     if isinstance(srm, list):
         for entry in srm:
             if isinstance(entry, dict):
                 if entry.get("build") is False or entry.get("建板") is False:
-                    # Check if point is in this zone's bounds
                     bounds = entry.get("bounds")
                     if bounds and len(bounds) >= 4:
                         x_min, y_min, x_max, y_max = bounds[:4]
@@ -451,70 +425,115 @@ def _in_slab_region(cx, cy, srm, config):
 
 
 # ---------------------------------------------------------------------------
-# 5. Floor assignment
+# Floor grouping (per-floor slab generation)
 # ---------------------------------------------------------------------------
 
-def assign_floors_to_faces(valid_faces, nodes, edges, edge_floors, config):
-    """Assign floors to each face based on boundary edges' floor sets.
+def group_segments_by_floor(segments):
+    """Group floors that share identical segment geometry.
 
-    Each face's floors = intersection of all boundary edges' floors.
-    If a boundary edge has no floor info, it's ignored (not constraining).
+    Floors that see exactly the same set of segment coordinates are grouped
+    together, allowing per-group slab generation instead of mixing all floors
+    into one 2D plane.
 
-    Returns list of slab dicts.
+    Args:
+        segments: list of (x1, y1, x2, y2, floors_set)
+
+    Returns list of (frozenset_of_floors, segment_list) tuples.
     """
-    # Determine foundation stories
+    all_floors = set()
+    for _, _, _, _, floors in segments:
+        all_floors |= floors
+
+    if not all_floors:
+        return [(frozenset(), segments)]
+
+    # For each floor, compute which segment geometries are present
+    floor_to_seg_keys = {}
+    for floor in all_floors:
+        seg_keys = set()
+        for x1, y1, x2, y2, floors in segments:
+            if floor in floors:
+                k1 = _coord_key(x1, y1)
+                k2 = _coord_key(x2, y2)
+                seg_keys.add((min(k1, k2), max(k1, k2)))
+        floor_to_seg_keys[floor] = frozenset(seg_keys)
+
+    # Group floors with identical segment key sets
+    key_to_floors = {}
+    for floor, seg_key_set in floor_to_seg_keys.items():
+        if seg_key_set not in key_to_floors:
+            key_to_floors[seg_key_set] = set()
+        key_to_floors[seg_key_set].add(floor)
+
+    # For each group, collect actual segments (deduplicated)
+    result = []
+    for seg_key_set, floor_group in key_to_floors.items():
+        fs = frozenset(floor_group)
+        group_segments = []
+        seen = set()
+        for x1, y1, x2, y2, floors in segments:
+            if floors & fs:
+                k1 = _coord_key(x1, y1)
+                k2 = _coord_key(x2, y2)
+                seg_id = (min(k1, k2), max(k1, k2))
+                if seg_id not in seen:
+                    seen.add(seg_id)
+                    group_segments.append((x1, y1, x2, y2, fs))
+        result.append((fs, group_segments))
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Step 7: Floor assignment
+# ---------------------------------------------------------------------------
+
+def assign_floors_to_slabs(valid_faces, edge_floors, config):
+    """Assign floors to each slab polygon based on boundary edge floors.
+
+    Each slab's floors = intersection of all boundary edges' floor sets.
+    """
     stories = config.get("stories", [])
     foundation_floor = None
     for s in stories:
         if isinstance(s, dict) and s.get("name", "").startswith("B"):
-            # Keep the first (lowest) basement
             if foundation_floor is None:
                 foundation_floor = s["name"]
 
-    # Collect all story names for "all floors" default
-    all_story_names = []
-    for s in stories:
-        if isinstance(s, dict):
-            all_story_names.append(s["name"])
+    all_story_names = [s["name"] for s in stories if isinstance(s, dict)]
 
     slabs = []
-    for face, area in valid_faces:
-        # Collect floors from boundary edges
-        face_floors = None  # Will intersect
-        n = len(face)
+    for poly, area in valid_faces:
+        face_floors = None
+        n = len(poly)
 
         for i in range(n):
-            u = face[i]
-            v = face[(i + 1) % n]
-            edge_key = (min(u, v), max(u, v))
-            efloors = edge_floors.get(edge_key)
+            u = poly[i]
+            v = poly[(i + 1) % n]
+            ekey = (min(u, v), max(u, v))
+            efloors = edge_floors.get(ekey)
             if efloors:
                 if face_floors is None:
                     face_floors = set(efloors)
                 else:
                     face_floors &= efloors
 
-        if face_floors is None or len(face_floors) == 0:
-            # No floor info from edges; use all floors
+        if not face_floors:
             face_floors = set(all_story_names) if all_story_names else {"1F"}
 
-        # Determine if this is a foundation slab
         is_foundation = False
         if foundation_floor and foundation_floor in face_floors:
-            # If all floors in this face are foundation
             is_foundation = all(
                 f.startswith("B") or f == foundation_floor
                 for f in face_floors
             )
 
-        # Build corners
-        corners = [[round(nodes[idx][0], 2), round(nodes[idx][1], 2)]
-                    for idx in face]
+        corners = [[round(x, 2), round(y, 2)] for x, y in poly]
 
-        # Sort floors in story order
         floor_order = {s["name"]: i for i, s in enumerate(stories)
                        if isinstance(s, dict)}
-        sorted_floors = sorted(face_floors, key=lambda f: floor_order.get(f, 999))
+        sorted_floors = sorted(face_floors,
+                               key=lambda f: floor_order.get(f, 999))
 
         slabs.append({
             "corners": corners,
@@ -526,12 +545,94 @@ def assign_floors_to_faces(valid_faces, nodes, edges, edge_floors, config):
     return slabs
 
 
+def assign_floors_simple(valid_faces, floor_set, stories, foundation_floor):
+    """Assign a fixed floor set to all slabs in a group.
+
+    Since all segments in the group share the same floors, no intersection
+    logic is needed — every slab gets the group's floor set.
+    """
+    floor_order = {s["name"]: i for i, s in enumerate(stories)
+                   if isinstance(s, dict)}
+    sorted_floors = sorted(floor_set,
+                           key=lambda f: floor_order.get(f, 999))
+
+    is_foundation = False
+    if foundation_floor and foundation_floor in floor_set:
+        is_foundation = all(
+            f.startswith("B") or f == foundation_floor
+            for f in floor_set
+        )
+
+    slabs = []
+    for poly, area in valid_faces:
+        corners = [[round(x, 2), round(y, 2)] for x, y in poly]
+        slabs.append({
+            "corners": corners,
+            "floors": list(sorted_floors),
+            "is_foundation": is_foundation,
+            "area": round(area, 2),
+        })
+
+    return slabs
+
+
+def _normalize_corners(corners):
+    """Normalize corner list for comparison (canonical rotation).
+
+    Rotates the corner list so the lexicographically smallest corner is first.
+    """
+    if not corners:
+        return tuple()
+    min_idx = min(range(len(corners)),
+                  key=lambda i: (corners[i][0], corners[i][1]))
+    rotated = corners[min_idx:] + corners[:min_idx]
+    return tuple(tuple(c) for c in rotated)
+
+
+def _merge_slab_entries(slabs, stories):
+    """Merge slabs with identical corners from different floor groups.
+
+    Two slabs are considered identical if they have the same corner
+    coordinates (after canonical rotation). Their floor lists are combined.
+    """
+    floor_order = {s["name"]: i for i, s in enumerate(stories)
+                   if isinstance(s, dict)}
+
+    by_corners = {}
+    for slab in slabs:
+        key = _normalize_corners(slab["corners"])
+        if key in by_corners:
+            existing = by_corners[key]
+            existing_set = set(existing["floors"])
+            for f in slab["floors"]:
+                if f not in existing_set:
+                    existing["floors"].append(f)
+                    existing_set.add(f)
+            existing["floors"].sort(key=lambda f: floor_order.get(f, 999))
+            # Recompute is_foundation based on merged floors
+            existing["is_foundation"] = all(
+                f.startswith("B") for f in existing["floors"])
+        else:
+            by_corners[key] = {
+                "corners": slab["corners"],
+                "floors": list(slab["floors"]),
+                "is_foundation": slab["is_foundation"],
+                "area": slab["area"],
+            }
+
+    return list(by_corners.values())
+
+
 # ---------------------------------------------------------------------------
-# 6. Output generation
+# Output generation
 # ---------------------------------------------------------------------------
 
-def generate_slab_config(slabs, slab_thickness=15, raft_thickness=100):
+def generate_slab_config(slabs, slab_thickness=15, raft_thickness=100,
+                         foundation_floor=None):
     """Convert internal slab list to config format.
+
+    When a slab spans both foundation and non-foundation floors, it is split
+    into an FS entry (foundation floors) and an S entry (remaining floors).
 
     Returns (slab_entries, new_sections).
     """
@@ -539,20 +640,53 @@ def generate_slab_config(slabs, slab_thickness=15, raft_thickness=100):
     slab_thicknesses = set()
     raft_thicknesses = set()
 
+    # Determine which floors are foundation floors (B*F up to and including
+    # the foundation_floor itself)
+    foundation_floors = set()
+    if foundation_floor:
+        foundation_floors.add(foundation_floor)
+
     for slab in slabs:
+        floors = slab["floors"]
+        corners = slab["corners"]
+
         if slab["is_foundation"]:
+            # Pure foundation slab
             section = f"FS{raft_thickness}"
             raft_thicknesses.add(raft_thickness)
+            slab_entries.append({
+                "corners": corners,
+                "section": section,
+                "floors": floors,
+            })
+        elif foundation_floor and foundation_floor in floors:
+            # Mixed slab: split into FS (foundation floor) + S (rest)
+            fs_floors = [f for f in floors if f == foundation_floor]
+            s_floors = [f for f in floors if f != foundation_floor]
+
+            if fs_floors:
+                raft_thicknesses.add(raft_thickness)
+                slab_entries.append({
+                    "corners": corners,
+                    "section": f"FS{raft_thickness}",
+                    "floors": fs_floors,
+                })
+            if s_floors:
+                slab_thicknesses.add(slab_thickness)
+                slab_entries.append({
+                    "corners": corners,
+                    "section": f"S{slab_thickness}",
+                    "floors": s_floors,
+                })
         else:
+            # Pure regular slab
             section = f"S{slab_thickness}"
             slab_thicknesses.add(slab_thickness)
-
-        entry = {
-            "corners": slab["corners"],
-            "section": section,
-            "floors": slab["floors"],
-        }
-        slab_entries.append(entry)
+            slab_entries.append({
+                "corners": corners,
+                "section": section,
+                "floors": floors,
+            })
 
     sections = {}
     if slab_thicknesses:
@@ -564,11 +698,14 @@ def generate_slab_config(slabs, slab_thickness=15, raft_thickness=100):
 
 
 # ---------------------------------------------------------------------------
-# 7. Main pipeline
+# Main pipeline
 # ---------------------------------------------------------------------------
 
 def generate_slabs(config, slab_thickness=15, raft_thickness=100):
     """Main entry point: config → slab entries.
+
+    Processes each floor group independently to avoid mixing segments
+    from incompatible floors into a single 2D plane.
 
     Args:
         config: Complete config dict (must contain beams, small_beams, etc.)
@@ -577,59 +714,112 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100):
 
     Returns (updated_config, stats).
     """
-    pool = NodePool()
     stats = {
-        "total_nodes": 0,
-        "total_edges": 0,
-        "total_faces_raw": 0,
-        "total_faces_filtered": 0,
+        "total_segments": 0,
+        "total_intersections": 0,
+        "total_beam_segments": 0,
+        "total_polygons_raw": 0,
+        "total_polygons_filtered": 0,
         "total_slabs": 0,
         "foundation_slabs": 0,
         "regular_slabs": 0,
+        "floor_groups": 0,
         "warnings": [],
     }
 
-    # Step 1-2: Collect nodes and build edges
-    print("  Step 1-2: Collecting nodes and building edges...")
-    edges = collect_nodes_and_edges(config, pool)
-    nodes = pool.nodes
-    stats["total_nodes"] = len(nodes)
-    stats["total_edges"] = len(edges)
-    print(f"    Nodes: {len(nodes)}, Edges: {len(edges)}")
+    # Step 1: Collect structural segments
+    print("  Step 1: Collecting structural segments...")
+    segments = []
 
-    if len(edges) < 3:
-        stats["warnings"].append("Too few edges to form any face")
+    for beam in config.get("beams", []):
+        segments.append((
+            beam["x1"], beam["y1"], beam["x2"], beam["y2"],
+            set(beam.get("floors", [])),
+        ))
+
+    for sb in config.get("small_beams", []):
+        segments.append((
+            sb["x1"], sb["y1"], sb["x2"], sb["y2"],
+            set(sb.get("floors", [])),
+        ))
+
+    for wall in config.get("walls", []):
+        segments.append((
+            wall["x1"], wall["y1"], wall["x2"], wall["y2"],
+            set(wall.get("floors", [])),
+        ))
+
+    stats["total_segments"] = len(segments)
+    print(f"    Segments: {len(segments)}")
+
+    if len(segments) < 3:
+        stats["warnings"].append("Too few segments to form any slab")
         return config, stats
 
-    # Step 2b: Build adjacency
-    print("  Step 3: Building adjacency and enumerating faces...")
-    adj, edge_floors = build_adjacency(edges, nodes)
+    # Step 2: Group floors by identical segment geometry
+    print("  Step 2: Grouping floors by segment geometry...")
+    floor_groups = group_segments_by_floor(segments)
+    stats["floor_groups"] = len(floor_groups)
+    print(f"    Floor groups: {len(floor_groups)}")
+    for fs, gs in floor_groups:
+        print(f"      {sorted(fs)}: {len(gs)} segments")
 
-    # Step 3: Face enumeration
-    faces = enumerate_faces(adj, nodes)
-    stats["total_faces_raw"] = len(faces)
-    print(f"    Raw faces: {len(faces)}")
+    stories = config.get("stories", [])
+    foundation_floor = None
+    for s in stories:
+        if isinstance(s, dict) and s.get("name", "").startswith("B"):
+            if foundation_floor is None:
+                foundation_floor = s["name"]
 
-    # Step 4: Filter faces
-    print("  Step 4: Filtering faces...")
-    valid_faces = filter_faces(faces, nodes, config, edge_floors)
-    stats["total_faces_filtered"] = len(valid_faces)
-    print(f"    Valid faces: {len(valid_faces)}")
+    # Steps 3-6: Process each group independently
+    all_slabs = []
 
-    if not valid_faces:
-        stats["warnings"].append("No valid slab faces found after filtering")
+    for floor_set, group_segs in floor_groups:
+        if len(group_segs) < 3:
+            continue
+
+        print(f"  Processing group {sorted(floor_set)} "
+              f"({len(group_segs)} segments)...")
+
+        seg_points = compute_intersections(group_segs)
+        n_ints = sum(len(pts) - 2 for pts in seg_points.values())
+        stats["total_intersections"] += n_ints
+
+        beam_segs = build_beam_segments(group_segs, seg_points)
+        stats["total_beam_segments"] += len(beam_segs)
+
+        if len(beam_segs) < 3:
+            continue
+
+        adj, edge_floors = build_point_adjacency(beam_segs)
+        polygons = walk_slab_polygons(adj)
+        stats["total_polygons_raw"] += len(polygons)
+
+        valid_faces = filter_slabs(polygons, config)
+        stats["total_polygons_filtered"] += len(valid_faces)
+
+        # Assign this group's floors to all slabs
+        group_slabs = assign_floors_simple(
+            valid_faces, floor_set, stories, foundation_floor)
+        all_slabs.extend(group_slabs)
+        print(f"    -> {len(valid_faces)} slabs")
+
+    # Step 7: Merge identical slabs across groups
+    print("  Step 7: Merging slabs across groups...")
+    merged_slabs = _merge_slab_entries(all_slabs, stories)
+    print(f"    {len(all_slabs)} raw -> {len(merged_slabs)} merged")
+
+    if not merged_slabs:
+        stats["warnings"].append("No valid slab polygons found after filtering")
         return config, stats
 
-    # Step 5: Assign floors
-    print("  Step 5: Assigning floors...")
-    slabs = assign_floors_to_faces(valid_faces, nodes, edges, edge_floors, config)
-
-    # Step 6: Generate config entries
+    # Generate config entries
     slab_entries, new_sections = generate_slab_config(
-        slabs, slab_thickness, raft_thickness)
+        merged_slabs, slab_thickness, raft_thickness, foundation_floor)
 
     stats["total_slabs"] = len(slab_entries)
-    stats["foundation_slabs"] = sum(1 for s in slabs if s["is_foundation"])
+    stats["foundation_slabs"] = sum(
+        1 for e in slab_entries if e["section"].startswith("FS"))
     stats["regular_slabs"] = stats["total_slabs"] - stats["foundation_slabs"]
 
     # Update config
@@ -654,16 +844,16 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100):
 
 
 # ---------------------------------------------------------------------------
-# 8. CLI interface
+# CLI interface
 # ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate slab polygons from beam layout using graph-based face enumeration")
+        description="Generate slab polygons from beam layout")
     parser.add_argument("--config", required=True,
-                        help="Path to snapped_config.json (contains all beams)")
+                        help="Path to config with all beams")
     parser.add_argument("--output", required=True,
-                        help="Path for output config with slabs (final_config.json)")
+                        help="Path for output config with slabs")
     parser.add_argument("--slab-thickness", type=int, default=15,
                         help="Default slab thickness in cm (default: 15)")
     parser.add_argument("--raft-thickness", type=int, default=100,
@@ -672,7 +862,6 @@ def main():
                         help="Show results without writing output")
     args = parser.parse_args()
 
-    # Load config
     with open(args.config, encoding="utf-8") as f:
         config = json.load(f)
 
@@ -684,7 +873,6 @@ def main():
     print(f"  slab_thickness: {args.slab_thickness}cm")
     print(f"  raft_thickness: {args.raft_thickness}cm")
 
-    # Generate slabs
     print(f"\n--- Generating slabs ---")
     updated_config, stats = generate_slabs(
         config,
@@ -692,12 +880,13 @@ def main():
         raft_thickness=args.raft_thickness,
     )
 
-    # Summary
     print(f"\n--- Slab Generation Summary ---")
-    print(f"  Nodes: {stats['total_nodes']}")
-    print(f"  Edges: {stats['total_edges']}")
-    print(f"  Raw faces: {stats['total_faces_raw']}")
-    print(f"  Filtered faces: {stats['total_faces_filtered']}")
+    print(f"  Segments: {stats['total_segments']}")
+    print(f"  Floor groups: {stats['floor_groups']}")
+    print(f"  Intersections: {stats['total_intersections']}")
+    print(f"  Beam segments: {stats['total_beam_segments']}")
+    print(f"  Raw polygons: {stats['total_polygons_raw']}")
+    print(f"  Filtered slabs: {stats['total_polygons_filtered']}")
     print(f"  Total slabs: {stats['total_slabs']}")
     print(f"    Regular (S): {stats['regular_slabs']}")
     print(f"    Foundation (FS): {stats['foundation_slabs']}")
@@ -707,7 +896,6 @@ def main():
         for w in stats["warnings"]:
             print(f"  WARNING: {w}")
 
-    # Show sample slabs
     slabs = updated_config.get("slabs", [])
     if slabs:
         print(f"\nSample slabs (first 5):")

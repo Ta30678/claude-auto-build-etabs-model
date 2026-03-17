@@ -104,7 +104,7 @@ def run(SapModel, config, elev_map=None, strength_lookup=None):
         from gs_03_grid_stories import define_stories
         elev_map = define_stories(SapModel, config)
 
-    all_stories = [s["name"] for s in config.get("stories", [])]
+    all_stories = [s["name"] for s in reversed(config.get("stories", []))]
 
     if strength_lookup is None:
         strength_lookup = build_strength_lookup(

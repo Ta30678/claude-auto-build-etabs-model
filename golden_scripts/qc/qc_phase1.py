@@ -277,7 +277,7 @@ def check_sections(SapModel, config):
     # Check that every config frame section (or its Cfc variants) exists
     from constants import build_strength_lookup
     strength_map = config.get("strength_map", {})
-    all_stories = [s["name"] for s in config.get("stories", [])]
+    all_stories = [s["name"] for s in reversed(config.get("stories", []))]
     strength_lookup = build_strength_lookup(strength_map, all_stories)
     fc_values = sorted(set(strength_lookup.values())) if strength_lookup else []
 

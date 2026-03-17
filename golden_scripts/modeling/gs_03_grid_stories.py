@@ -18,15 +18,24 @@ def _check_existing_grids(SapModel):
     """Check if grid lines already exist in the ETABS model.
 
     Returns True if grid lines are found, False otherwise.
+    Handles both raw COM format (retcode at end) and etabs_api format (retcode at start).
     """
     try:
         table_key = "Grid Definitions - Grid Lines"
         ret = SapModel.DatabaseTables.GetTableForDisplayArray(
             table_key, [], "All", 0, [], 0, [])
-        retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
-        if retcode == 0:
-            num_records = ret[3] if len(ret) > 3 else 0
-            return num_records > 0
+        if not ret or len(ret) < 4:
+            return False
+        # Detect format: raw COM has retcode at end, etabs_api at start
+        if isinstance(ret[-1], int) and isinstance(ret[0], (list, tuple)):
+            # Raw COM format: retcode at ret[-1], num_records at ret[3]
+            retcode = ret[-1]
+            num_records = ret[3]
+        else:
+            # etabs_api format: retcode at ret[0], num_records at ret[5]
+            retcode = ret[0]
+            num_records = ret[5] if len(ret) > 5 else 0
+        return retcode == 0 and isinstance(num_records, int) and num_records > 0
     except Exception:
         pass
     return False
@@ -126,18 +135,21 @@ def define_stories(SapModel, config):
         return []
 
     num_stories = len(stories_config)
-    story_names = [s["name"] for s in stories_config]
-    story_heights = [s["height"] for s in stories_config]
 
-    # Calculate elevations if not provided
-    story_elevations = []
+    # Config stores stories top-to-bottom (ETABS GUI convention).
+    # SetStories_2 API expects bottom-to-top order, so reverse.
+    stories_reversed = list(reversed(stories_config))
+    story_names = [s["name"] for s in stories_reversed]
+    story_heights = [s["height"] for s in stories_reversed]
+
+    # Calculate elevations (bottom-to-top accumulation)
+    _elev_lookup = {}
     current_elev = base_elev
-    for s in stories_config:
+    for s in stories_reversed:
         current_elev += s["height"]
-        elev = s.get("elevation", current_elev)
-        story_elevations.append(elev)
+        _elev_lookup[s["name"]] = s.get("elevation", current_elev)
 
-    is_master = [s.get("is_master", True) for s in stories_config]
+    is_master = [s.get("is_master", True) for s in stories_reversed]
     similar_to = ["None"] * num_stories
     splice_above = [False] * num_stories
     splice_height = [0.0] * num_stories
@@ -157,19 +169,14 @@ def define_stories(SapModel, config):
         print(f"  WARNING: Could not define stories: {e}")
         print("  Stories may already exist. Continuing...")
 
-    # Print summary
-    elev = base_elev
+    # Print summary (bottom-to-top for clarity)
     print(f"  BASE elevation: {base_elev}m")
-    for i, s in enumerate(stories_config):
-        elev += s["height"]
-        print(f"  {s['name']}: height={s['height']}m, elevation={elev}m")
+    for s in reversed(stories_config):
+        print(f"  {s['name']}: height={s['height']}m, elevation={_elev_lookup[s['name']]}m")
 
     # Return story elevation map for use by other scripts
     elev_map = {"BASE": base_elev}
-    current = base_elev
-    for s in stories_config:
-        current += s["height"]
-        elev_map[s["name"]] = current
+    elev_map.update(_elev_lookup)
 
     return elev_map
 

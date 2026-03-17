@@ -327,9 +327,10 @@ def replicate_rooftop(columns, beams, walls, stories, core_grid_area,
                       slabs=None):
     """Add rooftop floors to elements. Two phases:
 
-    Phase A — R1F full copy (no core_grid_area needed):
-      All elements with top_floor in floors → add R1F.
-      R1F config = identical to top floor (ALL columns/walls/beams/slabs).
+    Phase A — R1F:
+      Columns/walls in core → add R1F (core check, same as Phase B).
+      Beams/slabs with top_floor → add R1F (full copy, no core check).
+      Fallback: when core_grid_area is None, all elements get full copy.
 
     Phase B — R2F~PRF core copy (needs core_grid_area):
       Columns/walls in core → add R2F ~ second-to-last rooftop (not PRF).
@@ -344,16 +345,19 @@ def replicate_rooftop(columns, beams, walls, stories, core_grid_area,
     if not replicable:
         return
 
-    # ── Phase A: R1F full copy (no core check) ──
+    # ── Phase A: R1F — columns/walls use core check, beams/slabs full copy ──
     top_floor = _find_top_floor(stories)
     if top_floor and "R1F" in replicable:
         for col in columns:
             if top_floor in col["floors"] and "R1F" not in col["floors"]:
-                col["floors"].append("R1F")
+                if not core_grid_area or _in_core(col["grid_x"], col["grid_y"], core_grid_area):
+                    col["floors"].append("R1F")
 
         for wall in walls:
             if top_floor in wall["floors"] and "R1F" not in wall["floors"]:
-                wall["floors"].append("R1F")
+                if not core_grid_area or (_in_core(wall["x1"], wall["y1"], core_grid_area) and
+                        _in_core(wall["x2"], wall["y2"], core_grid_area)):
+                    wall["floors"].append("R1F")
 
         for beam in beams:
             if top_floor in beam["floors"] and "R1F" not in beam["floors"]:
@@ -442,6 +446,8 @@ def replicate_rooftop_sb_slabs(small_beams, slabs, stories, core_grid_area):
     beam_floors = r2f_plus
 
     for sb in small_beams:
+        if top_floor not in sb["floors"]:
+            continue  # Only replicate SBs from the top superstructure floor
         if (_in_core(sb["x1"], sb["y1"], core_grid_area) and
                 _in_core(sb["x2"], sb["y2"], core_grid_area)):
             existing = set(sb["floors"])
@@ -451,6 +457,8 @@ def replicate_rooftop_sb_slabs(small_beams, slabs, stories, core_grid_area):
 
     if slabs:
         for slab in slabs:
+            if top_floor not in slab["floors"]:
+                continue  # Only replicate slabs from the top superstructure floor
             corners = slab.get("corners", [])
             if corners and all(
                     _in_core(c[0], c[1], core_grid_area) for c in corners):

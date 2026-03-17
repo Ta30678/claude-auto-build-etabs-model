@@ -231,7 +231,7 @@ python -m golden_scripts.tools.affine_calibrate \
     --output "sb_calibrated/1F~2F/sb_elements.json"
 ```
 
-### SB Validate Tool (Phase 2 — angle correction + snap + split)
+### SB Validate Tool (Phase 2 — angle correction + snap + cluster + split)
 ```bash
 # Full SB validation pipeline (replaces config_snap in Phase 2)
 python -m golden_scripts.tools.sb_validate \
@@ -247,15 +247,15 @@ python -m golden_scripts.tools.sb_validate \
     --config model_config.json \
     --grid-data grid_data.json \
     --output sb_elements_validated.json \
-    --tolerance 1.0 --split-tolerance 0.15
+    --tolerance 1.0 --split-tolerance 0.30 --cluster-tolerance 0.30
 
-# Disable angle correction or splitting
+# Disable angle correction, splitting, or clustering
 python -m golden_scripts.tools.sb_validate \
     --sb-elements sb_elements_aligned.json \
     --config model_config.json \
     --grid-data grid_data.json \
     --output sb_elements_validated.json \
-    --no-angle-correct --no-split
+    --no-angle-correct --no-split --no-cluster
 
 # Preview without writing
 python -m golden_scripts.tools.sb_validate ... --dry-run

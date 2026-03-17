@@ -15,6 +15,7 @@ from golden_scripts.tools.sb_validate import (
     _compute_section_area,
     find_sb_intermediate_supports,
     split_all_sbs,
+    cluster_free_endpoints,
 )
 from golden_scripts.tools.beam_validate import split_beam
 
@@ -633,6 +634,7 @@ class TestReport:
             "warning_endpoints", "max_snap_distance", "avg_snap_distance",
             "corrections", "warnings",
             "angle_corrections", "angle_corrected_sbs",
+            "clustered_endpoints", "cluster_count",
             "split_sbs", "new_sbs_from_split", "total_sbs_after_split",
             "split_details",
         ]
@@ -784,3 +786,194 @@ class TestIntegration:
             sb_data, simple_config, simple_grid_data, tolerance=1.0)
         assert "_metadata" in validated
         assert validated["_metadata"]["source"] == "pptx_to_elements"
+
+
+# ---------------------------------------------------------------------------
+# TestClusterFreeEndpoints
+# ---------------------------------------------------------------------------
+
+class TestClusterFreeEndpoints:
+
+    def test_two_half_snapped_sbs_cluster(self):
+        """Two half-snapped SBs with free ends ~5cm apart converge to centroid."""
+        small_beams = [
+            # SB-A: vertical, start snapped, end free at (4.25, 3.02)
+            {"x1": 4.25, "y1": 0.0, "x2": 4.25, "y2": 3.02,
+             "section": "SB25X50", "floors": ["1F"]},
+            # SB-B: horizontal, start snapped, end free at (4.27, 3.0)
+            {"x1": 0.0, "y1": 3.0, "x2": 4.27, "y2": 3.0,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        assert len(corrections) == 1
+        # Centroid of (4.25, 3.02) and (4.27, 3.0) ≈ (4.26, 3.01)
+        cx, cy = corrections[0]["centroid"]
+        assert abs(cx - 4.26) < 0.01
+        assert abs(cy - 3.01) < 0.01
+        # Both endpoints now at centroid
+        assert small_beams[0]["x2"] == cx
+        assert small_beams[0]["y2"] == cy
+        assert small_beams[1]["x2"] == cx
+        assert small_beams[1]["y2"] == cy
+        # Both marked as snapped
+        assert snapped_state[0][1] is True
+        assert snapped_state[1][1] is True
+
+    def test_three_endpoint_cluster(self):
+        """Three free endpoints within tolerance cluster to centroid."""
+        small_beams = [
+            {"x1": 0.0, "y1": 0.0, "x2": 5.00, "y2": 3.00,
+             "section": "SB25X50", "floors": ["1F"]},
+            {"x1": 10.0, "y1": 0.0, "x2": 5.02, "y2": 2.98,
+             "section": "SB25X50", "floors": ["1F"]},
+            {"x1": 5.01, "y1": 6.0, "x2": 5.01, "y2": 3.01,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        assert len(corrections) == 1
+        assert corrections[0]["member_count"] == 3
+        # All three free ends at same centroid
+        cx, cy = corrections[0]["centroid"]
+        assert small_beams[0]["x2"] == cx
+        assert small_beams[1]["x2"] == cx
+        assert small_beams[2]["y2"] == cy
+
+    def test_no_cluster_when_far_apart(self):
+        """Free endpoints > 30cm apart do not cluster."""
+        small_beams = [
+            {"x1": 0.0, "y1": 0.0, "x2": 4.0, "y2": 3.0,
+             "section": "SB25X50", "floors": ["1F"]},
+            {"x1": 10.0, "y1": 0.0, "x2": 5.0, "y2": 3.0,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        # Distance between (4.0, 3.0) and (5.0, 3.0) = 1.0m > 0.30m
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        assert len(corrections) == 0
+        # Endpoints unchanged
+        assert small_beams[0]["x2"] == 4.0
+        assert small_beams[1]["x2"] == 5.0
+
+    def test_no_cluster_floor_mismatch(self):
+        """Free endpoints close but on different floors do not cluster."""
+        small_beams = [
+            {"x1": 0.0, "y1": 0.0, "x2": 4.25, "y2": 3.0,
+             "section": "SB25X50", "floors": ["1F"]},
+            {"x1": 10.0, "y1": 0.0, "x2": 4.27, "y2": 3.0,
+             "section": "SB25X50", "floors": ["3F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        assert len(corrections) == 0
+
+    def test_already_snapped_excluded(self):
+        """Fully-snapped SB endpoints are not considered for clustering."""
+        small_beams = [
+            # Fully snapped
+            {"x1": 0.0, "y1": 0.0, "x2": 4.25, "y2": 3.0,
+             "section": "SB25X50", "floors": ["1F"]},
+            # Half snapped, free end near (4.25, 3.0)
+            {"x1": 10.0, "y1": 0.0, "x2": 4.27, "y2": 3.02,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, True], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        # Only 1 free endpoint → not enough for a cluster
+        assert len(corrections) == 0
+
+    def test_no_cluster_flag(self, simple_grid_data):
+        """no_cluster=True disables endpoint clustering."""
+        config = {
+            "columns": [{"grid_x": 0.0, "grid_y": 0.0, "floors": ["1F"]}],
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 8.5, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [],
+        }
+        sb_data = {
+            "small_beams": [
+                # Two SBs whose free ends are close but won't snap to anything
+                {"x1": 0.0, "y1": 3.02, "x2": 4.25, "y2": 3.02,
+                 "section": "SB25X50", "floors": ["1F"]},
+                {"x1": 8.5, "y1": 3.0, "x2": 4.27, "y2": 3.0,
+                 "section": "SB25X50", "floors": ["1F"]},
+            ],
+        }
+        _, report = validate_small_beams(
+            sb_data, config, simple_grid_data, tolerance=1.0,
+            no_cluster=True, no_split=True, no_angle_correct=True)
+        assert report["cluster_count"] == 0
+        assert report["clustered_endpoints"] == 0
+
+    def test_clustered_sb_becomes_target_in_round2(self, simple_grid_data):
+        """After clustering, the now-fully-snapped SB becomes a snap target for others."""
+        config = {
+            "columns": [],
+            "beams": [
+                # Horizontal beam at Y=0
+                {"x1": 0.0, "y1": 0.0, "x2": 8.5, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                # Horizontal beam at Y=6
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [],
+        }
+        sb_data = {
+            "small_beams": [
+                # SB-A: vertical from beam Y=0 to free end at (4.25, 3.02)
+                # → start snaps to beam, end is free → half-snapped
+                {"x1": 4.25, "y1": 0.02, "x2": 4.25, "y2": 3.02,
+                 "section": "SB25X50", "floors": ["1F"]},
+                # SB-B: vertical from beam Y=6 to free end at (4.27, 3.0)
+                # → start snaps to beam, end is free → half-snapped
+                {"x1": 4.27, "y1": 5.98, "x2": 4.27, "y2": 3.0,
+                 "section": "SB25X50", "floors": ["1F"]},
+                # SB-C: horizontal, starts at free position near the cluster point,
+                # ends far from anything. After SB-A+B cluster, this should snap
+                # to the cluster point in round 2.
+                {"x1": 4.28, "y1": 3.03, "x2": 2.0, "y2": 3.03,
+                 "section": "SB20X40", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_small_beams(
+            sb_data, config, simple_grid_data, tolerance=1.0,
+            no_split=True, no_angle_correct=True)
+        # SB-A and SB-B should have been clustered
+        assert report["cluster_count"] >= 1
+        # SB-C's start should have snapped to the cluster point (via SB-A or SB-B
+        # becoming a segment target)
+        sb_c = validated["small_beams"][2]
+        # The start of SB-C (4.28, 3.03) should have snapped close to cluster centroid
+        assert report["snapped_endpoints"] >= 3  # at least A-start, B-start, C-start
+
+    def test_split_tolerance_default(self, simple_grid_data):
+        """Verify split_tolerance default is 0.30m (column 0.25m from SB line splits it)."""
+        config = {
+            "columns": [
+                {"grid_x": 8.5, "grid_y": 3.25, "floors": ["1F"]},
+            ],
+            "beams": [
+                {"x1": 0.0, "y1": 3.0, "x2": 17.0, "y2": 3.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [],
+        }
+        sb_data = {
+            "small_beams": [
+                # Horizontal SB along Y=3 from X=0 to X=17
+                # Column at (8.5, 3.25) is 0.25m from the SB line
+                # With old default 0.15m: no split. With new 0.30m: split.
+                {"x1": 0.0, "y1": 3.0, "x2": 17.0, "y2": 3.0,
+                 "section": "SB25X50", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_small_beams(
+            sb_data, config, simple_grid_data, tolerance=1.0,
+            no_angle_correct=True, no_cluster=True)
+        # Column 0.25m away should now cause a split with default 0.30m tolerance
+        assert report["split_sbs"] == 1
+        assert len(validated["small_beams"]) == 2

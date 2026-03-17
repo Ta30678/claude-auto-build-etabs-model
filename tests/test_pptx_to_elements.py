@@ -9,6 +9,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from golden_scripts.tools.pptx_to_elements import (
     _get_freeform_vertex_count,
+    _AbsShape,
+    _iter_slide_shapes,
     COLUMN_REQUIRED_VERTICES,
     FLOOR_LABEL_RE,
     expand_floor_range,
@@ -177,3 +179,126 @@ class TestFormatParseRoundtrip:
         assert 3 in parsed
         assert "B1F" in parsed[3]
         assert "B2F" in parsed[3]
+
+
+# ─── AbsShape group dimension scaling tests ──────────────────────────────────
+
+
+from unittest.mock import MagicMock, PropertyMock
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+
+def _make_mock_shape(left, top, width, height, shape_type=MSO_SHAPE_TYPE.FREEFORM):
+    """Create a mock shape with position/dimension attributes."""
+    s = MagicMock()
+    s.left = left
+    s.top = top
+    s.width = width
+    s.height = height
+    s.shape_type = shape_type
+    return s
+
+
+class TestAbsShapeGroupScaling:
+    """Tests for _AbsShape width/height scaling in group transforms."""
+
+    def test_absshape_width_height_override(self):
+        """_AbsShape stores explicit width/height when provided."""
+        raw = _make_mock_shape(100, 200, 300, 400)
+        proxy = _AbsShape(raw, 500, 600, abs_width=900, abs_height=1200)
+        assert proxy.width == 900
+        assert proxy.height == 1200
+        assert proxy.left == 500
+        assert proxy.top == 600
+
+    def test_absshape_width_height_default(self):
+        """_AbsShape falls back to raw shape's width/height when not provided."""
+        raw = _make_mock_shape(100, 200, 300, 400)
+        proxy = _AbsShape(raw, 500, 600)
+        assert proxy.width == 300
+        assert proxy.height == 400
+
+    def test_iter_slide_shapes_scales_grouped_dimensions(self):
+        """Grouped shapes get scaled width/height from group transform."""
+        # Child shape: 100x200 at (50, 50) in child coord space
+        child = _make_mock_shape(50, 50, 100, 200, MSO_SHAPE_TYPE.FREEFORM)
+
+        # Group transform: child space 1000x1000, output space 2000x4000
+        # → scale_x = 2.0, scale_y = 4.0
+        group = MagicMock()
+        group.shape_type = MSO_SHAPE_TYPE.GROUP
+        group.shapes = [child]
+
+        # Build group xfrm XML: off=(0,0), ext=(2000,4000), chOff=(0,0), chExt=(1000,1000)
+        _NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        grp_xml = f"""
+        <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                  xmlns:a="{_NS_A}">
+          <p:grpSpPr>
+            <a:xfrm>
+              <a:off x="0" y="0"/>
+              <a:ext cx="2000" cy="4000"/>
+              <a:chOff x="0" y="0"/>
+              <a:chExt cx="1000" cy="1000"/>
+            </a:xfrm>
+          </p:grpSpPr>
+        </p:grpSp>
+        """
+        group._element = etree.fromstring(grp_xml.encode())
+        group.left = 0
+        group.top = 0
+        group.width = 2000
+        group.height = 4000
+
+        # Mock container that holds the group
+        container = MagicMock()
+        container.shapes = [group]
+
+        results = list(_iter_slide_shapes(container))
+        assert len(results) == 1
+        proxy = results[0]
+        # Position: (0 + (50-0)*2000/1000, 0 + (50-0)*4000/1000) = (100, 200)
+        assert proxy.left == 100
+        assert proxy.top == 200
+        # Dimensions: (100*2000/1000, 200*4000/1000) = (200, 800)
+        assert proxy.width == 200
+        assert proxy.height == 800
+
+    def test_iter_slide_shapes_identity_group_no_change(self):
+        """Identity group transform preserves original dimensions."""
+        child = _make_mock_shape(50, 50, 300, 400, MSO_SHAPE_TYPE.FREEFORM)
+
+        group = MagicMock()
+        group.shape_type = MSO_SHAPE_TYPE.GROUP
+        group.shapes = [child]
+
+        # Identity: ext == chExt
+        _NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        grp_xml = f"""
+        <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                  xmlns:a="{_NS_A}">
+          <p:grpSpPr>
+            <a:xfrm>
+              <a:off x="100" y="200"/>
+              <a:ext cx="5000" cy="5000"/>
+              <a:chOff x="0" y="0"/>
+              <a:chExt cx="5000" cy="5000"/>
+            </a:xfrm>
+          </p:grpSpPr>
+        </p:grpSp>
+        """
+        group._element = etree.fromstring(grp_xml.encode())
+        group.left = 100
+        group.top = 200
+        group.width = 5000
+        group.height = 5000
+
+        container = MagicMock()
+        container.shapes = [group]
+
+        results = list(_iter_slide_shapes(container))
+        assert len(results) == 1
+        proxy = results[0]
+        # Identity scale → dimensions unchanged
+        assert proxy.width == 300
+        assert proxy.height == 400

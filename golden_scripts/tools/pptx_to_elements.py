@@ -180,13 +180,15 @@ def parse_page_floors(page_floors_str: str) -> dict[int, list[str]]:
 
 
 class _AbsShape:
-    """Proxy that overrides left/top with absolute slide coordinates."""
-    __slots__ = ('_shape', 'left', 'top')
+    """Proxy that overrides left/top/width/height with absolute slide coordinates."""
+    __slots__ = ('_shape', 'left', 'top', 'width', 'height')
 
-    def __init__(self, shape, abs_left, abs_top):
+    def __init__(self, shape, abs_left, abs_top, abs_width=None, abs_height=None):
         self._shape = shape
         self.left = abs_left
         self.top = abs_top
+        self.width = abs_width if abs_width is not None else shape.width
+        self.height = abs_height if abs_height is not None else shape.height
 
     def __getattr__(self, name):
         return getattr(self._shape, name)
@@ -260,8 +262,12 @@ def _iter_slide_shapes(container, type_filter=None):
                 cx, cy = child_proxy.left, child_proxy.top
                 abs_x = int(ox + (cx - cox) * ecx / cecx) if cecx else ox + cx
                 abs_y = int(oy + (cy - coy) * ecy / cecy) if cecy else oy + cy
+                # Scale dimensions by group transform
+                cw, ch = child_proxy.width, child_proxy.height
+                abs_w = int(cw * ecx / cecx) if cecx else cw
+                abs_h = int(ch * ecy / cecy) if cecy else ch
                 raw = child_proxy._shape if isinstance(child_proxy, _AbsShape) else child_proxy
-                yield _AbsShape(raw, abs_x, abs_y)
+                yield _AbsShape(raw, abs_x, abs_y, abs_w, abs_h)
         else:
             if type_filter is None or shape.shape_type in type_filter:
                 yield _AbsShape(shape, shape.left, shape.top)

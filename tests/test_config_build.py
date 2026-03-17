@@ -242,12 +242,12 @@ class TestRooftopReplication:
         assert "R3F" in cols[0]["floors"]
         assert "PRF" not in cols[0]["floors"]
 
-    def test_column_outside_core_gets_r1f_only(self, stories_with_rooftop, core_area):
-        """Non-core column: Phase A gives R1F, Phase B skips (not in core)."""
+    def test_column_outside_core_gets_no_rooftop(self, stories_with_rooftop, core_area):
+        """Non-core column: Phase A skips R1F (column extends above via +1 rule)."""
         cols = [{"grid_x": 1, "grid_y": 1, "section": "C90X90",
                  "floors": ["B3F", "1F", "2F", "RF"]}]
         replicate_rooftop(cols, [], [], stories_with_rooftop, core_area)
-        assert "R1F" in cols[0]["floors"]
+        assert "R1F" not in cols[0]["floors"]
         assert "R2F" not in cols[0]["floors"]
         assert "R3F" not in cols[0]["floors"]
         assert "PRF" not in cols[0]["floors"]
@@ -272,6 +272,14 @@ class TestRooftopReplication:
         assert "R3F" in walls[0]["floors"]
         assert "PRF" not in walls[0]["floors"]
 
+    def test_wall_outside_core_no_r1f(self, stories_with_rooftop, core_area):
+        """Non-core wall: Phase A skips R1F (wall extends above via +1 rule)."""
+        walls = [{"x1": 1, "y1": 1, "x2": 1, "y2": 3,
+                  "section": "W25", "floors": ["1F", "2F", "RF"]}]
+        replicate_rooftop([], [], walls, stories_with_rooftop, core_area)
+        assert "R1F" not in walls[0]["floors"]
+        assert "R2F" not in walls[0]["floors"]
+
     def test_small_beam_in_core_gets_rooftop(self, stories_with_rooftop, core_area):
         """Core SB: Phase A gives R1F, Phase B gives R2F+R3F+PRF."""
         sbs = [{"x1": 6, "y1": 10, "x2": 14, "y2": 10,
@@ -281,6 +289,27 @@ class TestRooftopReplication:
         assert "R2F" in sbs[0]["floors"]
         assert "R3F" in sbs[0]["floors"]
         assert "PRF" in sbs[0]["floors"]
+
+    def test_sb_without_top_floor_no_rooftop_phase_b(self, stories_with_rooftop, core_area):
+        """Core SB at 1F only (not top_floor=2F) → Phase B should NOT add R2F+."""
+        sbs = [{"x1": 6, "y1": 10, "x2": 14, "y2": 10,
+                "section": "SB30X50", "floors": ["1F"]}]
+        replicate_rooftop_sb_slabs(sbs, None, stories_with_rooftop, core_area)
+        # Phase A: 1F ≠ top_floor (2F), so no R1F
+        assert "R1F" not in sbs[0]["floors"]
+        # Phase B: top_floor not in floors → skip
+        assert "R2F" not in sbs[0]["floors"]
+        assert "R3F" not in sbs[0]["floors"]
+        assert "PRF" not in sbs[0]["floors"]
+
+    def test_foundation_sb_no_rooftop(self, stories_with_rooftop, core_area):
+        """Foundation SB (B3F only) should NOT get rooftop floors."""
+        sbs = [{"x1": 6, "y1": 10, "x2": 14, "y2": 10,
+                "section": "FSB30X50", "floors": ["B3F"]}]
+        replicate_rooftop_sb_slabs(sbs, None, stories_with_rooftop, core_area)
+        assert "R1F" not in sbs[0]["floors"]
+        assert "R2F" not in sbs[0]["floors"]
+        assert "PRF" not in sbs[0]["floors"]
 
     def test_no_duplicate_floors(self, stories_with_rooftop, core_area):
         cols = [{"grid_x": 10, "grid_y": 10, "section": "C90X90",
@@ -298,12 +327,12 @@ class TestRooftopReplication:
         assert "R3F" not in beams[0]["floors"]
         assert "PRF" not in beams[0]["floors"]
 
-    def test_r1f_full_copy_column(self, stories_with_rooftop, core_area):
-        """Non-core column with top_floor → gets R1F only, not R2F+."""
+    def test_non_core_column_no_r1f(self, stories_with_rooftop, core_area):
+        """Non-core column with top_floor → no R1F (column extends above via +1 rule)."""
         cols = [{"grid_x": 1, "grid_y": 1, "section": "C60X60",
                  "floors": ["1F", "2F"]}]
         replicate_rooftop(cols, [], [], stories_with_rooftop, core_area)
-        assert "R1F" in cols[0]["floors"]
+        assert "R1F" not in cols[0]["floors"]
         assert "R2F" not in cols[0]["floors"]
         assert "R3F" not in cols[0]["floors"]
 
