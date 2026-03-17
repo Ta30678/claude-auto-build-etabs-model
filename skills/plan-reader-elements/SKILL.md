@@ -82,7 +82,16 @@ Affine 校正       →  calibrated/{floor}/elements.json  (affine_calibrate.py 
 
 命名格式詳見 **section-name** skill。
 
-### 3.2 辨識流程
+### 3.2 牆的 PPT 2D 偏移
+
+PPT 結構配置圖是 2D 展示：剪力牆/連續壁在圖面上畫在大梁**旁邊**（平行偏移），
+因為牆和梁不能重疊在同一個 2D 位置。在 ETABS 3D 模型中，牆應建在梁**正下方**
+（共用同一軸線座標）。
+
+此偏移由 `beam_validate.py` 的 wall-to-beam snap 自動校正（tolerance=1.0m），
+READER 在審閱 beam validation report 時確認 `wall_beam_snaps` 結果即可。
+
+### 3.3 辨識流程
 
 ```
 Step 1: 載入圖例對照表（自動提取或手動確認）
@@ -91,7 +100,7 @@ Step 3: 由位置判斷構件類型（Grid 交叉→柱、沿 Grid→梁、跨 G
 Step 4: 記錄座標與尺寸
 ```
 
-### 3.3 柱方向判斷
+### 3.4 柱方向判斷
 
 ```
 水平方向較長 = X向寬度較大

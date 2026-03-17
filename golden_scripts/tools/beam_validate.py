@@ -13,6 +13,7 @@ Pipeline order:
   Step 1: Split beams at columns + walls + other beams
   Step 2: Split walls at columns + beams + other walls
   Step 3: Angle correction (2° default, runs on post-split geometry)
+  Step 4: Wall-to-beam re-snap (1.0m default, aligns walls under parallel beams)
 
 Usage:
     python -m golden_scripts.tools.beam_validate \
@@ -735,7 +736,145 @@ def _find_nearest_any(px, py, targets):
 
 
 # ---------------------------------------------------------------------------
-# 6. Main validation
+# 6. Wall-to-beam snap
+# ---------------------------------------------------------------------------
+
+def _wall_direction(wall):
+    """Return 'X' or 'Y' based on which axis the wall is parallel to.
+
+    A wall along X has its variable axis in X (fixed Y).
+    A wall along Y has its variable axis in Y (fixed X).
+    """
+    dx = abs(wall["x2"] - wall["x1"])
+    dy = abs(wall["y2"] - wall["y1"])
+    return "X" if dx >= dy else "Y"
+
+
+def _beam_direction(beam):
+    """Return 'X' or 'Y' based on which axis the beam spans."""
+    dx = abs(beam["x2"] - beam["x1"])
+    dy = abs(beam["y2"] - beam["y1"])
+    return "X" if dx >= dy else "Y"
+
+
+def _ranges_overlap(a_min, a_max, b_min, b_max):
+    """True if [a_min, a_max] and [b_min, b_max] overlap (with 0.01m tolerance)."""
+    return a_min <= b_max + 0.01 and b_min <= a_max + 0.01
+
+
+def snap_walls_to_beams(elements, tolerance=1.0):
+    """Snap wall fixed-axis coordinate to the nearest parallel beam.
+
+    In PPT 2D structural plans, walls are drawn next to beams (offset)
+    because they can't overlap in 2D. In the 3D ETABS model, walls should
+    be placed directly under beams (same axis coordinate).
+
+    For each wall:
+      1. Determine direction (X or Y)
+      2. Find same-direction beams with overlapping variable-axis range
+         and at least one common floor
+      3. Snap wall's fixed-axis to the nearest qualifying beam's fixed-axis
+      4. Only snap if distance > 0.01m and <= tolerance
+
+    Parameters
+    ----------
+    elements : dict
+        Parsed elements with "beams" and "walls".
+    tolerance : float
+        Max snap distance in meters (default 1.0).
+
+    Returns
+    -------
+    tuple[dict, list]
+        (updated_elements, snap_details_list)
+    """
+    walls = elements.get("walls", [])
+    beams = elements.get("beams", [])
+    snap_details = []
+
+    if not walls or not beams:
+        return elements, snap_details
+
+    for wall in walls:
+        w_dir = _wall_direction(wall)
+        w_floors = set(wall.get("floors", []))
+
+        if w_dir == "X":
+            # Wall is horizontal: fixed axis = Y, variable axis = X
+            w_fixed = (wall["y1"] + wall["y2"]) / 2.0
+            w_var_min = min(wall["x1"], wall["x2"])
+            w_var_max = max(wall["x1"], wall["x2"])
+        else:
+            # Wall is vertical: fixed axis = X, variable axis = Y
+            w_fixed = (wall["x1"] + wall["x2"]) / 2.0
+            w_var_min = min(wall["y1"], wall["y2"])
+            w_var_max = max(wall["y1"], wall["y2"])
+
+        best_beam = None
+        best_dist = float("inf")
+        best_beam_fixed = None
+
+        for beam in beams:
+            b_dir = _beam_direction(beam)
+            if b_dir != w_dir:
+                continue
+
+            # Check floor overlap
+            b_floors = set(beam.get("floors", []))
+            if not (w_floors & b_floors):
+                continue
+
+            if b_dir == "X":
+                b_fixed = (beam["y1"] + beam["y2"]) / 2.0
+                b_var_min = min(beam["x1"], beam["x2"])
+                b_var_max = max(beam["x1"], beam["x2"])
+            else:
+                b_fixed = (beam["x1"] + beam["x2"]) / 2.0
+                b_var_min = min(beam["y1"], beam["y2"])
+                b_var_max = max(beam["y1"], beam["y2"])
+
+            # Check variable-axis overlap
+            if not _ranges_overlap(w_var_min, w_var_max, b_var_min, b_var_max):
+                continue
+
+            dist = abs(w_fixed - b_fixed)
+            if dist < best_dist:
+                best_dist = dist
+                best_beam = beam
+                best_beam_fixed = b_fixed
+
+        # Apply snap if within tolerance and meaningful
+        if best_beam is not None and best_dist > 0.01 and best_dist <= tolerance:
+            before = {
+                "x1": wall["x1"], "y1": wall["y1"],
+                "x2": wall["x2"], "y2": wall["y2"],
+            }
+
+            if w_dir == "X":
+                wall["y1"] = best_beam_fixed
+                wall["y2"] = best_beam_fixed
+            else:
+                wall["x1"] = best_beam_fixed
+                wall["x2"] = best_beam_fixed
+
+            snap_details.append({
+                "wall_section": wall.get("section", ""),
+                "wall_floors": wall.get("floors", []),
+                "direction": w_dir,
+                "before": before,
+                "after": {
+                    "x1": wall["x1"], "y1": wall["y1"],
+                    "x2": wall["x2"], "y2": wall["y2"],
+                },
+                "distance": round(best_dist, 4),
+                "target_beam_section": best_beam.get("section", ""),
+            })
+
+    return elements, snap_details
+
+
+# ---------------------------------------------------------------------------
+# 7. Main validation
 # ---------------------------------------------------------------------------
 
 def validate_beams(elements, grid_data, tolerance=1.5,
@@ -748,6 +887,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
       Step 1: Split beams at columns + walls + other beams
       Step 2: Split walls at columns + beams + other walls
       Step 3: Angle correction (2° default, on post-split geometry)
+      Step 4: Wall-to-beam re-snap (1.0m default, aligns walls under beams)
 
     Parameters
     ----------
@@ -801,6 +941,8 @@ def validate_beams(elements, grid_data, tolerance=1.5,
             "wall_new_from_split": 0,
             "wall_total_after_split": len(elements.get("walls", [])),
             "wall_split_details": [],
+            "wall_beam_snaps": 0,
+            "wall_beam_snap_details": [],
         }
         return elements, report
 
@@ -982,6 +1124,9 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         elements, angle_corrections = correct_angles(
             elements, grid_data, angle_threshold_deg)
 
+    # --- Step 4: Wall-to-beam re-snap ---
+    elements, wall_beam_snap_details = snap_walls_to_beams(elements, tolerance=1.0)
+
     # --- Build report ---
     snap_distances = [c["snap_distance"] for c in corrections]
     report = {
@@ -998,13 +1143,15 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         "angle_corrected_walls": sum(1 for a in angle_corrections if a["element_type"] == "wall"),
         **split_report,
         **wall_split_report,
+        "wall_beam_snaps": len(wall_beam_snap_details),
+        "wall_beam_snap_details": wall_beam_snap_details,
     }
 
     return elements, report
 
 
 # ---------------------------------------------------------------------------
-# 7. CLI entry point
+# 8. CLI entry point
 # ---------------------------------------------------------------------------
 
 def main():
@@ -1101,6 +1248,13 @@ def main():
               f"{report['wall_new_from_split']} new sub-walls "
               f"(total after split: {report['wall_total_after_split']})")
 
+    # Wall-beam snap summary
+    if report.get("wall_beam_snaps", 0) > 0:
+        print(f"  Wall-beam snaps: {report['wall_beam_snaps']}")
+        for d in report["wall_beam_snap_details"]:
+            print(f"    {d['wall_section']} ({d['direction']}): "
+                  f"Δ={d['distance']}m → {d['target_beam_section']}")
+
     if report["warnings"]:
         print(f"\nWARNINGS ({len(report['warnings'])}):")
         for w in report["warnings"]:
@@ -1137,6 +1291,11 @@ def main():
                 pts = ", ".join(f"({p[0]},{p[1]})" for p in s["split_points"])
                 print(f"  wall[{s['original_index']}] {s['section']}: "
                       f"→ {s['result_count']} segments at [{pts}]")
+        if report.get("wall_beam_snap_details"):
+            print(f"\nWall-beam snap preview ({len(report['wall_beam_snap_details'])}):")
+            for d in report["wall_beam_snap_details"]:
+                print(f"  {d['wall_section']} ({d['direction']}): "
+                      f"Δ={d['distance']}m → {d['target_beam_section']}")
     else:
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(validated, f, ensure_ascii=False, indent=2)

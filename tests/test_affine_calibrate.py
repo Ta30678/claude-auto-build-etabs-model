@@ -16,6 +16,7 @@ from golden_scripts.tools.affine_calibrate import (
     find_fallback_transform,
     _normalize_grid_data_for_affine,
     compute_grid_transform,
+    snap_elements_to_grid,
 )
 
 
@@ -291,3 +292,123 @@ class TestNormalizeGridDataForAffine:
         assert transform is not None
         assert transform["n_x_anchors"] == 2
         assert transform["n_y_anchors"] == 2
+
+
+# ---------------------------------------------------------------------------
+# snap_elements_to_grid
+# ---------------------------------------------------------------------------
+
+class TestSnapElementsToGrid:
+    """Tests for post-affine grid snap."""
+
+    GRID_DATA = {
+        "x_grids": [
+            {"name": "A", "coordinate": 0.0},
+            {"name": "B", "coordinate": 8.5},
+            {"name": "C", "coordinate": 17.0},
+        ],
+        "y_grids": [
+            {"name": "1", "coordinate": 0.0},
+            {"name": "5", "coordinate": 10.0},
+            {"name": "6", "coordinate": 17.6},
+        ],
+    }
+
+    def test_column_snaps_to_grid(self):
+        """Column at (8.65, 17.46), grid B=8.5, grid 6=17.6 → snaps to (8.5, 17.6)."""
+        slide = {
+            "columns": [
+                {"grid_x": 8.65, "grid_y": 17.46, "x1": 8.65, "y1": 17.46,
+                 "section": "C80X80", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(slide, self.GRID_DATA)
+        assert stats["columns_snapped"] == 1
+        assert slide["columns"][0]["grid_x"] == 8.5
+        assert slide["columns"][0]["grid_y"] == 17.6
+        assert slide["columns"][0]["x1"] == 8.5
+        assert slide["columns"][0]["y1"] == 17.6
+
+    def test_column_too_far_not_snapped(self):
+        """Column at (5.0, 12.0), no grid within 0.5m → unchanged."""
+        slide = {
+            "columns": [
+                {"grid_x": 5.0, "grid_y": 12.0, "x1": 5.0, "y1": 12.0,
+                 "section": "C80X80", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(slide, self.GRID_DATA)
+        assert stats["columns_snapped"] == 0
+        assert slide["columns"][0]["grid_x"] == 5.0
+        assert slide["columns"][0]["grid_y"] == 12.0
+
+    def test_beam_x_direction_aligned(self):
+        """Beam direction='X' with y1=17.46, y2=17.62, grid Y=17.6 → y1=y2=17.6."""
+        slide = {
+            "beams": [
+                {"x1": 0.0, "y1": 17.46, "x2": 8.5, "y2": 17.62,
+                 "direction": "X", "section": "B55X80", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(slide, self.GRID_DATA)
+        assert stats["beams_aligned"] == 1
+        assert slide["beams"][0]["y1"] == 17.6
+        assert slide["beams"][0]["y2"] == 17.6
+        # x should be untouched
+        assert slide["beams"][0]["x1"] == 0.0
+        assert slide["beams"][0]["x2"] == 8.5
+
+    def test_beam_y_direction_aligned(self):
+        """Beam direction='Y' with x1=8.65, x2=8.49, grid X=8.5 → x1=x2=8.5."""
+        slide = {
+            "beams": [
+                {"x1": 8.65, "y1": 0.0, "x2": 8.49, "y2": 10.0,
+                 "direction": "Y", "section": "B55X80", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(slide, self.GRID_DATA)
+        assert stats["beams_aligned"] == 1
+        assert slide["beams"][0]["x1"] == 8.5
+        assert slide["beams"][0]["x2"] == 8.5
+        # y should be untouched
+        assert slide["beams"][0]["y1"] == 0.0
+        assert slide["beams"][0]["y2"] == 10.0
+
+    def test_beam_no_direction_unchanged(self):
+        """Beam with direction='' → not touched."""
+        slide = {
+            "beams": [
+                {"x1": 1.0, "y1": 2.0, "x2": 5.0, "y2": 6.0,
+                 "direction": "", "section": "B40X60", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(slide, self.GRID_DATA)
+        assert stats["beams_aligned"] == 0
+        assert slide["beams"][0]["x1"] == 1.0
+        assert slide["beams"][0]["y1"] == 2.0
+
+    def test_beam_x_no_grid_uses_average(self):
+        """Beam direction='X' with y1=12.01, y2=11.99, no grid near → y1=y2=12.0."""
+        slide = {
+            "beams": [
+                {"x1": 0.0, "y1": 12.01, "x2": 8.5, "y2": 11.99,
+                 "direction": "X", "section": "B55X80", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(slide, self.GRID_DATA)
+        assert stats["beams_aligned"] == 1
+        assert slide["beams"][0]["y1"] == 12.0
+        assert slide["beams"][0]["y2"] == 12.0
+
+    def test_wall_x_direction_aligned(self):
+        """Wall direction='X' snapped same as beam."""
+        slide = {
+            "walls": [
+                {"x1": 0.0, "y1": 17.46, "x2": 8.5, "y2": 17.62,
+                 "direction": "X", "section": "W30", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(slide, self.GRID_DATA)
+        assert stats["walls_aligned"] == 1
+        assert slide["walls"][0]["y1"] == 17.6
+        assert slide["walls"][0]["y2"] == 17.6

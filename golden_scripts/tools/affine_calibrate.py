@@ -451,6 +451,114 @@ def apply_transform_to_slide(slide_data, transform):
     return result
 
 
+def snap_elements_to_grid(slide_data, grid_data, col_tolerance=0.5, beam_tolerance=0.5):
+    """Post-affine grid snap: fix residual drift from affine transform.
+
+    1. Columns: snap to nearest grid intersection (within col_tolerance)
+    2. Beams with direction="X": force y1=y2, snap to nearest grid Y
+    3. Beams with direction="Y": force x1=x2, snap to nearest grid X
+    4. Walls: same as beams
+
+    Args:
+        slide_data: Calibrated slide data (modified in-place).
+        grid_data: Grid data (any format — auto-normalized).
+        col_tolerance: Max distance (m) for column snap.
+        beam_tolerance: Max distance (m) for beam/wall axis snap.
+
+    Returns:
+        dict with snap statistics (columns_snapped, beams_aligned, walls_aligned).
+    """
+    gd = _normalize_grid_data_for_affine(grid_data)
+    x_coords = [g["coordinate"] for g in gd.get("x_grids", [])]
+    y_coords = [g["coordinate"] for g in gd.get("y_grids", [])]
+
+    stats = {"columns_snapped": 0, "beams_aligned": 0, "walls_aligned": 0}
+
+    def _nearest(val, coords):
+        """Return (nearest_coord, distance) or (None, inf) if coords is empty."""
+        if not coords:
+            return None, float("inf")
+        best = min(coords, key=lambda c: abs(c - val))
+        return best, abs(best - val)
+
+    # --- Columns: snap to nearest grid intersection ---
+    for col in slide_data.get("columns", []):
+        cx = col.get("grid_x", col.get("x1"))
+        cy = col.get("grid_y", col.get("y1"))
+        if cx is None or cy is None:
+            continue
+
+        gx, dx = _nearest(cx, x_coords)
+        gy, dy = _nearest(cy, y_coords)
+
+        if dx < col_tolerance and dy < col_tolerance:
+            if "grid_x" in col:
+                col["grid_x"] = round(gx, 2)
+            if "grid_y" in col:
+                col["grid_y"] = round(gy, 2)
+            if "x1" in col:
+                col["x1"] = round(gx, 2)
+            if "y1" in col:
+                col["y1"] = round(gy, 2)
+            stats["columns_snapped"] += 1
+
+    # --- Beams: direction-aware axis alignment ---
+    for beam in slide_data.get("beams", []):
+        direction = beam.get("direction", "")
+        if not direction:
+            direction = _direction_of(beam.get("x1", 0), beam.get("y1", 0),
+                                      beam.get("x2", 0), beam.get("y2", 0))
+        if direction == "X":
+            avg_y = (beam["y1"] + beam["y2"]) / 2.0
+            gy, dy = _nearest(avg_y, y_coords)
+            if dy < beam_tolerance:
+                beam["y1"] = round(gy, 2)
+                beam["y2"] = round(gy, 2)
+            else:
+                beam["y1"] = round(avg_y, 2)
+                beam["y2"] = round(avg_y, 2)
+            stats["beams_aligned"] += 1
+        elif direction == "Y":
+            avg_x = (beam["x1"] + beam["x2"]) / 2.0
+            gx, dx = _nearest(avg_x, x_coords)
+            if dx < beam_tolerance:
+                beam["x1"] = round(gx, 2)
+                beam["x2"] = round(gx, 2)
+            else:
+                beam["x1"] = round(avg_x, 2)
+                beam["x2"] = round(avg_x, 2)
+            stats["beams_aligned"] += 1
+
+    # --- Walls: same as beams ---
+    for wall in slide_data.get("walls", []):
+        direction = wall.get("direction", "")
+        if not direction:
+            direction = _direction_of(wall.get("x1", 0), wall.get("y1", 0),
+                                      wall.get("x2", 0), wall.get("y2", 0))
+        if direction == "X":
+            avg_y = (wall["y1"] + wall["y2"]) / 2.0
+            gy, dy = _nearest(avg_y, y_coords)
+            if dy < beam_tolerance:
+                wall["y1"] = round(gy, 2)
+                wall["y2"] = round(gy, 2)
+            else:
+                wall["y1"] = round(avg_y, 2)
+                wall["y2"] = round(avg_y, 2)
+            stats["walls_aligned"] += 1
+        elif direction == "Y":
+            avg_x = (wall["x1"] + wall["x2"]) / 2.0
+            gx, dx = _nearest(avg_x, x_coords)
+            if dx < beam_tolerance:
+                wall["x1"] = round(gx, 2)
+                wall["x2"] = round(gx, 2)
+            else:
+                wall["x1"] = round(avg_x, 2)
+                wall["x2"] = round(avg_x, 2)
+            stats["walls_aligned"] += 1
+
+    return stats
+
+
 # ---------------------------------------------------------------------------
 # 4. Apply transforms to SB elements
 # ---------------------------------------------------------------------------
@@ -569,6 +677,8 @@ def main():
                         help="Path for aligned output")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show transform details without writing output")
+    parser.add_argument("--no-grid-snap", action="store_true",
+                        help="Skip post-affine grid snap for columns and beams")
     args = parser.parse_args()
 
     if args.mode == "grid":
@@ -634,6 +744,12 @@ def _run_grid_mode(args):
 
     # Apply transform
     calibrated = apply_transform_to_slide(slide_data, transform)
+
+    # Post-affine grid snap
+    if not args.no_grid_snap:
+        snap_stats = snap_elements_to_grid(calibrated, grid_data)
+        print(f"  Post-affine grid snap: {snap_stats['columns_snapped']} columns, "
+              f"{snap_stats['beams_aligned']} beams, {snap_stats['walls_aligned']} walls")
 
     if args.dry_run:
         print(f"\n[DRY RUN] No output written.")

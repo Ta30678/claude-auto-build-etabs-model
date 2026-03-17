@@ -19,6 +19,7 @@ from golden_scripts.tools.beam_validate import (
     split_beam,
     split_all_beams,
     split_all_walls,
+    snap_walls_to_beams,
 )
 
 
@@ -1457,3 +1458,177 @@ class TestNewPipelineOrder:
         # Beam should also be split at the wall
         assert report["split_beams"] == 1
         assert len(validated["beams"]) == 2
+
+
+class TestSnapWallsToBeams:
+    """Tests for wall-to-beam snap (Step 4)."""
+
+    def test_x_wall_snaps_to_x_beam(self):
+        """X-direction wall offset 0.3m from X-direction beam → should snap."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall parallel to beam but offset 0.3m in Y
+                {"x1": 0.0, "y1": 6.3, "x2": 8.5, "y2": 6.3,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0)
+        assert len(details) == 1
+        assert details[0]["distance"] == 0.3
+        assert details[0]["direction"] == "X"
+        assert details[0]["target_beam_section"] == "B50X80"
+        # Wall Y should now match beam Y
+        assert result["walls"][0]["y1"] == 6.0
+        assert result["walls"][0]["y2"] == 6.0
+
+    def test_y_wall_snaps_to_y_beam(self):
+        """Y-direction wall offset 0.8m from Y-direction beam → should snap."""
+        elements = {
+            "beams": [
+                {"x1": 8.5, "y1": 0.0, "x2": 8.5, "y2": 12.0,
+                 "section": "B55X90", "floors": ["2F"]},
+            ],
+            "walls": [
+                # Wall parallel to beam but offset 0.8m in X
+                {"x1": 9.3, "y1": 0.0, "x2": 9.3, "y2": 12.0,
+                 "section": "W30", "floors": ["2F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0)
+        assert len(details) == 1
+        assert details[0]["distance"] == 0.8
+        assert details[0]["direction"] == "Y"
+        # Wall X should now match beam X
+        assert result["walls"][0]["x1"] == 8.5
+        assert result["walls"][0]["x2"] == 8.5
+
+    def test_no_variable_axis_overlap(self):
+        """Wall with no overlapping beam in variable-axis → should NOT snap."""
+        elements = {
+            "beams": [
+                # Beam from x=0 to x=8.5
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall from x=10 to x=15 — no overlap in X range
+                {"x1": 10.0, "y1": 6.3, "x2": 15.0, "y2": 6.3,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0)
+        assert len(details) == 0
+        # Wall unchanged
+        assert result["walls"][0]["y1"] == 6.3
+
+    def test_wall_too_far_from_beam(self):
+        """Wall > 1.0m from any beam → should NOT snap."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall 1.5m away — exceeds tolerance
+                {"x1": 0.0, "y1": 7.5, "x2": 8.5, "y2": 7.5,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0)
+        assert len(details) == 0
+        assert result["walls"][0]["y1"] == 7.5
+
+    def test_no_floor_overlap(self):
+        """Wall with no floor overlap with any beam → should NOT snap."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Same position but different floor
+                {"x1": 0.0, "y1": 6.3, "x2": 8.5, "y2": 6.3,
+                 "section": "W25", "floors": ["3F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0)
+        assert len(details) == 0
+        assert result["walls"][0]["y1"] == 6.3
+
+    def test_wall_already_aligned(self):
+        """Wall within 0.01m of beam (already aligned) → should NOT snap."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                {"x1": 0.0, "y1": 6.005, "x2": 8.5, "y2": 6.005,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0)
+        assert len(details) == 0
+
+    def test_perpendicular_wall_not_snapped(self):
+        """Y-direction wall should NOT snap to X-direction beam."""
+        elements = {
+            "beams": [
+                # Horizontal beam
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Vertical wall
+                {"x1": 4.3, "y1": 0.0, "x2": 4.3, "y2": 12.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0)
+        assert len(details) == 0
+
+    def test_wall_beam_snap_in_full_pipeline(self):
+        """Wall-beam snap integrates into validate_beams report."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 8.50}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 12.00}],
+        }
+        elements = {
+            "columns": [
+                {"grid_x": 0.0, "grid_y": 3.5, "floors": ["1F"]},
+                {"grid_x": 8.5, "grid_y": 3.5, "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall offset 0.3m from beam at y=3.5 (not on grid line)
+                # Grid snap won't fix this because nearest grid is y=0 (3.5m away)
+                # or y=12 (8.5m away) — both beyond useful snap
+                {"x1": 0.0, "y1": 3.8, "x2": 8.5, "y2": 3.8,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "beams": [
+                # Beam at y=3.5 connecting the two columns
+                {"x1": 0.0, "y1": 3.5, "x2": 8.5, "y2": 3.5,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_beams(elements, grid_data, tolerance=1.5)
+        assert "wall_beam_snaps" in report
+        assert report["wall_beam_snaps"] == 1
+        assert len(report["wall_beam_snap_details"]) == 1
+        # Wall should be aligned to beam at y=3.5
+        wall = validated["walls"][0]
+        assert wall["y1"] == 3.5
+        assert wall["y2"] == 3.5

@@ -161,6 +161,8 @@ python -m golden_scripts.tools.beam_validate \
 - WARNING = 0 → OK；> 0 → 對照 PPT 截圖確認
 - split_beams > 0 → 確認分割位置合理（中間柱/牆）
 - angle_corrections > 0 → 確認角度校正合理（近正交梁/牆被校正，斜梁不動）
+- wall_beam_snaps > 0 → 對照 PPT 截圖確認牆 snap 到正確的梁（剪力牆/連續壁 ↔ 平行大梁）
+- wall_beam_snaps = 0 且有牆 → 確認牆已在梁上（無需 snap）或圖面無牆
 
 ### Step E4: 回報結果
 
