@@ -153,13 +153,20 @@ maxTurns: 30
 
 ## 屋突複製規則 (Rooftop Replication)
 
-**觸發條件**: stories 有 R2F 以上樓層 AND READER 提供 core_grid_area
+**兩階段複製**：
 
-**複製邏輯** (以 core_grid_area 為篩選範圍):
+### Phase A: R1F 完整複製（不需 core_grid_area）
+- **觸發條件**: stories 包含 R1F
+- **邏輯**: 找到頂樓（最後一個上構層，如 14F），所有 floors 包含頂樓的構件，自動加入 R1F
+- **範圍**: ALL 柱/牆/梁/版/小梁，不分核心/非核心
+- **原因**: R1F 的配置完全等於頂樓
 
-1. **柱**: 核心區內的柱，將 R1F~最高屋突前一層 加入 floors
-2. **梁**: 兩端都在核心區內的梁，加入 R2F~PRF 到 floors
-3. **牆**: 同柱邏輯
+### Phase B: R2F~PRF 核心區複製（需 core_grid_area）
+- **觸發條件**: stories 有 R2F 以上樓層 AND READER 提供 core_grid_area
+- **邏輯**:
+  1. 柱/牆: 核心區內 → 加入 R2F~最高屋突前一層
+  2. 梁/小梁: 兩端都在核心區 → 加入 R2F~PRF
+  3. 版: 所有角點都在核心區 → 加入 R2F~PRF
 
 ## Phase 2: 執行 Golden Scripts
 

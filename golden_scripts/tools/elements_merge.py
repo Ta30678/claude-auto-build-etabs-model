@@ -30,9 +30,10 @@ def dedup_elements(elements_list, element_type):
 
     for el in elements_list:
         if element_type == "columns":
+            cx = round(el.get("grid_x", el.get("x1", 0)), 2)
+            cy = round(el.get("grid_y", el.get("y1", 0)), 2)
             key = (
-                el.get("grid_x", ""),
-                el.get("grid_y", ""),
+                cx, cy,
                 el.get("section", ""),
                 tuple(sorted(el.get("floors", []))),
             )

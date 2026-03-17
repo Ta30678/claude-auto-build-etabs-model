@@ -5,8 +5,14 @@ Phase 1 of the BTS workflow extracts major beams from structural plans via
 pptx_to_elements.py. The extracted beam endpoint coordinates may not land
 precisely on grid intersections, columns, walls, or other beams due to PPTX
 shape imprecision. This tool validates and auto-snaps floating endpoints,
-corrects near-orthogonal angle deviations, and splits beams at intermediate
-column/wall supports.
+splits beams/walls at intermediate supports (columns, walls, other beams),
+and corrects near-orthogonal angle deviations on the final geometry.
+
+Pipeline order:
+  Step 0: 3-round snap (grid + columns + walls + beams)
+  Step 1: Split beams at columns + walls + other beams
+  Step 2: Split walls at columns + beams + other walls
+  Step 3: Angle correction (2° default, runs on post-split geometry)
 
 Usage:
     python -m golden_scripts.tools.beam_validate \
@@ -21,7 +27,7 @@ Usage:
         --elements elements.json \
         --grid-data grid_data.json \
         --output elements_validated.json \
-        --angle-threshold 5.0 \
+        --angle-threshold 2.0 \
         --split-tolerance 0.15
 
     # Disable angle correction or splitting:
@@ -114,10 +120,10 @@ def build_beam_targets(elements, grid_data):
 
     # Columns -> point targets
     for col in elements.get("columns", []):
+        cx = col.get("grid_x", col.get("x1", 0))
+        cy = col.get("grid_y", col.get("y1", 0))
         element_targets.append(SnapTarget(
-            "point",
-            col["grid_x"], col["grid_y"],
-            col["grid_x"], col["grid_y"],
+            "point", cx, cy, cx, cy,
             col.get("floors", [])))
 
     # Walls -> segment targets
@@ -184,7 +190,7 @@ def _find_nearest_grid_value(coord, grid_lines):
     return best_coord, best_dist, best_label
 
 
-def correct_angles(elements, grid_data, angle_threshold_deg=5.0):
+def correct_angles(elements, grid_data, angle_threshold_deg=2.0):
     """Auto-correct near-orthogonal angle deviations for beams and walls.
 
     For each beam/wall with endpoints (x1,y1)→(x2,y2):
@@ -194,7 +200,8 @@ def correct_angles(elements, grid_data, angle_threshold_deg=5.0):
       nearest X grid line, or fallback to average.
     - Otherwise: leave unchanged (true diagonal).
 
-    Angle correction runs BEFORE snap so that orthogonal elements align cleanly.
+    Angle correction runs AFTER snap + split so that it operates on final
+    geometry without risk of moving endpoints away from correct snap targets.
 
     Parameters
     ----------
@@ -203,7 +210,7 @@ def correct_angles(elements, grid_data, angle_threshold_deg=5.0):
     grid_data : dict
         Grid data with "x" and "y" lists.
     angle_threshold_deg : float
-        Maximum angle deviation from horizontal/vertical to correct (default 5.0).
+        Maximum angle deviation from horizontal/vertical to correct (default 2.0).
 
     Returns
     -------
@@ -326,8 +333,9 @@ def segment_intersection(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2):
     return x, y, t_a, t_b
 
 
-def find_intermediate_supports(beam, columns, walls, split_tolerance=0.15):
-    """Find intermediate support points (columns/walls) along a beam.
+def find_intermediate_supports(beam, columns, walls, split_tolerance=0.15,
+                               segments=None):
+    """Find intermediate support points (columns/walls/segments) along a beam.
 
     Parameters
     ----------
@@ -339,6 +347,10 @@ def find_intermediate_supports(beam, columns, walls, split_tolerance=0.15):
         Wall list with x1,y1,x2,y2,floors.
     split_tolerance : float
         Max perpendicular distance for column projection (default 0.15m).
+    segments : list[dict] or None
+        Additional segment targets (other beams or walls) with
+        x1,y1,x2,y2,floors. Processed with the same logic as walls
+        (intersection + parallelism check + floor overlap).
 
     Returns
     -------
@@ -361,7 +373,8 @@ def find_intermediate_supports(beam, columns, walls, split_tolerance=0.15):
     for col in columns:
         if not floors_overlap(b_floors, col.get("floors", [])):
             continue
-        cx, cy = col["grid_x"], col["grid_y"]
+        cx = col.get("grid_x", col.get("x1", 0))
+        cy = col.get("grid_y", col.get("y1", 0))
         # Project column onto beam line
         t = ((cx - bx1) * bdx + (cy - by1) * bdy) / b_len_sq
         if t <= 0.02 or t >= 0.98:
@@ -372,32 +385,41 @@ def find_intermediate_supports(beam, columns, walls, split_tolerance=0.15):
         d = math.hypot(cx - proj_x, cy - proj_y)
         if d <= split_tolerance:
             supports.append((t, round(proj_x, 2), round(proj_y, 2),
-                             f"column at ({col['grid_x']},{col['grid_y']})"))
+                             f"column at ({cx},{cy})"))
+
+    # Helper: check segment-type targets (walls or other beams/walls)
+    def _check_segments(seg_list, label_prefix):
+        for seg in seg_list:
+            if not floors_overlap(b_floors, seg.get("floors", [])):
+                continue
+            sx1, sy1 = seg["x1"], seg["y1"]
+            sx2, sy2 = seg["x2"], seg["y2"]
+            # Check parallelism: skip segments parallel to beam
+            sdx = sx2 - sx1
+            sdy = sy2 - sy1
+            s_len = math.hypot(sdx, sdy)
+            if s_len < 1e-6:
+                continue
+            dot = abs((bdx * sdx + bdy * sdy) / (b_len * s_len))
+            if dot > 0.95:
+                continue  # parallel, skip
+
+            result = segment_intersection(bx1, by1, bx2, by2,
+                                          sx1, sy1, sx2, sy2)
+            if result is None:
+                continue
+            x, y, t_beam, t_seg = result
+            if t_beam <= 0.02 or t_beam >= 0.98:
+                continue  # at or beyond endpoints
+            supports.append((t_beam, round(x, 2), round(y, 2),
+                             f"{label_prefix} ({sx1},{sy1})-({sx2},{sy2})"))
 
     # Check walls
-    for wall in walls:
-        if not floors_overlap(b_floors, wall.get("floors", [])):
-            continue
-        wx1, wy1 = wall["x1"], wall["y1"]
-        wx2, wy2 = wall["x2"], wall["y2"]
-        # Check parallelism: skip walls parallel to beam
-        wdx = wx2 - wx1
-        wdy = wy2 - wy1
-        w_len = math.hypot(wdx, wdy)
-        if w_len < 1e-6:
-            continue
-        dot = abs((bdx * wdx + bdy * wdy) / (b_len * w_len))
-        if dot > 0.95:
-            continue  # parallel wall, skip
+    _check_segments(walls, "wall")
 
-        result = segment_intersection(bx1, by1, bx2, by2, wx1, wy1, wx2, wy2)
-        if result is None:
-            continue
-        x, y, t_beam, t_wall = result
-        if t_beam <= 0.02 or t_beam >= 0.98:
-            continue  # at or beyond endpoints
-        supports.append((t_beam, round(x, 2), round(y, 2),
-                         f"wall ({wx1},{wy1})-({wx2},{wy2})"))
+    # Check additional segments (other beams, other walls, etc.)
+    if segments:
+        _check_segments(segments, "segment")
 
     # Sort by t, deduplicate close points (delta_t < 0.02)
     supports.sort(key=lambda s: s[0])
@@ -459,7 +481,12 @@ def split_beam(beam, support_points):
 
 
 def split_all_beams(elements, grid_data, split_tolerance=0.15):
-    """Split all beams at intermediate column/wall supports.
+    """Split all beams at intermediate column/wall/beam supports.
+
+    Each beam is split at:
+    - Columns within split_tolerance perpendicular distance
+    - Walls crossing the beam (non-parallel, with floor overlap)
+    - Other beams crossing the beam (non-parallel, with floor overlap)
 
     Parameters
     ----------
@@ -485,7 +512,11 @@ def split_all_beams(elements, grid_data, split_tolerance=0.15):
     new_from_split = 0
 
     for i, beam in enumerate(beams):
-        supports = find_intermediate_supports(beam, columns, walls, split_tolerance)
+        # Other beams as additional segment targets (exclude self)
+        other_beams = beams[:i] + beams[i + 1:]
+        supports = find_intermediate_supports(
+            beam, columns, walls, segments=other_beams,
+            split_tolerance=split_tolerance)
         if supports:
             sub_beams = split_beam(beam, supports)
             new_beams.extend(sub_beams)
@@ -511,6 +542,71 @@ def split_all_beams(elements, grid_data, split_tolerance=0.15):
     }
 
     return elements, split_report
+
+
+def split_all_walls(elements, grid_data, split_tolerance=0.15):
+    """Split all walls at intermediate column/beam/wall supports.
+
+    Each wall is split at:
+    - Columns within split_tolerance perpendicular distance
+    - Beams crossing the wall (non-parallel, with floor overlap)
+    - Other walls crossing the wall (non-parallel, with floor overlap)
+
+    Parameters
+    ----------
+    elements : dict
+        Elements with "beams", "columns", "walls".
+    grid_data : dict
+        Grid data (unused directly, reserved for future).
+    split_tolerance : float
+        Max perpendicular distance for column projection.
+
+    Returns
+    -------
+    tuple[dict, dict]
+        (elements_with_split_walls, wall_split_report)
+    """
+    walls = elements.get("walls", [])
+    columns = elements.get("columns", [])
+    beams = elements.get("beams", [])
+
+    new_walls = []
+    split_details = []
+    split_count = 0
+    new_from_split = 0
+
+    for i, wall in enumerate(walls):
+        # Other walls as additional segment targets (exclude self)
+        other_walls = walls[:i] + walls[i + 1:]
+        # Beams are segment targets for wall splitting
+        supports = find_intermediate_supports(
+            wall, columns, other_walls, segments=beams,
+            split_tolerance=split_tolerance)
+        if supports:
+            sub_walls = split_beam(wall, supports)  # split_beam is generic
+            new_walls.extend(sub_walls)
+            split_count += 1
+            new_from_split += len(sub_walls) - 1
+            split_details.append({
+                "original_index": i,
+                "section": wall.get("section", ""),
+                "original_coords": [wall["x1"], wall["y1"], wall["x2"], wall["y2"]],
+                "split_points": [(s[1], s[2], s[3]) for s in supports],
+                "result_count": len(sub_walls),
+            })
+        else:
+            new_walls.append(wall)
+
+    elements["walls"] = new_walls
+
+    wall_split_report = {
+        "wall_split_walls": split_count,
+        "wall_new_from_split": new_from_split,
+        "wall_total_after_split": len(new_walls),
+        "wall_split_details": split_details,
+    }
+
+    return elements, wall_split_report
 
 
 # ---------------------------------------------------------------------------
@@ -617,13 +713,14 @@ def _find_nearest_any(px, py, targets):
 
 def validate_beams(elements, grid_data, tolerance=1.5,
                    split_tolerance=0.15, no_split=False,
-                   angle_threshold_deg=5.0, no_angle_correct=False):
+                   angle_threshold_deg=2.0, no_angle_correct=False):
     """Validate and auto-snap major beam endpoints.
 
     Pipeline order:
-      Step 0: Angle correction (correct near-orthogonal beams/walls)
-      Step 1-3: 3-round snap (grid + columns + walls + beams)
-      Step 4: Beam splitting (split at intermediate column/wall supports)
+      Step 0: 3-round snap (grid + columns + walls + beams)
+      Step 1: Split beams at columns + walls + other beams
+      Step 2: Split walls at columns + beams + other walls
+      Step 3: Angle correction (2° default, on post-split geometry)
 
     Parameters
     ----------
@@ -636,9 +733,9 @@ def validate_beams(elements, grid_data, tolerance=1.5,
     split_tolerance : float
         Max perpendicular distance for beam splitting (default 0.15m).
     no_split : bool
-        If True, skip beam splitting step.
+        If True, skip beam and wall splitting steps.
     angle_threshold_deg : float
-        Max angle deviation to correct (default 5.0 degrees).
+        Max angle deviation to correct (default 2.0 degrees).
     no_angle_correct : bool
         If True, skip angle correction step.
 
@@ -649,12 +746,6 @@ def validate_beams(elements, grid_data, tolerance=1.5,
     """
     # Deep copy to avoid mutating the original
     elements = json.loads(json.dumps(elements))
-
-    # --- Step 0: Angle correction ---
-    angle_corrections = []
-    if not no_angle_correct:
-        elements, angle_corrections = correct_angles(
-            elements, grid_data, angle_threshold_deg)
 
     beams = elements.get("beams", [])
     n = len(beams)
@@ -672,15 +763,21 @@ def validate_beams(elements, grid_data, tolerance=1.5,
             "avg_snap_distance": 0,
             "corrections": [],
             "warnings": [],
-            "angle_corrections": angle_corrections,
-            "angle_corrected_beams": sum(1 for a in angle_corrections if a["element_type"] == "beam"),
-            "angle_corrected_walls": sum(1 for a in angle_corrections if a["element_type"] == "wall"),
+            "angle_corrections": [],
+            "angle_corrected_beams": 0,
+            "angle_corrected_walls": 0,
             "split_beams": 0,
             "new_beams_from_split": 0,
             "total_beams_after_split": 0,
             "split_details": [],
+            "wall_split_walls": 0,
+            "wall_new_from_split": 0,
+            "wall_total_after_split": len(elements.get("walls", [])),
+            "wall_split_details": [],
         }
         return elements, report
+
+    # --- Step 0: 3-round snap ---
 
     # Build targets
     grid_targets, element_targets = build_beam_targets(elements, grid_data)
@@ -832,15 +929,31 @@ def validate_beams(elements, grid_data, tolerance=1.5,
                 "message": "Zero-length beam after snap — both endpoints at same location",
             })
 
-    # --- Step 4: Beam splitting ---
+    # --- Step 1: Beam splitting (beams at columns + walls + other beams) ---
     split_report = {
         "split_beams": 0,
         "new_beams_from_split": 0,
-        "total_beams_after_split": n,
+        "total_beams_after_split": len(elements.get("beams", [])),
         "split_details": [],
     }
     if not no_split:
         elements, split_report = split_all_beams(elements, grid_data, split_tolerance)
+
+    # --- Step 2: Wall splitting (walls at columns + beams + other walls) ---
+    wall_split_report = {
+        "wall_split_walls": 0,
+        "wall_new_from_split": 0,
+        "wall_total_after_split": len(elements.get("walls", [])),
+        "wall_split_details": [],
+    }
+    if not no_split:
+        elements, wall_split_report = split_all_walls(elements, grid_data, split_tolerance)
+
+    # --- Step 3: Angle correction (on post-split geometry) ---
+    angle_corrections = []
+    if not no_angle_correct:
+        elements, angle_corrections = correct_angles(
+            elements, grid_data, angle_threshold_deg)
 
     # --- Build report ---
     snap_distances = [c["snap_distance"] for c in corrections]
@@ -857,6 +970,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         "angle_corrected_beams": sum(1 for a in angle_corrections if a["element_type"] == "beam"),
         "angle_corrected_walls": sum(1 for a in angle_corrections if a["element_type"] == "wall"),
         **split_report,
+        **wall_split_report,
     }
 
     return elements, report
@@ -877,8 +991,8 @@ def main():
                         help="Path for validated elements output")
     parser.add_argument("--tolerance", type=float, default=1.5,
                         help="Snap tolerance in meters (default: 1.5)")
-    parser.add_argument("--angle-threshold", type=float, default=5.0,
-                        help="Angle correction threshold in degrees (default: 5.0)")
+    parser.add_argument("--angle-threshold", type=float, default=2.0,
+                        help="Angle correction threshold in degrees (default: 2.0)")
     parser.add_argument("--no-angle-correct", action="store_true",
                         help="Skip angle correction step")
     parser.add_argument("--split-tolerance", type=float, default=0.15,
@@ -955,6 +1069,10 @@ def main():
         print(f"  Split beams: {report['split_beams']} → "
               f"{report['new_beams_from_split']} new sub-beams "
               f"(total after split: {report['total_beams_after_split']})")
+    if report.get("wall_split_walls", 0) > 0:
+        print(f"  Split walls: {report['wall_split_walls']} → "
+              f"{report['wall_new_from_split']} new sub-walls "
+              f"(total after split: {report['wall_total_after_split']})")
 
     if report["warnings"]:
         print(f"\nWARNINGS ({len(report['warnings'])}):")
@@ -981,10 +1099,16 @@ def main():
                       f"{a['angle_deg']}° → {a['correction_axis']} "
                       f"[{a['target_grid_label']}] Δ={a['displacement']}m")
         if report.get("split_details"):
-            print(f"\nSplit preview ({len(report['split_details'])}):")
+            print(f"\nBeam split preview ({len(report['split_details'])}):")
             for s in report["split_details"]:
                 pts = ", ".join(f"({p[0]},{p[1]})" for p in s["split_points"])
                 print(f"  beam[{s['original_index']}] {s['section']}: "
+                      f"→ {s['result_count']} segments at [{pts}]")
+        if report.get("wall_split_details"):
+            print(f"\nWall split preview ({len(report['wall_split_details'])}):")
+            for s in report["wall_split_details"]:
+                pts = ", ".join(f"({p[0]},{p[1]})" for p in s["split_points"])
+                print(f"  wall[{s['original_index']}] {s['section']}: "
                       f"→ {s['result_count']} segments at [{pts}]")
     else:
         with open(args.output, "w", encoding="utf-8") as f:

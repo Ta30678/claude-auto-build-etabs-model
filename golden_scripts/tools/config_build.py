@@ -24,7 +24,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from golden_scripts.tools.config_merge import validate_config
-from golden_scripts.constants import is_rooftop_story
+from golden_scripts.constants import is_rooftop_story, is_substructure_story, is_superstructure_story
 
 
 # ── Geometry Utilities ─────────────────────────────────────────
@@ -94,18 +94,83 @@ def is_non_rectangular(polygon):
 
 # ── Element Stripping ──────────────────────────────────────────
 
-def strip_columns(columns):
-    """Remove page_num from columns."""
+def snap_columns_to_grid(columns, grid_info, tolerance=1.5):
+    """Snap columns to nearest grid intersection and remove off-grid false positives.
+
+    Parameters
+    ----------
+    columns : list[dict]
+        Columns with grid_x/x1 and grid_y/y1.
+    grid_info : dict
+        Grid info with grids.x and grids.y.
+    tolerance : float
+        Max snap distance (m). Columns farther than this are dropped.
+
+    Returns
+    -------
+    (snapped_columns, dropped_count)
+    """
+    x_coords = [g["coordinate"] for g in grid_info.get("grids", {}).get("x", [])]
+    y_coords = [g["coordinate"] for g in grid_info.get("grids", {}).get("y", [])]
+    if not x_coords or not y_coords:
+        return columns, 0
+
+    # Build grid intersection set
+    intersections = [(x, y) for x in x_coords for y in y_coords]
+
+    result = []
+    dropped = 0
+    seen = set()
+
+    for col in columns:
+        cx = col.get("grid_x", col.get("x1", 0))
+        cy = col.get("grid_y", col.get("y1", 0))
+
+        # Find nearest grid intersection
+        best_dist = float("inf")
+        best_x, best_y = cx, cy
+        for gx, gy in intersections:
+            d = math.hypot(cx - gx, cy - gy)
+            if d < best_dist:
+                best_dist = d
+                best_x, best_y = gx, gy
+
+        if best_dist > tolerance:
+            dropped += 1
+            continue
+
+        # Dedup: same position + section + floors
+        key = (best_x, best_y, col.get("section", ""),
+               tuple(sorted(col.get("floors", []))))
+        if key in seen:
+            continue
+        seen.add(key)
+
+        result.append({
+            "grid_x": best_x,
+            "grid_y": best_y,
+            "section": col.get("section", ""),
+            "floors": list(col.get("floors", [])),
+        })
+
+    return result, dropped
+
+
+def strip_columns(columns, grid_info=None):
+    """Remove page_num from columns. Accept grid_x/grid_y or x1/y1.
+    If grid_info provided, snap to nearest grid intersection."""
+    if grid_info:
+        return snap_columns_to_grid(columns, grid_info)
     result = []
     for col in columns:
         out = {
-            "grid_x": col["grid_x"],
-            "grid_y": col["grid_y"],
+            "grid_x": col.get("grid_x", col.get("x1", 0)),
+            "grid_y": col.get("grid_y", col.get("y1", 0)),
             "section": col.get("section", ""),
             "floors": list(col.get("floors", [])),
         }
         result.append(out)
-    return result
+    return result, 0
 
 
 def strip_beams(beams):
@@ -154,10 +219,29 @@ def strip_small_beams(small_beams):
 
 # ── Building Outline Filtering ─────────────────────────────────
 
-def filter_by_outline(columns, beams, walls, outline, tolerance=0.01):
-    """Filter elements outside building_outline polygon.
+def _all_substructure(floors):
+    """Check if ALL floors in the list are substructure (B*F, 1F, BASE)."""
+    return bool(floors) and all(is_substructure_story(f) for f in floors)
 
-    Only activates for non-rectangular outlines.
+
+def _choose_outline(element, building_outline, sub_outline):
+    """Pick the right outline for an element based on its floors.
+
+    Substructure-only elements use substructure_outline (rectangular → skip).
+    Mixed / superstructure elements use building_outline (may be L-shaped).
+    """
+    floors = element.get("floors", [])
+    if _all_substructure(floors) and sub_outline:
+        return sub_outline
+    return building_outline
+
+
+def filter_by_outline(columns, beams, walls, outline,
+                      substructure_outline=None, tolerance=0.01):
+    """Filter elements outside the appropriate outline polygon.
+
+    Uses building_outline for superstructure elements and
+    substructure_outline for substructure-only elements.
     - Columns: point must be inside polygon.
     - Beams/walls: both endpoints outside → remove.
 
@@ -169,7 +253,11 @@ def filter_by_outline(columns, beams, walls, outline, tolerance=0.01):
 
     filtered_cols = []
     for i, col in enumerate(columns):
-        if point_in_or_near_polygon(col["grid_x"], col["grid_y"], outline, tolerance):
+        ol = _choose_outline(col, outline, substructure_outline)
+        if not is_non_rectangular(ol):
+            filtered_cols.append(col)
+            continue
+        if point_in_or_near_polygon(col["grid_x"], col["grid_y"], ol, tolerance):
             filtered_cols.append(col)
         else:
             warnings.append(
@@ -178,8 +266,12 @@ def filter_by_outline(columns, beams, walls, outline, tolerance=0.01):
 
     filtered_beams = []
     for i, beam in enumerate(beams):
-        p1_in = point_in_or_near_polygon(beam["x1"], beam["y1"], outline, tolerance)
-        p2_in = point_in_or_near_polygon(beam["x2"], beam["y2"], outline, tolerance)
+        ol = _choose_outline(beam, outline, substructure_outline)
+        if not is_non_rectangular(ol):
+            filtered_beams.append(beam)
+            continue
+        p1_in = point_in_or_near_polygon(beam["x1"], beam["y1"], ol, tolerance)
+        p2_in = point_in_or_near_polygon(beam["x2"], beam["y2"], ol, tolerance)
         if p1_in or p2_in:
             filtered_beams.append(beam)
         else:
@@ -189,8 +281,12 @@ def filter_by_outline(columns, beams, walls, outline, tolerance=0.01):
 
     filtered_walls = []
     for i, wall in enumerate(walls):
-        p1_in = point_in_or_near_polygon(wall["x1"], wall["y1"], outline, tolerance)
-        p2_in = point_in_or_near_polygon(wall["x2"], wall["y2"], outline, tolerance)
+        ol = _choose_outline(wall, outline, substructure_outline)
+        if not is_non_rectangular(ol):
+            filtered_walls.append(wall)
+            continue
+        p1_in = point_in_or_near_polygon(wall["x1"], wall["y1"], ol, tolerance)
+        p2_in = point_in_or_near_polygon(wall["x2"], wall["y2"], ol, tolerance)
         if p1_in or p2_in:
             filtered_walls.append(wall)
         else:
@@ -212,6 +308,13 @@ def has_r2f_or_above(stories):
     return False
 
 
+def _find_top_floor(stories):
+    """Find the highest superstructure story (e.g., 14F)."""
+    super_stories = [s["name"] for s in stories
+                     if is_superstructure_story(s["name"])]
+    return super_stories[-1] if super_stories else None
+
+
 def _in_core(x, y, core_grid_area, tolerance=0.01):
     """Check if point is within core_grid_area rectangle."""
     x_range = core_grid_area["x_range"]
@@ -220,14 +323,17 @@ def _in_core(x, y, core_grid_area, tolerance=0.01):
             y_range[0] - tolerance <= y <= y_range[1] + tolerance)
 
 
-def replicate_rooftop(columns, beams, walls, stories, core_grid_area):
-    """Add rooftop floors to elements within core grid area.
+def replicate_rooftop(columns, beams, walls, stories, core_grid_area,
+                      slabs=None):
+    """Add rooftop floors to elements. Two phases:
 
-    Trigger: core_grid_area exists AND stories have R2F+.
+    Phase A — R1F full copy (no core_grid_area needed):
+      All elements with top_floor in floors → add R1F.
+      R1F config = identical to top floor (ALL columns/walls/beams/slabs).
 
-    Logic:
-    - Columns/walls in core: add R1F ~ second-to-last rooftop floor
-    - Beams with both endpoints in core: add second rooftop ~ last rooftop floor
+    Phase B — R2F~PRF core copy (needs core_grid_area):
+      Columns/walls in core → add R2F ~ second-to-last rooftop (not PRF).
+      Beams/slabs in core → add R2F ~ last rooftop (including PRF).
 
     Modifies elements in-place.
     """
@@ -235,13 +341,38 @@ def replicate_rooftop(columns, beams, walls, stories, core_grid_area):
     rooftop = [n for n in all_names if is_rooftop_story(n)]
     # Exclude RF (main building roof) — only R1F+ and PRF are replicable
     replicable = [n for n in rooftop if n != "RF"]
-    if len(replicable) < 2:
+    if not replicable:
         return
 
-    # Column/wall floors: R1F ~ second-to-last (e.g., R1F, R2F, R3F — not PRF)
-    col_wall_floors = replicable[:-1]
-    # Beam floors: R2F ~ last (e.g., R2F, R3F, PRF — not R1F)
-    beam_floors = replicable[1:]
+    # ── Phase A: R1F full copy (no core check) ──
+    top_floor = _find_top_floor(stories)
+    if top_floor and "R1F" in replicable:
+        for col in columns:
+            if top_floor in col["floors"] and "R1F" not in col["floors"]:
+                col["floors"].append("R1F")
+
+        for wall in walls:
+            if top_floor in wall["floors"] and "R1F" not in wall["floors"]:
+                wall["floors"].append("R1F")
+
+        for beam in beams:
+            if top_floor in beam["floors"] and "R1F" not in beam["floors"]:
+                beam["floors"].append("R1F")
+
+        if slabs:
+            for slab in slabs:
+                if top_floor in slab["floors"] and "R1F" not in slab["floors"]:
+                    slab["floors"].append("R1F")
+
+    # ── Phase B: R2F~PRF core copy (needs core_grid_area) ──
+    r2f_plus = [n for n in replicable if n != "R1F"]
+    if not r2f_plus or not core_grid_area:
+        return
+
+    # Column/wall floors: R2F ~ second-to-last (e.g., R2F, R3F — not PRF)
+    col_wall_floors = r2f_plus[:-1] if len(r2f_plus) > 1 else []
+    # Beam/slab floors: R2F ~ last (e.g., R2F, R3F, PRF)
+    beam_floors = r2f_plus
 
     for col in columns:
         if _in_core(col["grid_x"], col["grid_y"], core_grid_area):
@@ -266,23 +397,49 @@ def replicate_rooftop(columns, beams, walls, stories, core_grid_area):
                 if f not in existing:
                     beam["floors"].append(f)
 
+    if slabs:
+        for slab in slabs:
+            corners = slab.get("corners", [])
+            if corners and all(
+                    _in_core(c[0], c[1], core_grid_area) for c in corners):
+                existing = set(slab["floors"])
+                for f in beam_floors:
+                    if f not in existing:
+                        slab["floors"].append(f)
 
-def replicate_rooftop_small_beams(small_beams, stories, core_grid_area):
-    """Add rooftop floors to small beams within core grid area.
 
-    Same logic as beams: add second rooftop ~ last rooftop floor.
+def replicate_rooftop_sb_slabs(small_beams, slabs, stories, core_grid_area):
+    """Add rooftop floors to small beams and slabs. Two phases:
+
+    Phase A — R1F full copy: SB/Slab with top_floor → add R1F (no core check).
+    Phase B — R2F~PRF core copy: SB/Slab in core → add R2F~PRF.
+
     Exported for use by sb_patch_build.py.
     """
-    if not core_grid_area or not has_r2f_or_above(stories):
-        return
-
     all_names = [s["name"] for s in stories]
     rooftop = [n for n in all_names if is_rooftop_story(n)]
     replicable = [n for n in rooftop if n != "RF"]
-    if len(replicable) < 2:
+    if not replicable:
         return
 
-    beam_floors = replicable[1:]
+    # ── Phase A: R1F full copy (no core check) ──
+    top_floor = _find_top_floor(stories)
+    if top_floor and "R1F" in replicable:
+        for sb in small_beams:
+            if top_floor in sb["floors"] and "R1F" not in sb["floors"]:
+                sb["floors"].append("R1F")
+
+        if slabs:
+            for slab in slabs:
+                if top_floor in slab["floors"] and "R1F" not in slab["floors"]:
+                    slab["floors"].append("R1F")
+
+    # ── Phase B: R2F~PRF core copy (needs core_grid_area) ──
+    r2f_plus = [n for n in replicable if n != "R1F"]
+    if not r2f_plus or not core_grid_area:
+        return
+
+    beam_floors = r2f_plus
 
     for sb in small_beams:
         if (_in_core(sb["x1"], sb["y1"], core_grid_area) and
@@ -291,6 +448,16 @@ def replicate_rooftop_small_beams(small_beams, stories, core_grid_area):
             for f in beam_floors:
                 if f not in existing:
                     sb["floors"].append(f)
+
+    if slabs:
+        for slab in slabs:
+            corners = slab.get("corners", [])
+            if corners and all(
+                    _in_core(c[0], c[1], core_grid_area) for c in corners):
+                existing = set(slab["floors"])
+                for f in beam_floors:
+                    if f not in existing:
+                        slab["floors"].append(f)
 
 
 # ── Config Building ────────────────────────────────────────────
@@ -323,7 +490,9 @@ def build_config(elements, grid_info, project_name, save_path):
             config[key] = grid_info[key]
 
     # From elements — strip auxiliary fields
-    columns = strip_columns(elements.get("columns", []))
+    columns, col_dropped = strip_columns(elements.get("columns", []), grid_info)
+    if col_dropped:
+        warnings.append(f"Dropped {col_dropped} columns too far from grid intersections")
     beams = strip_beams(elements.get("beams", []))
     walls = strip_walls(elements.get("walls", []))
 
@@ -354,15 +523,20 @@ def build_config(elements, grid_info, project_name, save_path):
 
     # Building outline filtering (non-rectangular only)
     outline = grid_info.get("building_outline")
+    sub_outline = grid_info.get("substructure_outline")
     if outline and is_non_rectangular(outline):
         columns, beams, walls, outline_warnings = filter_by_outline(
-            columns, beams, walls, outline)
+            columns, beams, walls, outline,
+            substructure_outline=sub_outline)
         warnings.extend(outline_warnings)
 
     # Rooftop replication
     core_grid_area = grid_info.get("core_grid_area")
-    if core_grid_area and has_r2f_or_above(config["stories"]):
-        replicate_rooftop(columns, beams, walls, config["stories"], core_grid_area)
+    rooftop_names = [s["name"] for s in config["stories"]
+                     if is_rooftop_story(s["name"])]
+    if rooftop_names:
+        replicate_rooftop(columns, beams, walls, config["stories"],
+                          core_grid_area)
 
     config["columns"] = columns
     config["beams"] = beams

@@ -18,6 +18,7 @@ from golden_scripts.tools.beam_validate import (
     find_intermediate_supports,
     split_beam,
     split_all_beams,
+    split_all_walls,
 )
 
 
@@ -275,7 +276,11 @@ class TestSnapToBeam:
         assert abs(beam_b["y2"] - 0.0) < 0.01
 
     def test_chain_snap(self, grid_3x3):
-        """Beam A -> column, Beam B -> Beam A, Beam C -> Beam B: multi-round chain."""
+        """Beam A -> column, Beam B -> grid, Beam C -> Beam B: multi-round chain.
+
+        After snap + split, beams may be split at crossing points. We verify
+        that the snapped coordinates exist somewhere in the output beams.
+        """
         elements = {
             "columns": [
                 {"grid_x": 0.0, "grid_y": 0.0, "floors": ["1F"]},
@@ -287,8 +292,7 @@ class TestSnapToBeam:
                 {"x1": 0.02, "y1": 0.01,
                  "x2": 8.48, "y2": 0.03,
                  "section": "B50X80", "floors": ["1F"]},
-                # Beam B: from grid B/1 to mid-span of A, roughly at (4.25, 0.05)
-                # Actually let's make B span grid B/1 to C/1
+                # Beam B: from grid B/1 to C/1
                 {"x1": 8.52, "y1": 0.02,
                  "x2": 16.98, "y2": 0.03,
                  "section": "B50X80", "floors": ["1F"]},
@@ -299,17 +303,18 @@ class TestSnapToBeam:
             ],
         }
         validated, report = validate_beams(elements, grid_3x3, tolerance=1.5)
-        # Beam A should snap to (0.0, 0.0) and (8.50, 0.0)
-        a = validated["beams"][0]
-        assert a["x1"] == 0.0 and a["y1"] == 0.0
-        assert a["x2"] == 8.50 and a["y2"] == 0.0
-        # Beam B should snap to (8.50, 0.0) and (17.00, 0.0)
-        b = validated["beams"][1]
-        assert b["x1"] == 8.50 and b["y1"] == 0.0
-        assert b["x2"] == 17.00 and b["y2"] == 0.0
-        # Beam C end (12.75, 0.08) should snap to Beam B segment at y=0.0
-        c = validated["beams"][2]
-        assert abs(c["y2"] - 0.0) < 0.01
+        all_beams = validated["beams"]
+        # Verify key snapped coordinates exist in the output
+        # Beam A endpoints: (0,0) and (8.5,0)
+        b50_beams = [b for b in all_beams if b["section"] == "B50X80"]
+        start_at_origin = any(b["x1"] == 0.0 and b["y1"] == 0.0 for b in b50_beams)
+        end_at_c1 = any(b["x2"] == 17.0 and b["y2"] == 0.0 for b in b50_beams)
+        assert start_at_origin, "Should have a B50X80 beam starting at (0,0)"
+        assert end_at_c1, "Should have a B50X80 beam ending at (17,0)"
+        # Beam C end should snap near y=0
+        b30_beams = [b for b in all_beams if b["section"] == "B30X50"]
+        assert any(abs(b["y2"] - 0.0) < 0.01 or abs(b["y1"] - 0.0) < 0.01
+                    for b in b30_beams), "Beam C should have an endpoint at y≈0"
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +369,7 @@ class TestFloorOverlap:
 class TestReport:
 
     def test_report_structure(self, simple_grid_data):
-        """Verify report has all required keys including angle + split."""
+        """Verify report has all required keys including angle + split + wall_split."""
         elements = {
             "columns": [],
             "walls": [],
@@ -381,6 +386,8 @@ class TestReport:
             "angle_corrections", "angle_corrected_beams", "angle_corrected_walls",
             "split_beams", "new_beams_from_split", "total_beams_after_split",
             "split_details",
+            "wall_split_walls", "wall_new_from_split", "wall_total_after_split",
+            "wall_split_details",
         ]
         for key in required_keys:
             assert key in report, f"Missing key: {key}"
@@ -514,7 +521,7 @@ class TestFindNearestGridValue:
 class TestCorrectAngles:
 
     def test_near_horizontal_corrects_to_grid(self):
-        """Beam tilted ~2° from horizontal aligns Y to nearest grid line."""
+        """Beam tilted ~1° from horizontal aligns Y to nearest grid line."""
         grid_data = {
             "x": [{"label": "A", "coordinate": 0.0},
                    {"label": "B", "coordinate": 8.50}],
@@ -523,12 +530,13 @@ class TestCorrectAngles:
         }
         elements = {
             "beams": [
-                {"x1": 0.0, "y1": 5.88, "x2": 8.5, "y2": 6.12,
+                # ~1° tilt: dy/dx = 0.15/8.5 ≈ 0.018 → ~1.0°
+                {"x1": 0.0, "y1": 5.92, "x2": 8.5, "y2": 6.07,
                  "section": "B50X80", "floors": ["1F"]},
             ],
             "walls": [], "columns": [],
         }
-        elements, angle_report = correct_angles(elements, grid_data, 5.0)
+        elements, angle_report = correct_angles(elements, grid_data)
         beam = elements["beams"][0]
         # Both Y should be snapped to grid "2" at 6.00
         assert beam["y1"] == 6.0
@@ -538,7 +546,7 @@ class TestCorrectAngles:
         assert angle_report[0]["target_grid_label"] == "2"
 
     def test_near_vertical_corrects_to_grid(self):
-        """Beam tilted ~3° from vertical aligns X to nearest grid line."""
+        """Beam tilted ~1.5° from vertical aligns X to nearest grid line."""
         grid_data = {
             "x": [{"label": "A", "coordinate": 0.0},
                    {"label": "B", "coordinate": 8.50}],
@@ -547,12 +555,13 @@ class TestCorrectAngles:
         }
         elements = {
             "beams": [
-                {"x1": 8.38, "y1": 0.0, "x2": 8.62, "y2": 6.0,
+                # ~1.5° tilt from vertical: dx/dy = 0.16/6.0 ≈ 0.027 → ~1.5°
+                {"x1": 8.42, "y1": 0.0, "x2": 8.58, "y2": 6.0,
                  "section": "B50X80", "floors": ["1F"]},
             ],
             "walls": [], "columns": [],
         }
-        elements, angle_report = correct_angles(elements, grid_data, 5.0)
+        elements, angle_report = correct_angles(elements, grid_data)
         beam = elements["beams"][0]
         assert beam["x1"] == 8.5
         assert beam["x2"] == 8.5
@@ -571,11 +580,30 @@ class TestCorrectAngles:
             ],
             "walls": [], "columns": [],
         }
-        elements, angle_report = correct_angles(elements, grid_data, 5.0)
+        elements, angle_report = correct_angles(elements, grid_data)
         assert len(angle_report) == 0
         beam = elements["beams"][0]
         assert beam["x2"] == 8.0
         assert beam["y2"] == 4.62
+
+    def test_3deg_not_corrected_with_default_threshold(self):
+        """Beam at ~3° is NOT corrected with default 2° threshold."""
+        import math
+        dy = 10.0 * math.tan(math.radians(3.0))
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0}],
+            "y": [{"label": "1", "coordinate": 0.0}],
+        }
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 10.0, "y2": dy,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [], "columns": [],
+        }
+        elements, angle_report = correct_angles(elements, grid_data)
+        # 3° > 2° default threshold → not corrected
+        assert len(angle_report) == 0
 
     def test_zero_length_skipped(self):
         """Zero-length beam is skipped."""
@@ -587,7 +615,7 @@ class TestCorrectAngles:
             ],
             "walls": [], "columns": [],
         }
-        elements, angle_report = correct_angles(elements, grid_data, 5.0)
+        elements, angle_report = correct_angles(elements, grid_data)
         assert len(angle_report) == 0
 
     def test_wall_also_corrected(self):
@@ -600,12 +628,13 @@ class TestCorrectAngles:
         elements = {
             "beams": [],
             "walls": [
-                {"x1": 0.12, "y1": 0.0, "x2": -0.08, "y2": 10.0,
+                # ~0.7° tilt: dx/dy = 0.12/10.0 → ~0.7°
+                {"x1": 0.06, "y1": 0.0, "x2": -0.06, "y2": 10.0,
                  "section": "W30", "floors": ["1F"]},
             ],
             "columns": [],
         }
-        elements, angle_report = correct_angles(elements, grid_data, 5.0)
+        elements, angle_report = correct_angles(elements, grid_data)
         wall = elements["walls"][0]
         assert wall["x1"] == 0.0
         assert wall["x2"] == 0.0
@@ -619,21 +648,22 @@ class TestCorrectAngles:
         }
         elements = {
             "beams": [
-                {"x1": 0.0, "y1": 5.10, "x2": 8.0, "y2": 4.90,
+                # ~0.7° tilt
+                {"x1": 0.0, "y1": 5.05, "x2": 8.0, "y2": 4.95,
                  "section": "B50X80", "floors": ["1F"]},
             ],
             "walls": [], "columns": [],
         }
-        elements, angle_report = correct_angles(elements, grid_data, 5.0)
+        elements, angle_report = correct_angles(elements, grid_data)
         beam = elements["beams"][0]
         assert beam["y1"] == beam["y2"] == 5.0
         assert angle_report[0]["target_grid_label"] == "average"
 
     def test_threshold_boundary(self):
-        """Angle exactly at threshold (5°) should be corrected."""
+        """Angle exactly at threshold (2°) should be corrected."""
         import math
-        # 5° = tan(5°) ≈ 0.0875, for length 10m → dy ≈ 0.875
-        dy = 10.0 * math.tan(math.radians(5.0))
+        # 2° = tan(2°) ≈ 0.0349, for length 10m → dy ≈ 0.349
+        dy = 10.0 * math.tan(math.radians(2.0))
         grid_data = {
             "x": [{"label": "A", "coordinate": 0.0}],
             "y": [{"label": "1", "coordinate": 0.0}],
@@ -645,9 +675,30 @@ class TestCorrectAngles:
             ],
             "walls": [], "columns": [],
         }
-        elements, angle_report = correct_angles(elements, grid_data, 5.0)
-        # At exactly 5° threshold, should be corrected (≤ threshold)
+        elements, angle_report = correct_angles(elements, grid_data)
+        # At exactly 2° threshold, should be corrected (≤ threshold)
         assert len(angle_report) == 1
+
+    def test_explicit_5deg_threshold(self):
+        """Angle correction with explicit 5° threshold still works."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 8.50}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 6.00}],
+        }
+        elements = {
+            "beams": [
+                # ~1.6° tilt
+                {"x1": 0.0, "y1": 5.88, "x2": 8.5, "y2": 6.12,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [], "columns": [],
+        }
+        elements, angle_report = correct_angles(elements, grid_data, 5.0)
+        beam = elements["beams"][0]
+        assert beam["y1"] == 6.0
+        assert beam["y2"] == 6.0
 
 
 # ---------------------------------------------------------------------------
@@ -871,8 +922,8 @@ class TestSplitAllBeams:
 
 class TestSnapAndSplit:
 
-    def test_angle_snap_split_integration(self, grid_3x3):
-        """Full pipeline: angle correction + snap + split."""
+    def test_snap_split_angle_integration(self, grid_3x3):
+        """Full pipeline: snap → split → angle correction (new order)."""
         elements = {
             "columns": [
                 {"grid_x": 0.0, "grid_y": 0.0, "floors": ["1F"]},
@@ -881,18 +932,17 @@ class TestSnapAndSplit:
             ],
             "walls": [],
             "beams": [
-                # Beam from A/1 to C/1 with slight Y deviation (2°)
-                # → angle correction aligns Y → snap → split at B/1
+                # Beam from A/1 to C/1 with slight Y deviation (~0.7°)
+                # → snap to grid → split at B/1 → angle correction aligns Y
                 {"x1": 0.02, "y1": 0.12, "x2": 16.98, "y2": -0.08,
                  "section": "B50X80", "floors": ["1F"]},
             ],
         }
         validated, report = validate_beams(elements, grid_3x3, tolerance=1.5)
-        # After angle correction + snap + split at column B
-        assert report["angle_corrected_beams"] >= 1
+        # After snap + split at column B + angle correction
         assert report["split_beams"] == 1
         assert len(validated["beams"]) == 2
-        # Both sub-beams should have Y=0
+        # Both sub-beams should have Y=0 (snap handles it, angle correction confirms)
         for b in validated["beams"]:
             assert b["y1"] == 0.0
             assert b["y2"] == 0.0
@@ -996,3 +1046,238 @@ class TestNormalizeGridData:
         beam = validated["beams"][0]
         assert beam["x2"] == 8.50
         assert beam["y2"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# TestBeamBeamSplit
+# ---------------------------------------------------------------------------
+
+class TestBeamBeamSplit:
+    """Tests for beam-beam cross splitting (new feature)."""
+
+    def test_two_beams_crossing(self):
+        """Two beams crossing at (5,5) → each split into 2."""
+        elements = {
+            "beams": [
+                # Horizontal beam
+                {"x1": 0.0, "y1": 5.0, "x2": 10.0, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                # Vertical beam
+                {"x1": 5.0, "y1": 0.0, "x2": 5.0, "y2": 10.0,
+                 "section": "B40X60", "floors": ["1F"]},
+            ],
+            "columns": [],
+            "walls": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_beams(elements, grid_data, 0.15)
+        assert report["split_beams"] == 2
+        assert len(elements["beams"]) == 4
+
+    def test_beam_beam_no_floor_overlap(self):
+        """Beams on different floors don't split each other."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 5.0, "x2": 10.0, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                {"x1": 5.0, "y1": 0.0, "x2": 5.0, "y2": 10.0,
+                 "section": "B40X60", "floors": ["3F"]},
+            ],
+            "columns": [],
+            "walls": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_beams(elements, grid_data, 0.15)
+        assert report["split_beams"] == 0
+        assert len(elements["beams"]) == 2
+
+    def test_parallel_beams_no_split(self):
+        """Parallel beams don't split each other."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 10.0, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                {"x1": 0.0, "y1": 3.0, "x2": 10.0, "y2": 3.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "columns": [],
+            "walls": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_beams(elements, grid_data, 0.15)
+        assert report["split_beams"] == 0
+
+    def test_beam_at_endpoint_no_split(self):
+        """Beam ending at another beam's endpoint (T-junction at end) → no split."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 10.0, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                # Touches the first beam's start
+                {"x1": 0.0, "y1": -5.0, "x2": 0.0, "y2": 0.0,
+                 "section": "B40X60", "floors": ["1F"]},
+            ],
+            "columns": [],
+            "walls": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_beams(elements, grid_data, 0.15)
+        # The second beam meets the first at its endpoint (t=0.0), should not split
+        assert report["split_beams"] == 0
+
+
+# ---------------------------------------------------------------------------
+# TestSplitAllWalls
+# ---------------------------------------------------------------------------
+
+class TestSplitAllWalls:
+    """Tests for wall splitting at beams/columns/other walls."""
+
+    def test_wall_split_at_beam_crossing(self):
+        """Wall crossed by a beam → wall split into 2."""
+        elements = {
+            "walls": [
+                # Vertical wall
+                {"x1": 5.0, "y1": 0.0, "x2": 5.0, "y2": 10.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "beams": [
+                # Horizontal beam crossing the wall at y=5
+                {"x1": 0.0, "y1": 5.0, "x2": 10.0, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_walls(elements, grid_data, 0.15)
+        assert report["wall_split_walls"] == 1
+        assert len(elements["walls"]) == 2
+        # Sub-walls should split at y=5
+        coords_y = sorted([elements["walls"][0]["y2"], elements["walls"][1]["y1"]])
+        assert abs(coords_y[0] - 5.0) < 0.01 or abs(coords_y[1] - 5.0) < 0.01
+
+    def test_wall_split_at_column(self):
+        """Wall with column on its midspan → wall split into 2."""
+        elements = {
+            "walls": [
+                {"x1": 0.0, "y1": 5.0, "x2": 10.0, "y2": 5.0,
+                 "section": "W30", "floors": ["1F"]},
+            ],
+            "beams": [],
+            "columns": [
+                {"grid_x": 5.0, "grid_y": 5.0, "floors": ["1F"]},
+            ],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_walls(elements, grid_data, 0.15)
+        assert report["wall_split_walls"] == 1
+        assert len(elements["walls"]) == 2
+
+    def test_wall_split_at_other_wall(self):
+        """Two perpendicular walls crossing → each split."""
+        elements = {
+            "walls": [
+                {"x1": 0.0, "y1": 5.0, "x2": 10.0, "y2": 5.0,
+                 "section": "W30", "floors": ["1F"]},
+                {"x1": 5.0, "y1": 0.0, "x2": 5.0, "y2": 10.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "beams": [],
+            "columns": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_walls(elements, grid_data, 0.15)
+        assert report["wall_split_walls"] == 2
+        assert len(elements["walls"]) == 4
+
+    def test_wall_no_split_no_floor_overlap(self):
+        """Wall and beam on different floors → no split."""
+        elements = {
+            "walls": [
+                {"x1": 5.0, "y1": 0.0, "x2": 5.0, "y2": 10.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "beams": [
+                {"x1": 0.0, "y1": 5.0, "x2": 10.0, "y2": 5.0,
+                 "section": "B50X80", "floors": ["3F"]},
+            ],
+            "columns": [],
+        }
+        grid_data = {"x": [], "y": []}
+        elements, report = split_all_walls(elements, grid_data, 0.15)
+        assert report["wall_split_walls"] == 0
+        assert len(elements["walls"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# TestNewPipelineOrder
+# ---------------------------------------------------------------------------
+
+class TestNewPipelineOrder:
+    """Verify the new pipeline order (snap → split → angle) produces
+    correct results that the old order (angle → snap → split) would get wrong."""
+
+    def test_snap_before_angle_prevents_wrong_target(self):
+        """Old pipeline: angle correction first would move beam Y away from
+        the correct snap target. New pipeline: snap first locks the endpoint,
+        then angle correction only fine-tunes post-split sub-beams.
+
+        Scenario: beam endpoint is near a column at (8.5, 3.2). The beam
+        has a slight tilt (~1.5°). Old pipeline would align Y to a grid line
+        first, moving it away from the column. New pipeline snaps to column
+        first, then angle correction only affects sub-beams if needed.
+        """
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 8.50}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 6.00}],
+        }
+        elements = {
+            "columns": [
+                {"grid_x": 0.0, "grid_y": 3.2, "floors": ["1F"]},
+                {"grid_x": 8.5, "grid_y": 3.2, "floors": ["1F"]},
+            ],
+            "walls": [],
+            "beams": [
+                # Beam connecting two columns at y=3.2, slight tilt
+                {"x1": 0.02, "y1": 3.18, "x2": 8.48, "y2": 3.22,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_beams(elements, grid_data, tolerance=1.5)
+        beam = validated["beams"][0]
+        # Should snap to columns at y=3.2, NOT angle-correct to grid y=0 or y=6
+        assert beam["x1"] == 0.0
+        assert beam["y1"] == 3.2
+        assert beam["x2"] == 8.5
+        assert beam["y2"] == 3.2
+
+    def test_wall_split_in_pipeline(self):
+        """Full pipeline includes wall splitting."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 8.50}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 6.00}],
+        }
+        elements = {
+            "columns": [],
+            "walls": [
+                # Vertical wall
+                {"x1": 4.0, "y1": 0.0, "x2": 4.0, "y2": 6.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "beams": [
+                # Horizontal beam crossing the wall at x=4
+                {"x1": 0.0, "y1": 3.0, "x2": 8.50, "y2": 3.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_beams(elements, grid_data, tolerance=1.5)
+        # Wall should be split at the beam crossing point
+        assert report["wall_split_walls"] == 1
+        assert len(validated["walls"]) == 2
+        # Beam should also be split at the wall
+        assert report["split_beams"] == 1
+        assert len(validated["beams"]) == 2

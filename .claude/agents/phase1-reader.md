@@ -106,14 +106,17 @@ python -m golden_scripts.tools.pptx_to_elements \
    - **❌ 禁止假設 Grid label 由下往上遞增或由左往右遞增**
    - **✅ 必須以 grid_data.json 座標 + 截圖 bubble 文字為準**
 
-4. **辨識 Grid 線位置**：在截圖上找出至少 2 條 X-方向 + 2 條 Y-方向 Grid 線的 PPT-米座標
+4. **辨識 Grid 線位置**：在截圖上盡量找出**所有可見** Grid 線的 PPT-米座標（每軸最少 2 條，但應盡量標出全部可辨識的 grid lines，anchor 越多校正精度越高）
 5. **輸出 grid_anchors JSON**：
    ```json
    {
      "anchors": [
        {"grid_name": "1", "direction": "X", "ppt_x": 2.34},
+       {"grid_name": "2", "direction": "X", "ppt_x": 14.50},
+       {"grid_name": "3", "direction": "X", "ppt_x": 22.80},
        {"grid_name": "5", "direction": "X", "ppt_x": 31.14},
        {"grid_name": "A", "direction": "Y", "ppt_y": 1.20},
+       {"grid_name": "C", "direction": "Y", "ppt_y": 18.40},
        {"grid_name": "G", "direction": "Y", "ppt_y": 43.60}
      ]
    }
@@ -177,6 +180,7 @@ python -m golden_scripts.tools.beam_validate \
 3. **建築外框 (building_outline)**：polygon 座標 (m)
    - 下構 building_outline 一致性：所有下構樓層（B*F + 1F）共用同一個 building_outline。
 4. **屋突核心區 (core_grid_area)**：從標準層圖面辨識電梯井和樓梯間的 Grid 範圍。即使 PPT 沒有屋突頁面也必須提供。
+   - 注意：core_grid_area 用於 R2F~PRF 的核心區複製。R1F 是頂樓的完整複製（所有構件），不需要 core_grid_area。
 5. **強度分配 (strength_map)**：直接使用 Team Lead 提供的 `STRENGTH_TABLE`，不需從圖面掃描強度。將 STRENGTH_TABLE 直接複製到 grid_info.json 的 `strength_map` 欄位。
 6. **大梁驗證報告審閱 (beam validation review)**：審閱 Step E3.5 產生的 per-slide `{floor_label}/beam_report_{floor_label}.json`：
    - 檢視 corrections 摘要（snap 校正數量、最大距離）

@@ -425,6 +425,9 @@ def apply_transform_to_slide(slide_data, transform):
         if "x1" in elem and "y1" in elem:
             elem["x1"], elem["y1"] = apply_affine(
                 elem["x1"], elem["y1"], transform)
+        if "x2" in elem and "y2" in elem:
+            elem["x2"], elem["y2"] = apply_affine(
+                elem["x2"], elem["y2"], transform)
 
     for category in ("beams", "walls", "small_beams"):
         for elem in result.get(category, []):

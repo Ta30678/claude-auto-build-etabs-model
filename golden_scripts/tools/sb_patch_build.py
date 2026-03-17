@@ -22,9 +22,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from golden_scripts.tools.config_build import (
     strip_small_beams,
-    has_r2f_or_above,
-    replicate_rooftop_small_beams,
+    replicate_rooftop_sb_slabs,
 )
+from golden_scripts.constants import is_rooftop_story
 
 _FRAME_RE = re.compile(r'^(B|SB|WB|FB|FSB|FWB|C)\d+X\d+(?:C\d+)?$')
 
@@ -109,8 +109,9 @@ def build_sb_patch(sb_elements, config):
     # Rooftop replication
     stories = config.get("stories", [])
     core_grid_area = config.get("core_grid_area")
-    if core_grid_area and has_r2f_or_above(stories):
-        replicate_rooftop_small_beams(small_beams, stories, core_grid_area)
+    rooftop_names = [s["name"] for s in stories if is_rooftop_story(s["name"])]
+    if rooftop_names:
+        replicate_rooftop_sb_slabs(small_beams, None, stories, core_grid_area)
 
     # Warn about empty sections
     for i, sb in enumerate(small_beams):

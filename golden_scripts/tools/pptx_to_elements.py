@@ -75,9 +75,9 @@ _WALL_CM_RE = re.compile(r"(\d+)\s*[cC][mM]\s*(?:連續壁|壁)")
 # Floor label patterns for --scan-floors / --auto-floors
 # Word boundaries prevent false positives (e.g. C490F should NOT match)
 _FLOOR_WB_BEFORE = r"(?<![A-EG-QS-Z\d])"  # Not preceded by letters (except F,R) or digits
-_FLOOR_WB_AFTER = r"(?!\w)"                 # Not followed by word characters
+_FLOOR_WB_AFTER = r"(?![A-Za-z0-9])"        # Not followed by ASCII alphanumeric
 _FLOOR_SINGLE_RE = rf"{_FLOOR_WB_BEFORE}[BR]?\d+F{_FLOOR_WB_AFTER}"
-_FLOOR_RANGE_RE = rf"{_FLOOR_WB_BEFORE}[BR]?\d+F\s*[~\-]\s*[BR]?\d+F{_FLOOR_WB_AFTER}"
+_FLOOR_RANGE_RE = rf"{_FLOOR_WB_BEFORE}[BR]?\d+F\s*[~\-\uff5e]\s*[BR]?\d+F{_FLOOR_WB_AFTER}"
 FLOOR_LABEL_RE = re.compile(
     rf"({_FLOOR_RANGE_RE}|{_FLOOR_SINGLE_RE})", re.IGNORECASE
 )
@@ -107,6 +107,7 @@ def expand_floor_range(range_str: str) -> list[str]:
       RF        → [RF]                    (single floor)
     """
     range_str = range_str.strip()
+    range_str = range_str.replace("\uff5e", "~").replace("-", "~")  # normalize separators
     if "~" not in range_str:
         return [range_str]
 
@@ -388,7 +389,7 @@ def format_scan_floors_output(detected: dict[int, list[dict]]) -> str:
         # For --page-floors suggestion, use first label
         labels = [e["label"] for e in entries]
         page_parts.append(f"{sn}={labels[0]}" if len(labels) == 1
-                          else f"{sn}={', '.join(labels)}")
+                          else f"{sn}={labels[0]}~{labels[-1]}")
 
     lines.append("")
     lines.append("Suggested --page-floors:")
@@ -687,9 +688,37 @@ _PHASE2_LABEL_RE = re.compile(
 SLIDE_AREA_RATIO_MAX = 0.50       # Exclude shapes > 50% of slide area
 MIN_SCALE_MEASUREMENTS = 1        # Require at least 1 measurement per page
 MIN_COLUMN_DIM_EMU = 30000        # Min column shape dimension (~3cm at typical scale)
+COLUMN_REQUIRED_VERTICES = (4, 5)  # 4- or 5-vertex freeforms (5 = explicit close point)
 MEASUREMENT_RE = re.compile(r"(\d+\.?\d*)\s*m\b")
 # Column section pattern: C100x100, C110x140, etc.
 _COLUMN_SECTION_RE = re.compile(r"C(\d+)\s*[xX]\s*(\d+)")
+
+
+# ─── Freeform Vertex Counting ────────────────────────────────────────────────
+
+_VERTEX_NS = {'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'}
+
+
+def _get_freeform_vertex_count(shape):
+    """Count vertices in a FREEFORM shape's custom geometry path.
+
+    Returns vertex count (moveTo + lnTo nodes, excluding close),
+    or None if geometry data is not accessible.
+    """
+    try:
+        el = shape._element
+    except AttributeError:
+        return None
+
+    paths = el.findall('.//a:custGeom/a:pathLst/a:path', _VERTEX_NS)
+    if not paths:
+        return None
+
+    count = 0
+    for path in paths:
+        count += len(path.findall('a:moveTo', _VERTEX_NS))
+        count += len(path.findall('a:lnTo', _VERTEX_NS))
+    return count
 
 
 # ─── Theme Color Resolution ──────────────────────────────────────────────────
@@ -874,6 +903,49 @@ def _find_measurement_texts(slide):
                 cy = shape.top + shape.height // 2
                 measurements.append((val, cx, cy, line.strip()))
     return measurements
+
+
+def _estimate_scale_from_shapes(slide, slide_num):
+    """Estimate rough EMU/m scale from FREEFORM shape bounding box.
+
+    Fallback when no measurement texts are available.
+    Assumes the drawing extent represents ~30m (typical structural plan).
+    """
+    min_x, min_y = float('inf'), float('inf')
+    max_x, max_y = float('-inf'), float('-inf')
+    count = 0
+    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)):
+        left, top = shape.left, shape.top
+        right = left + shape.width
+        bottom = top + shape.height
+        min_x = min(min_x, left)
+        min_y = min(min_y, top)
+        max_x = max(max_x, right)
+        max_y = max(max_y, bottom)
+        count += 1
+
+    if count < 5:
+        return None, f"Slide {slide_num}: too few shapes ({count}) for scale estimation"
+
+    extent_x = max_x - min_x
+    extent_y = max_y - min_y
+    extent = max(extent_x, extent_y)
+
+    if extent < 1000000:  # Less than ~1m worth of EMU
+        return None, f"Slide {slide_num}: shape extent too small for estimation"
+
+    # Assume the longer drawing dimension ≈ 30m
+    ASSUMED_SPAN_M = 30.0
+    scale = extent / ASSUMED_SPAN_M
+
+    return scale, {
+        "slide": slide_num,
+        "emu_per_meter": round(scale, 1),
+        "num_measurements": 0,
+        "estimated": True,
+        "assumed_span_m": ASSUMED_SPAN_M,
+        "extent_emu": round(extent, 0),
+    }
 
 
 def detect_slide_scale(slide, slide_num):
@@ -1742,9 +1814,6 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
 
         if w == 0 or h == 0:
             # Line shape (beam candidate)
-            length = max(w, h)
-            if length <= TICK_MAX_LENGTH_EMU:
-                continue  # Skip tick marks
             primary_color = line_color or fill_color
             alt_color_line = fill_color if primary_color == line_color else line_color
             lines.append({
@@ -1755,6 +1824,10 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
             })
         elif w > 0 and h > 0 and w < 500000 and h < 500000:
             # Small rectangle (column candidate)
+            # Only accept 4-vertex freeforms (true rectangles)
+            vc = _get_freeform_vertex_count(shape)
+            if vc is not None and vc not in COLUMN_REQUIRED_VERTICES:
+                continue
             if fill_color:
                 filled_rects.append({
                     "left": left, "top": top, "width": w, "height": h,
@@ -2082,6 +2155,12 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
             scale_val, scale_info = detect_slide_scale(prs.slides[sn - 1], sn)
             if scale_val is not None:
                 slide_scales[sn] = (scale_val, scale_info)
+            else:
+                # Fallback: estimate from shape extent
+                est_scale, est_info = _estimate_scale_from_shapes(prs.slides[sn - 1], sn)
+                if est_scale is not None:
+                    slide_scales[sn] = (est_scale, est_info)
+                    print(f"  Slide {sn}: using estimated scale {est_scale:.0f} EMU/m (no measurement texts)")
 
     # Fallback scale: use median of all detected scales (or manual scale)
     fallback_scale = None
@@ -2095,10 +2174,23 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
         slide = prs.slides[sn - 1]  # 1-based to 0-based
         print(f"\n--- Processing Slide {sn} ({', '.join(floors)}) ---")
 
-        # 1) Detect scale (per-slide, with fallback)
+        # 1) Compute floor label (needed for crop + JSON)
+        floor_label = (f"{floors[0]}~{floors[-1]}" if len(floors) > 1
+                       else floors[0])
+
+        # 2) Extract PNG FIRST (always, regardless of scale)
+        if crop:
+            actual_crop_dir = (str(Path(slides_info_dir) / floor_label / "screenshots")) if slides_info_dir else crop_dir
+            if actual_crop_dir:
+                extract_base_png(slide, sn, floor_label, actual_crop_dir)
+
+        # 3) Detect scale (per-slide, with fallback)
         if sn in slide_scales:
             scale, scale_info = slide_scales[sn]
-            print(f"  Scale: {scale:.1f} EMU/m ({scale_info.get('num_measurements', 0)} measurements)")
+            if isinstance(scale_info, dict) and scale_info.get("estimated"):
+                print(f"  Scale: {scale:.0f} EMU/m (ESTIMATED from shape extent \u2014 affine_calibrate will correct)")
+            else:
+                print(f"  Scale: {scale:.1f} EMU/m ({scale_info.get('num_measurements', 0) if isinstance(scale_info, dict) else 0} measurements)")
         elif fallback_scale:
             scale = fallback_scale
             scale_info = {"slide": sn, "emu_per_meter": round(scale, 1),
@@ -2114,15 +2206,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
             continue
         scale_details.append(scale_info)
 
-        # 2) Extract PNG (optional)
-        floor_label = (f"{floors[0]}~{floors[-1]}" if len(floors) > 1
-                       else floors[0])
-        if crop:
-            actual_crop_dir = (str(Path(slides_info_dir) / floor_label / "screenshots")) if slides_info_dir else crop_dir
-            if actual_crop_dir:
-                extract_base_png(slide, sn, floor_label, actual_crop_dir)
-
-        # 3) Parse legend (table-first, shape fallback)
+        # 4) Parse legend (table-first, shape fallback)
         legend, legend_diag, legend_boundary, legend_side = parse_legend(
             slide, slide_w, slide_h, phase=phase, theme_map=theme_map)
         legend_source = legend_diag.get("legend_source", "shape")

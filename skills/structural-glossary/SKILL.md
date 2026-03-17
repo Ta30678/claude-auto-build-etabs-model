@@ -23,9 +23,10 @@ All classification logic is implemented in `golden_scripts/constants.py`.
 
 ```
 PRF          ─┐
-R3F           │ rooftop (屋突)
+R3F           │ rooftop (屋突) — R2F+ 核心區複製
 R2F           │
-R1F / RF     ─┘
+R1F          ─┘  ← 頂樓完整複製
+RF           ─── superstructure 最頂層
 NF           ─┐
 ...           │ superstructure (上構)
 2F            │
@@ -126,6 +127,15 @@ is_rooftop_story("5F")        # False
 | 基礎層 | BASE 上一層 | BASE 本身無物件 |
 
 詳細樓層對應規則見 `plan-reader-floors` 第一節。
+
+### Rooftop Replication Rules
+
+| 樓層 | 複製範圍 | 需要 core_grid_area |
+|------|---------|-------------------|
+| R1F | 頂樓完整複製（ALL 柱/牆/梁/版/小梁） | 不需要 |
+| R2F~PRF | 只複製核心區構件（柱/牆/梁/版/小梁） | 需要 |
+
+R1F 的配置完全等於頂樓（最後一個上構層）。R2F 以上只有電梯/樓梯核心區的構件延伸到 PRF。
 
 ---
 

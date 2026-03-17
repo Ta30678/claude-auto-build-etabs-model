@@ -279,9 +279,9 @@ python -m golden_scripts.tools.elements_merge \
 python -m golden_scripts.tools.elements_merge ... --dry-run
 ```
 
-### Beam Validate Tool (Phase 1 — angle correction + snap + split)
+### Beam Validate Tool (Phase 1 — snap + split + angle correction)
 ```bash
-# Per-slide: validate, angle-correct, snap, and split beams
+# Per-slide: snap, split (beams+walls at crossings), angle-correct
 python -m golden_scripts.tools.beam_validate \
     --elements "calibrated/1F~2F/elements.json" \
     --grid-data grid_data.json \
@@ -294,7 +294,7 @@ python -m golden_scripts.tools.beam_validate \
     --elements elements.json \
     --grid-data grid_data.json \
     --output elements.json \
-    --angle-threshold 5.0 \
+    --angle-threshold 2.0 \
     --split-tolerance 0.15
 
 # Disable angle correction or splitting

@@ -18,7 +18,7 @@ from golden_scripts.tools.config_build import (
     filter_by_outline,
     has_r2f_or_above,
     replicate_rooftop,
-    replicate_rooftop_small_beams,
+    replicate_rooftop_sb_slabs,
     build_config,
 )
 
@@ -233,6 +233,7 @@ class TestRooftopReplication:
         assert has_r2f_or_above(stories) is False
 
     def test_column_in_core_gets_rooftop(self, stories_with_rooftop, core_area):
+        """Core column: Phase A gives R1F, Phase B gives R2F+R3F (not PRF)."""
         cols = [{"grid_x": 10, "grid_y": 10, "section": "C90X90",
                  "floors": ["B3F", "1F", "2F", "RF"]}]
         replicate_rooftop(cols, [], [], stories_with_rooftop, core_area)
@@ -241,23 +242,28 @@ class TestRooftopReplication:
         assert "R3F" in cols[0]["floors"]
         assert "PRF" not in cols[0]["floors"]
 
-    def test_column_outside_core_unchanged(self, stories_with_rooftop, core_area):
+    def test_column_outside_core_gets_r1f_only(self, stories_with_rooftop, core_area):
+        """Non-core column: Phase A gives R1F, Phase B skips (not in core)."""
         cols = [{"grid_x": 1, "grid_y": 1, "section": "C90X90",
                  "floors": ["B3F", "1F", "2F", "RF"]}]
-        original_floors = list(cols[0]["floors"])
         replicate_rooftop(cols, [], [], stories_with_rooftop, core_area)
-        assert cols[0]["floors"] == original_floors
+        assert "R1F" in cols[0]["floors"]
+        assert "R2F" not in cols[0]["floors"]
+        assert "R3F" not in cols[0]["floors"]
+        assert "PRF" not in cols[0]["floors"]
 
     def test_beam_in_core_gets_rooftop(self, stories_with_rooftop, core_area):
+        """Core beam: Phase A gives R1F, Phase B gives R2F+R3F+PRF."""
         beams = [{"x1": 6, "y1": 10, "x2": 14, "y2": 10,
                   "section": "B55X80", "floors": ["1F", "2F", "RF"]}]
         replicate_rooftop([], beams, [], stories_with_rooftop, core_area)
+        assert "R1F" in beams[0]["floors"]
         assert "R2F" in beams[0]["floors"]
         assert "R3F" in beams[0]["floors"]
         assert "PRF" in beams[0]["floors"]
-        assert "R1F" not in beams[0]["floors"]
 
     def test_wall_in_core_gets_rooftop(self, stories_with_rooftop, core_area):
+        """Core wall: Phase A gives R1F, Phase B gives R2F+R3F (not PRF)."""
         walls = [{"x1": 10, "y1": 6, "x2": 10, "y2": 14,
                   "section": "W25", "floors": ["1F", "2F", "RF"]}]
         replicate_rooftop([], [], walls, stories_with_rooftop, core_area)
@@ -267,9 +273,11 @@ class TestRooftopReplication:
         assert "PRF" not in walls[0]["floors"]
 
     def test_small_beam_in_core_gets_rooftop(self, stories_with_rooftop, core_area):
+        """Core SB: Phase A gives R1F, Phase B gives R2F+R3F+PRF."""
         sbs = [{"x1": 6, "y1": 10, "x2": 14, "y2": 10,
                 "section": "SB30X50", "floors": ["2F", "RF"]}]
-        replicate_rooftop_small_beams(sbs, stories_with_rooftop, core_area)
+        replicate_rooftop_sb_slabs(sbs, None, stories_with_rooftop, core_area)
+        assert "R1F" in sbs[0]["floors"]
         assert "R2F" in sbs[0]["floors"]
         assert "R3F" in sbs[0]["floors"]
         assert "PRF" in sbs[0]["floors"]
@@ -280,13 +288,63 @@ class TestRooftopReplication:
         replicate_rooftop(cols, [], [], stories_with_rooftop, core_area)
         assert cols[0]["floors"].count("R1F") == 1
 
-    def test_beam_one_endpoint_outside_core(self, stories_with_rooftop, core_area):
-        """Beam with only one endpoint in core should NOT get rooftop."""
+    def test_beam_one_endpoint_outside_core_gets_r1f(self, stories_with_rooftop, core_area):
+        """Non-core beam: Phase A gives R1F, Phase B skips (one endpoint outside)."""
         beams = [{"x1": 1, "y1": 1, "x2": 10, "y2": 10,
                   "section": "B55X80", "floors": ["1F", "2F", "RF"]}]
-        original = list(beams[0]["floors"])
         replicate_rooftop([], beams, [], stories_with_rooftop, core_area)
-        assert beams[0]["floors"] == original
+        assert "R1F" in beams[0]["floors"]
+        assert "R2F" not in beams[0]["floors"]
+        assert "R3F" not in beams[0]["floors"]
+        assert "PRF" not in beams[0]["floors"]
+
+    def test_r1f_full_copy_column(self, stories_with_rooftop, core_area):
+        """Non-core column with top_floor → gets R1F only, not R2F+."""
+        cols = [{"grid_x": 1, "grid_y": 1, "section": "C60X60",
+                 "floors": ["1F", "2F"]}]
+        replicate_rooftop(cols, [], [], stories_with_rooftop, core_area)
+        assert "R1F" in cols[0]["floors"]
+        assert "R2F" not in cols[0]["floors"]
+        assert "R3F" not in cols[0]["floors"]
+
+    def test_r1f_full_copy_beam(self, stories_with_rooftop, core_area):
+        """Non-core beam with top_floor → gets R1F only, not R2F+."""
+        beams = [{"x1": 1, "y1": 1, "x2": 3, "y2": 1,
+                  "section": "B40X60", "floors": ["1F", "2F"]}]
+        replicate_rooftop([], beams, [], stories_with_rooftop, core_area)
+        assert "R1F" in beams[0]["floors"]
+        assert "R2F" not in beams[0]["floors"]
+        assert "PRF" not in beams[0]["floors"]
+
+    def test_no_r1f_in_stories(self):
+        """Stories without R1F → no R1F replication."""
+        stories = [
+            {"name": "1F", "height": 4.2},
+            {"name": "2F", "height": 3.2},
+            {"name": "RF", "height": 3.2},
+            {"name": "R2F", "height": 3.2},
+            {"name": "PRF", "height": 1.5},
+        ]
+        core = {"x_range": [0, 20], "y_range": [0, 20]}
+        cols = [{"grid_x": 10, "grid_y": 10, "section": "C90X90",
+                 "floors": ["1F", "2F"]}]
+        replicate_rooftop(cols, [], [], stories, core)
+        assert "R1F" not in cols[0]["floors"]
+
+    def test_r1f_only_no_r2f(self):
+        """Stories with R1F but no R2F+ → R1F full copy still happens."""
+        stories = [
+            {"name": "1F", "height": 4.2},
+            {"name": "2F", "height": 3.2},
+            {"name": "RF", "height": 3.2},
+            {"name": "R1F", "height": 3.2},
+            {"name": "PRF", "height": 1.5},
+        ]
+        cols = [{"grid_x": 1, "grid_y": 1, "section": "C90X90",
+                 "floors": ["1F", "2F"]}]
+        replicate_rooftop(cols, [], [], stories, None)
+        assert "R1F" in cols[0]["floors"]
+        assert "PRF" not in cols[0]["floors"]
 
 
 # ── Build Config ───────────────────────────────────────────────
