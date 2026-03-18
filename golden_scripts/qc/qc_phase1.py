@@ -275,9 +275,9 @@ def check_sections(SapModel, config):
 
     # Frame sections — config lists base names, ETABS has Cfc variants too
     # Check that every config frame section (or its Cfc variants) exists
-    from constants import build_strength_lookup
+    from constants import build_strength_lookup, normalize_stories_order
     strength_map = config.get("strength_map", {})
-    all_stories = [s["name"] for s in reversed(config.get("stories", []))]
+    all_stories = [s["name"] for s in normalize_stories_order(config.get("stories", []))]
     strength_lookup = build_strength_lookup(strength_map, all_stories)
     fc_values = sorted(set(strength_lookup.values())) if strength_lookup else []
 

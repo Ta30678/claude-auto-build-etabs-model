@@ -94,82 +94,33 @@ def is_non_rectangular(polygon):
 
 # ── Element Stripping ──────────────────────────────────────────
 
-def snap_columns_to_grid(columns, grid_info, tolerance=1.5):
-    """Snap columns to nearest grid intersection and remove off-grid false positives.
+def strip_columns(columns, grid_info=None):
+    """Normalize column fields: accept grid_x/grid_y or x1/y1, strip page_num.
+
+    No snap/filter/dedup — these are handled upstream:
+    - Snap: affine_calibrate.py snap_elements_to_grid() (per-axis, 0.5m tolerance)
+    - Dedup: elements_merge.py dedup_elements()
+    - Filter: PPT extraction + color matching
 
     Parameters
     ----------
     columns : list[dict]
         Columns with grid_x/x1 and grid_y/y1.
-    grid_info : dict
-        Grid info with grids.x and grids.y.
-    tolerance : float
-        Max snap distance (m). Columns farther than this are dropped.
+    grid_info : dict, optional
+        Accepted for backward compatibility but not used.
 
     Returns
     -------
-    (snapped_columns, dropped_count)
+    (normalized_columns, dropped_count=0)
     """
-    x_coords = [g["coordinate"] for g in grid_info.get("grids", {}).get("x", [])]
-    y_coords = [g["coordinate"] for g in grid_info.get("grids", {}).get("y", [])]
-    if not x_coords or not y_coords:
-        return columns, 0
-
-    # Build grid intersection set
-    intersections = [(x, y) for x in x_coords for y in y_coords]
-
     result = []
-    dropped = 0
-    seen = set()
-
     for col in columns:
-        cx = col.get("grid_x", col.get("x1", 0))
-        cy = col.get("grid_y", col.get("y1", 0))
-
-        # Find nearest grid intersection
-        best_dist = float("inf")
-        best_x, best_y = cx, cy
-        for gx, gy in intersections:
-            d = math.hypot(cx - gx, cy - gy)
-            if d < best_dist:
-                best_dist = d
-                best_x, best_y = gx, gy
-
-        if best_dist > tolerance:
-            dropped += 1
-            continue
-
-        # Dedup: same position + section + floors
-        key = (best_x, best_y, col.get("section", ""),
-               tuple(sorted(col.get("floors", []))))
-        if key in seen:
-            continue
-        seen.add(key)
-
         result.append({
-            "grid_x": best_x,
-            "grid_y": best_y,
+            "grid_x": round(col.get("grid_x", col.get("x1", 0)), 2),
+            "grid_y": round(col.get("grid_y", col.get("y1", 0)), 2),
             "section": col.get("section", ""),
             "floors": list(col.get("floors", [])),
         })
-
-    return result, dropped
-
-
-def strip_columns(columns, grid_info=None):
-    """Remove page_num from columns. Accept grid_x/grid_y or x1/y1.
-    If grid_info provided, snap to nearest grid intersection."""
-    if grid_info:
-        return snap_columns_to_grid(columns, grid_info)
-    result = []
-    for col in columns:
-        out = {
-            "grid_x": col.get("grid_x", col.get("x1", 0)),
-            "grid_y": col.get("grid_y", col.get("y1", 0)),
-            "section": col.get("section", ""),
-            "floors": list(col.get("floors", [])),
-        }
-        result.append(out)
     return result, 0
 
 
@@ -498,9 +449,7 @@ def build_config(elements, grid_info, project_name, save_path):
             config[key] = grid_info[key]
 
     # From elements — strip auxiliary fields
-    columns, col_dropped = strip_columns(elements.get("columns", []), grid_info)
-    if col_dropped:
-        warnings.append(f"Dropped {col_dropped} columns too far from grid intersections")
+    columns, _ = strip_columns(elements.get("columns", []), grid_info)
     beams = strip_beams(elements.get("beams", []))
     walls = strip_walls(elements.get("walls", []))
 

@@ -330,7 +330,7 @@ class TestSnapElementsToGrid:
         assert slide["columns"][0]["y1"] == 17.6
 
     def test_column_too_far_not_snapped(self):
-        """Column at (5.0, 12.0), no grid within 0.5m → unchanged."""
+        """Column at (5.0, 12.0), no grid within 0.8m → unchanged."""
         slide = {
             "columns": [
                 {"grid_x": 5.0, "grid_y": 12.0, "x1": 5.0, "y1": 12.0,

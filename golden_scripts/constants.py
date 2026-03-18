@@ -291,3 +291,26 @@ def get_above_ground_stories(story_names):
     Used for split/merge: these are the stories that belong to individual buildings.
     """
     return [s for s in story_names if not is_substructure_story(s)]
+
+
+def normalize_stories_order(stories):
+    """Ensure stories are in bottom-to-top order.
+
+    Detects whether stories are top-to-bottom or bottom-to-top
+    by checking if substructure stories come first (bottom-to-top)
+    or last (top-to-bottom).
+
+    Returns stories in bottom-to-top order (B3F, B2F, ..., PRF).
+    """
+    if not stories or len(stories) <= 1:
+        return list(stories)
+    first = stories[0]["name"]
+    last = stories[-1]["name"]
+    # If first story is a substructure story, already bottom-to-top
+    if is_substructure_story(first) and not is_substructure_story(last):
+        return list(stories)
+    # If last story is a substructure story, reverse to bottom-to-top
+    if is_substructure_story(last) and not is_substructure_story(first):
+        return list(reversed(stories))
+    # Ambiguous: return as-is (assume bottom-to-top)
+    return list(stories)

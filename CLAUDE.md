@@ -354,6 +354,12 @@ python -m golden_scripts.tools.sb_patch_build ... --dry-run
 python -m golden_scripts.tools.read_grid --output grid_data.json
 ```
 
+### Diagnose Elevation Mismatch (debugging)
+```bash
+# Compare config elev_map vs ETABS actual elevations
+python -m golden_scripts.tools.diagnose_elev --config model_config.json
+```
+
 ### Slash commands (BTS Agent Teams — Phased, preferred)
 - `/bts-structure [description]` — Phase 1: 2 Readers + 1 Config-Builder → Grid+Story+柱+牆+大梁
 - `/bts-qc1 <config>` — Phase 1 QC: 比對 ETABS 模型 vs model_config.json（8 項檢查）
@@ -449,6 +455,9 @@ Section naming: {PREFIX}{WIDTH}X{DEPTH}[C{fc}]  (e.g. B55X80C350)
 API D/B swap: T3=Depth, T2=Width (SetRectangle)
 +1 floor rule: column/wall on plan NF spans from NF elevation to (N+1)F elevation
 Shell types: Membrane (2) for slabs/walls, ShellThick (1) for raft/FS
+Stories order: config may be either top-to-bottom or bottom-to-top;
+  normalize_stories_order() auto-detects and returns bottom-to-top.
+  Phase 2 cross-verifies elev_map against ETABS when step 3 is skipped.
 ```
 
 ### Foundation Floor Rules (MANDATORY)

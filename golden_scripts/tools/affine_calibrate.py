@@ -451,7 +451,7 @@ def apply_transform_to_slide(slide_data, transform):
     return result
 
 
-def snap_elements_to_grid(slide_data, grid_data, col_tolerance=0.5, beam_tolerance=0.5):
+def snap_elements_to_grid(slide_data, grid_data, col_tolerance=0.8, beam_tolerance=0.5):
     """Post-affine grid snap: fix residual drift from affine transform.
 
     1. Columns: snap to nearest grid intersection (within col_tolerance)

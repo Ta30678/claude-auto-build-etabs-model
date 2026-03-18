@@ -114,11 +114,48 @@ class TestStripElements:
     def test_strip_columns(self):
         cols = [{"grid_x": 0, "grid_y": 0, "section": "C90X90",
                  "floors": ["B3F", "1F"], "page_num": 3}]
-        result = strip_columns(cols)
+        result, dropped = strip_columns(cols)
+        assert dropped == 0
         assert len(result) == 1
         assert "page_num" not in result[0]
         assert result[0]["section"] == "C90X90"
         assert result[0]["floors"] == ["B3F", "1F"]
+
+    def test_strip_columns_preserves_offgrid(self):
+        """Off-grid columns (間柱) should pass through without coordinate modification."""
+        cols = [
+            {"grid_x": 4.2, "grid_y": 7.35, "section": "C60X60",
+             "floors": ["1F", "2F"]},
+        ]
+        grid_info = {
+            "grids": {
+                "x": [{"label": "1", "coordinate": 0},
+                      {"label": "2", "coordinate": 8.4}],
+                "y": [{"label": "A", "coordinate": 0},
+                      {"label": "B", "coordinate": 6.0}],
+            },
+        }
+        result, dropped = strip_columns(cols, grid_info)
+        assert dropped == 0
+        assert len(result) == 1
+        assert result[0]["grid_x"] == 4.2
+        assert result[0]["grid_y"] == 7.35
+
+    def test_strip_columns_normalizes_fields(self):
+        """x1/y1 keys should be normalized to grid_x/grid_y."""
+        cols = [
+            {"x1": 3.456, "y1": 8.789, "section": "C50X50",
+             "floors": ["1F"], "page_num": 2},
+        ]
+        result, dropped = strip_columns(cols)
+        assert dropped == 0
+        assert len(result) == 1
+        assert result[0]["grid_x"] == 3.46  # rounded to 2 decimals
+        assert result[0]["grid_y"] == 8.79
+        assert result[0]["section"] == "C50X50"
+        assert "page_num" not in result[0]
+        assert "x1" not in result[0]
+        assert "y1" not in result[0]
 
     def test_strip_beams(self):
         beams = [{"x1": 0, "y1": 0, "x2": 10, "y2": 0,
@@ -149,7 +186,7 @@ class TestStripElements:
         """Stripping should create independent copies of floors lists."""
         cols = [{"grid_x": 0, "grid_y": 0, "section": "C90X90",
                  "floors": ["1F", "2F"]}]
-        result = strip_columns(cols)
+        result, _ = strip_columns(cols)
         result[0]["floors"].append("3F")
         assert "3F" not in cols[0]["floors"]
 

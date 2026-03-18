@@ -11,7 +11,7 @@ import os
 _dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
-from constants import UNITS_TON_M
+from constants import UNITS_TON_M, normalize_stories_order
 
 
 def _check_existing_grids(SapModel):
@@ -136,20 +136,20 @@ def define_stories(SapModel, config):
 
     num_stories = len(stories_config)
 
-    # Config stores stories top-to-bottom (ETABS GUI convention).
-    # SetStories_2 API expects bottom-to-top order, so reverse.
-    stories_reversed = list(reversed(stories_config))
-    story_names = [s["name"] for s in stories_reversed]
-    story_heights = [s["height"] for s in stories_reversed]
+    # Normalize stories to bottom-to-top order (required by SetStories_2 API).
+    # Config may store stories in either order; normalize handles both.
+    stories_ordered = normalize_stories_order(stories_config)
+    story_names = [s["name"] for s in stories_ordered]
+    story_heights = [s["height"] for s in stories_ordered]
 
     # Calculate elevations (bottom-to-top accumulation)
     _elev_lookup = {}
     current_elev = base_elev
-    for s in stories_reversed:
+    for s in stories_ordered:
         current_elev += s["height"]
         _elev_lookup[s["name"]] = s.get("elevation", current_elev)
 
-    is_master = [s.get("is_master", True) for s in stories_reversed]
+    is_master = [s.get("is_master", True) for s in stories_ordered]
     similar_to = ["None"] * num_stories
     splice_above = [False] * num_stories
     splice_height = [0.0] * num_stories
@@ -169,9 +169,9 @@ def define_stories(SapModel, config):
         print(f"  WARNING: Could not define stories: {e}")
         print("  Stories may already exist. Continuing...")
 
-    # Print summary (bottom-to-top for clarity)
+    # Print summary (bottom-to-top)
     print(f"  BASE elevation: {base_elev}m")
-    for s in reversed(stories_config):
+    for s in stories_ordered:
         print(f"  {s['name']}: height={s['height']}m, elevation={_elev_lookup[s['name']]}m")
 
     # Return story elevation map for use by other scripts

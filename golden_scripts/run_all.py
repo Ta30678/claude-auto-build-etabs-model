@@ -17,7 +17,7 @@ import argparse
 # Add golden_scripts to path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from constants import build_strength_lookup
+from constants import build_strength_lookup, normalize_stories_order
 from modeling import gs_01_init
 from modeling import gs_02_sections
 from modeling import gs_03_grid_stories
@@ -49,6 +49,34 @@ DESIGN_STEPS = {
     12: ("Iterate",              gs_12_iterate),
 }
 STEPS = {**MODELING_STEPS, **DESIGN_STEPS}
+
+
+def _read_etabs_elevations(SapModel):
+    """Read actual story elevations from ETABS. Returns {name: top_elev} or None."""
+    try:
+        ret = SapModel.DatabaseTables.GetTableForDisplayArray(
+            "Story Definitions", [], "All", 0, [], 0, [])
+        if ret[0] != 0:
+            return None
+        fields = list(ret[4])
+        n_fields = len(fields)
+        n_records = ret[5]
+        data = list(ret[6])
+        elev_map = {}
+        for i in range(n_records):
+            row = dict(zip(fields, data[i * n_fields:(i + 1) * n_fields]))
+            name = row.get("Name", "")
+            try:
+                elev = float(row.get("Elevation", 0))
+            except (ValueError, TypeError):
+                continue
+            elev_map[name] = elev
+        # Rename "Base" -> "BASE" for consistency
+        if "Base" in elev_map:
+            elev_map["BASE"] = elev_map.pop("Base")
+        return elev_map if elev_map else None
+    except Exception:
+        return None
 
 
 def run_all(config, steps_to_run=None, dry_run=False):
@@ -93,10 +121,10 @@ def run_all(config, steps_to_run=None, dry_run=False):
     SapModel.SetModelIsLocked(False)
 
     # Prepare shared data (skip if config=None, step 12 handles it internally)
-    # Config stores stories top-to-bottom (ETABS convention); reverse to
-    # bottom-to-top order required by next_story() and build_strength_lookup().
+    # Normalize stories to bottom-to-top order required by next_story()
+    # and build_strength_lookup(). Config may store stories in either order.
     if config is not None:
-        all_stories = [s["name"] for s in reversed(config.get("stories", []))]
+        all_stories = [s["name"] for s in normalize_stories_order(config.get("stories", []))]
         strength_lookup = build_strength_lookup(
             config.get("strength_map", {}), all_stories)
     else:
@@ -106,24 +134,38 @@ def run_all(config, steps_to_run=None, dry_run=False):
     # Pre-build elev_map from config (no ETABS side effects).
     # This allows steps 7,8 to work without step 3 running first.
     # Each story name maps to its TOP elevation (= floor slab elevation).
-    # Config stores stories top-to-bottom (ETABS convention), so reverse
-    # before accumulating heights from base_elevation upward.
+    # Normalize stories to bottom-to-top before accumulating heights.
     elev_map = None
     if config is not None:
         stories = config.get("stories", [])
         base_elev = config.get("base_elevation", 0)
         if stories:
+            stories_ordered = normalize_stories_order(stories)
             elev_map = {}
             elev_map["BASE"] = base_elev
             current_elev = base_elev
-            for s in reversed(stories):
+            for s in stories_ordered:
                 current_elev += s["height"]
                 elev_map[s["name"]] = current_elev
 
-    results = {}
-
-    # Default to modeling steps only (design steps require explicit --steps)
+    # Phase 2 safety: cross-verify elev_map against ETABS when step 3 is not
+    # being run (i.e. stories already exist in ETABS from Phase 1).
     default_steps = steps_to_run if steps_to_run is not None else set(MODELING_STEPS.keys())
+    if 3 not in default_steps and elev_map:
+        etabs_elev = _read_etabs_elevations(SapModel)
+        if etabs_elev:
+            mismatches = {k: (elev_map[k], etabs_elev[k])
+                          for k in elev_map if k in etabs_elev
+                          and abs(elev_map[k] - etabs_elev[k]) > 0.01}
+            if mismatches:
+                print("\n  WARNING: Config elev_map differs from ETABS:")
+                for k, (cfg, etb) in sorted(mismatches.items(),
+                                             key=lambda x: x[1][1]):
+                    print(f"    {k}: config={cfg:.2f}, ETABS={etb:.2f}")
+                print("  Using ETABS elevations instead.\n")
+                elev_map = etabs_elev
+
+    results = {}
     for num in sorted(STEPS.keys()):
         if num not in default_steps:
             continue

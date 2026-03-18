@@ -14,7 +14,7 @@ import re
 _dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
-from constants import next_story, build_strength_lookup
+from constants import next_story, build_strength_lookup, normalize_stories_order
 
 
 def _get_frame_sections(SapModel):
@@ -104,7 +104,7 @@ def run(SapModel, config, elev_map=None, strength_lookup=None):
         from gs_03_grid_stories import define_stories
         elev_map = define_stories(SapModel, config)
 
-    all_stories = [s["name"] for s in reversed(config.get("stories", []))]
+    all_stories = [s["name"] for s in normalize_stories_order(config.get("stories", []))]
 
     if strength_lookup is None:
         strength_lookup = build_strength_lookup(
