@@ -39,6 +39,7 @@ import math
 import sys
 from pathlib import Path
 
+from golden_scripts.constants import normalize_stories_order
 from golden_scripts.tools.beam_validate import segment_intersection
 
 
@@ -372,20 +373,10 @@ def filter_slabs(polygons, config):
     outline = config.get("building_outline")
     outline_poly = [(pt[0], pt[1]) for pt in outline] if outline else None
 
-    face_data = []
+    valid = []
     for poly in polygons:
         area = face_area_signed(poly)
-        face_data.append((poly, area))
-
-    max_abs_area = max(abs(a) for _, a in face_data) if face_data else 0
-
-    valid = []
-    for poly, area in face_data:
         abs_area = abs(area)
-
-        # Skip outer face (largest area)
-        if abs_area > max_abs_area * 0.95 and abs_area > 100:
-            continue
 
         # Skip CW faces (negative area = exterior)
         if area < 0:
@@ -521,13 +512,6 @@ def assign_floors_to_slabs(valid_faces, edge_floors, config):
         if not face_floors:
             face_floors = set(all_story_names) if all_story_names else {"1F"}
 
-        is_foundation = False
-        if foundation_floor and foundation_floor in face_floors:
-            is_foundation = all(
-                f.startswith("B") or f == foundation_floor
-                for f in face_floors
-            )
-
         corners = [[round(x, 2), round(y, 2)] for x, y in poly]
 
         floor_order = {s["name"]: i for i, s in enumerate(stories)
@@ -538,7 +522,6 @@ def assign_floors_to_slabs(valid_faces, edge_floors, config):
         slabs.append({
             "corners": corners,
             "floors": sorted_floors,
-            "is_foundation": is_foundation,
             "area": round(area, 2),
         })
 
@@ -556,20 +539,12 @@ def assign_floors_simple(valid_faces, floor_set, stories, foundation_floor):
     sorted_floors = sorted(floor_set,
                            key=lambda f: floor_order.get(f, 999))
 
-    is_foundation = False
-    if foundation_floor and foundation_floor in floor_set:
-        is_foundation = all(
-            f.startswith("B") or f == foundation_floor
-            for f in floor_set
-        )
-
     slabs = []
     for poly, area in valid_faces:
         corners = [[round(x, 2), round(y, 2)] for x, y in poly]
         slabs.append({
             "corners": corners,
             "floors": list(sorted_floors),
-            "is_foundation": is_foundation,
             "area": round(area, 2),
         })
 
@@ -609,14 +584,10 @@ def _merge_slab_entries(slabs, stories):
                     existing["floors"].append(f)
                     existing_set.add(f)
             existing["floors"].sort(key=lambda f: floor_order.get(f, 999))
-            # Recompute is_foundation based on merged floors
-            existing["is_foundation"] = all(
-                f.startswith("B") for f in existing["floors"])
         else:
             by_corners[key] = {
                 "corners": slab["corners"],
                 "floors": list(slab["floors"]),
-                "is_foundation": slab["is_foundation"],
                 "area": slab["area"],
             }
 
@@ -640,51 +611,31 @@ def generate_slab_config(slabs, slab_thickness=15, raft_thickness=100,
     slab_thicknesses = set()
     raft_thicknesses = set()
 
-    # Determine which floors are foundation floors (B*F up to and including
-    # the foundation_floor itself)
-    foundation_floors = set()
-    if foundation_floor:
-        foundation_floors.add(foundation_floor)
-
     for slab in slabs:
         floors = slab["floors"]
         corners = slab["corners"]
 
-        if slab["is_foundation"]:
-            # Pure foundation slab
-            section = f"FS{raft_thickness}"
+        if foundation_floor and foundation_floor in floors:
+            # FS only at foundation floor
             raft_thicknesses.add(raft_thickness)
             slab_entries.append({
                 "corners": corners,
-                "section": section,
-                "floors": floors,
+                "section": f"FS{raft_thickness}",
+                "floors": [foundation_floor],
             })
-        elif foundation_floor and foundation_floor in floors:
-            # Mixed slab: split into FS (foundation floor) + S (rest)
-            fs_floors = [f for f in floors if f == foundation_floor]
-            s_floors = [f for f in floors if f != foundation_floor]
-
-            if fs_floors:
-                raft_thicknesses.add(raft_thickness)
-                slab_entries.append({
-                    "corners": corners,
-                    "section": f"FS{raft_thickness}",
-                    "floors": fs_floors,
-                })
-            if s_floors:
+            other_floors = [f for f in floors if f != foundation_floor]
+            if other_floors:
                 slab_thicknesses.add(slab_thickness)
                 slab_entries.append({
                     "corners": corners,
                     "section": f"S{slab_thickness}",
-                    "floors": s_floors,
+                    "floors": other_floors,
                 })
         else:
-            # Pure regular slab
-            section = f"S{slab_thickness}"
             slab_thicknesses.add(slab_thickness)
             slab_entries.append({
                 "corners": corners,
-                "section": section,
+                "section": f"S{slab_thickness}",
                 "floors": floors,
             })
 
@@ -764,7 +715,7 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100):
     for fs, gs in floor_groups:
         print(f"      {sorted(fs)}: {len(gs)} segments")
 
-    stories = config.get("stories", [])
+    stories = normalize_stories_order(config.get("stories", []))
     foundation_floor = None
     for s in stories:
         if isinstance(s, dict) and s.get("name", "").startswith("B"):

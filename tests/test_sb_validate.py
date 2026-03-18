@@ -17,6 +17,7 @@ from golden_scripts.tools.sb_validate import (
     split_all_sbs,
     cluster_free_endpoints,
     snap_sb_by_ray,
+    ray_ray_intersection,
 )
 from golden_scripts.tools.config_snap import SnapTarget
 from golden_scripts.tools.beam_validate import split_beam
@@ -983,7 +984,7 @@ class TestIntegration:
 class TestClusterFreeEndpoints:
 
     def test_two_half_snapped_sbs_cluster(self):
-        """Two half-snapped SBs with free ends ~5cm apart: each projected onto its own axis."""
+        """Two perpendicular half-snapped SBs: ray intersection at (4.25, 3.0)."""
         small_beams = [
             # SB-A: vertical, start snapped at (4.25, 0.0), end free at (4.25, 3.02)
             {"x1": 4.25, "y1": 0.0, "x2": 4.25, "y2": 3.02,
@@ -995,9 +996,12 @@ class TestClusterFreeEndpoints:
         snapped_state = [[True, False], [True, False]]
         corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
         assert len(corrections) == 1
-        # SB-A is vertical → X stays at 4.25 (direction preserved)
+        assert corrections[0]["method"] == "ray_intersection"
+        # SB-A vertical: projected to (4.25, 3.0) — exact intersection
         assert small_beams[0]["x2"] == 4.25
-        # SB-B is horizontal → Y stays at 3.0 (direction preserved)
+        assert small_beams[0]["y2"] == 3.0
+        # SB-B horizontal: projected to (4.25, 3.0) — exact intersection
+        assert small_beams[1]["x2"] == 4.25
         assert small_beams[1]["y2"] == 3.0
         # Both marked as snapped
         assert snapped_state[0][1] is True
@@ -1162,3 +1166,122 @@ class TestClusterFreeEndpoints:
         # Column 0.25m away should now cause a split with default 0.30m tolerance
         assert report["split_sbs"] == 1
         assert len(validated["small_beams"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Ray-ray intersection tests
+# ---------------------------------------------------------------------------
+
+class TestRayRayIntersection:
+    """Tests for ray_ray_intersection helper and cluster integration."""
+
+    def test_ray_ray_intersection_helper(self):
+        """Direct test of ray_ray_intersection: perpendicular rays."""
+        # Horizontal ray from (0, 3) going right
+        # Vertical ray from (5, 0) going up
+        result = ray_ray_intersection(0, 3, 1, 0, 5, 0, 0, 1)
+        assert result is not None
+        ix, iy = result
+        assert ix == 5.0
+        assert iy == 3.0
+
+    def test_ray_ray_intersection_helper_oblique(self):
+        """Direct test: two oblique rays intersect."""
+        import math
+        # Ray 1 from (0, 0) at 30 degrees
+        d1x = math.cos(math.radians(30))
+        d1y = math.sin(math.radians(30))
+        # Ray 2 from (10, 0) at 150 degrees
+        d2x = math.cos(math.radians(150))
+        d2y = math.sin(math.radians(150))
+        result = ray_ray_intersection(0, 0, d1x, d1y, 10, 0, d2x, d2y)
+        assert result is not None
+        ix, iy = result
+        assert abs(ix - 5.0) < 0.01
+        assert abs(iy - 2.89) < 0.02  # 5 * tan(30°) ≈ 2.887
+
+    def test_ray_ray_intersection_parallel(self):
+        """Parallel rays return None."""
+        result = ray_ray_intersection(0, 0, 1, 0, 0, 5, 1, 0)
+        assert result is None
+
+    def test_perpendicular_ray_ray_cluster(self):
+        """Two perpendicular SBs cluster via ray intersection to exact point."""
+        small_beams = [
+            # SB-A: vertical from (3.0, 0.0) up to free end (3.0, 5.02)
+            {"x1": 3.0, "y1": 0.0, "x2": 3.0, "y2": 5.02,
+             "section": "SB25X50", "floors": ["2F"]},
+            # SB-B: horizontal from (8.0, 5.0) left to free end (3.05, 5.0)
+            {"x1": 8.0, "y1": 5.0, "x2": 3.05, "y2": 5.0,
+             "section": "SB25X50", "floors": ["2F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        assert len(corrections) == 1
+        assert corrections[0]["method"] == "ray_intersection"
+        # Intersection at (3.0, 5.0)
+        assert small_beams[0]["x2"] == 3.0
+        assert small_beams[0]["y2"] == 5.0
+        assert small_beams[1]["x2"] == 3.0
+        assert small_beams[1]["y2"] == 5.0
+
+    def test_oblique_ray_ray_cluster(self):
+        """Two oblique SBs cluster via ray intersection."""
+        import math
+        # SB-A: from (0, 0) at 30° to free end near (5, 2.87)
+        length_a = 5.77  # ~5/cos(30°)
+        ax2 = round(length_a * math.cos(math.radians(30)), 2)
+        ay2 = round(length_a * math.sin(math.radians(30)), 2)
+        # SB-B: from (10, 0) at 150° to free end near (5, 2.87)
+        length_b = 5.77
+        bx2 = round(10 + length_b * math.cos(math.radians(150)), 2)
+        by2 = round(length_b * math.sin(math.radians(150)), 2)
+
+        small_beams = [
+            {"x1": 0.0, "y1": 0.0, "x2": ax2, "y2": ay2,
+             "section": "SB25X50", "floors": ["1F"]},
+            {"x1": 10.0, "y1": 0.0, "x2": bx2, "y2": by2,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.50)
+        assert len(corrections) == 1
+        assert corrections[0]["method"] == "ray_intersection"
+        # Both endpoints should converge to the intersection
+        assert abs(small_beams[0]["x2"] - small_beams[1]["x2"]) < 0.02
+        assert abs(small_beams[0]["y2"] - small_beams[1]["y2"]) < 0.02
+
+    def test_parallel_rays_fallback_to_centroid(self):
+        """Two parallel SBs fallback to centroid projection."""
+        small_beams = [
+            # SB-A: vertical from (4.0, 0.0) to free end (4.0, 3.02)
+            {"x1": 4.0, "y1": 0.0, "x2": 4.0, "y2": 3.02,
+             "section": "SB25X50", "floors": ["1F"]},
+            # SB-B: vertical from (4.02, 6.0) to free end (4.02, 2.98)
+            {"x1": 4.02, "y1": 6.0, "x2": 4.02, "y2": 2.98,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        assert len(corrections) == 1
+        assert corrections[0]["method"] == "centroid_projection"
+        # SB-A stays on x=4.0, SB-B stays on x=4.02 (projected along own axis)
+        assert small_beams[0]["x2"] == 4.0
+        assert small_beams[1]["x2"] == 4.02
+
+    def test_ray_intersection_outside_tolerance_fallback(self):
+        """Ray intersection too far from free endpoints → fallback to centroid."""
+        small_beams = [
+            # SB-A: nearly horizontal from (0, 0) to free (5.0, 0.1)
+            {"x1": 0.0, "y1": 0.0, "x2": 5.0, "y2": 0.1,
+             "section": "SB25X50", "floors": ["1F"]},
+            # SB-B: nearly horizontal from (10, 0.2) to free (5.05, 0.15)
+            {"x1": 10.0, "y1": 0.2, "x2": 5.05, "y2": 0.15,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        # The rays are nearly parallel — intersection is very far away
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        if corrections:
+            # Should fallback to centroid because intersection is far away
+            assert corrections[0]["method"] == "centroid_projection"

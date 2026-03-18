@@ -374,16 +374,37 @@ class TestGenerateSlabConfig:
     def test_basic(self):
         slabs = [
             {"corners": [[0, 0], [5, 0], [5, 3], [0, 3]],
-             "floors": ["2F"], "is_foundation": False, "area": 15.0},
+             "floors": ["2F"], "area": 15.0},
             {"corners": [[0, 0], [5, 0], [5, 3], [0, 3]],
-             "floors": ["B3F"], "is_foundation": True, "area": 15.0},
+             "floors": ["B3F"], "area": 15.0},
         ]
-        entries, sections = generate_slab_config(slabs, slab_thickness=15, raft_thickness=100)
+        entries, sections = generate_slab_config(
+            slabs, slab_thickness=15, raft_thickness=100,
+            foundation_floor="B3F")
         assert len(entries) == 2
         assert entries[0]["section"] == "S15"
         assert entries[1]["section"] == "FS100"
         assert sections["slab"] == [15]
         assert sections["raft"] == [100]
+
+    def test_fs_only_at_foundation_floor(self):
+        """FS should only be assigned to the foundation floor (B3F),
+        not to other B*F floors like B2F or B1F."""
+        slabs = [
+            {"corners": [[0, 0], [5, 0], [5, 3], [0, 3]],
+             "floors": ["B3F", "B2F", "B1F"], "area": 15.0},
+        ]
+        entries, sections = generate_slab_config(
+            slabs, slab_thickness=15, raft_thickness=100,
+            foundation_floor="B3F")
+        # Should split into FS at B3F + S at B2F, B1F
+        assert len(entries) == 2
+        fs_entries = [e for e in entries if e["section"].startswith("FS")]
+        s_entries = [e for e in entries if e["section"].startswith("S")]
+        assert len(fs_entries) == 1
+        assert fs_entries[0]["floors"] == ["B3F"]
+        assert len(s_entries) == 1
+        assert set(s_entries[0]["floors"]) == {"B2F", "B1F"}
 
 
 # ---------------------------------------------------------------------------
@@ -522,6 +543,88 @@ class TestPerFloorSlabGeneration:
 
         # 3 groups: {1F}, {2F}, {3F} — each with different SB layout
         assert stats["floor_groups"] == 3
+
+    def test_single_rectangle_not_filtered(self):
+        """A single rectangle > 100 m² should NOT be filtered out."""
+        config = {
+            "beams": [
+                {"x1": 0, "y1": 0, "x2": 20, "y2": 0,
+                 "section": "B55X80", "floors": ["2F"]},
+                {"x1": 20, "y1": 0, "x2": 20, "y2": 8,
+                 "section": "B55X80", "floors": ["2F"]},
+                {"x1": 20, "y1": 8, "x2": 0, "y2": 8,
+                 "section": "B55X80", "floors": ["2F"]},
+                {"x1": 0, "y1": 8, "x2": 0, "y2": 0,
+                 "section": "B55X80", "floors": ["2F"]},
+            ],
+            "small_beams": [],
+            "columns": [],
+            "walls": [],
+            "stories": [{"name": "2F", "height": 3.3}],
+            "sections": {"frame": ["B55X80"]},
+        }
+        # Area = 20 * 8 = 160 m² (> 100)
+        updated, stats = generate_slabs(config, slab_thickness=15)
+        slabs = updated.get("slabs", [])
+        assert len(slabs) == 1
+        assert slabs[0]["section"] == "S15"
+
+    def test_substructure_extension_slabs(self):
+        """Extension area (substructure wider than superstructure) must have slabs."""
+        config = {
+            "beams": [
+                # Tower (0-10, 0-6) — all floors
+                {"x1": 0, "y1": 0, "x2": 10, "y2": 0,
+                 "section": "B55X80", "floors": ["B3F", "B2F", "B1F", "1F", "2F"]},
+                {"x1": 10, "y1": 0, "x2": 10, "y2": 6,
+                 "section": "B55X80", "floors": ["B3F", "B2F", "B1F", "1F", "2F"]},
+                {"x1": 10, "y1": 6, "x2": 0, "y2": 6,
+                 "section": "B55X80", "floors": ["B3F", "B2F", "B1F", "1F", "2F"]},
+                {"x1": 0, "y1": 6, "x2": 0, "y2": 0,
+                 "section": "B55X80", "floors": ["B3F", "B2F", "B1F", "1F", "2F"]},
+                # Extension (0-10, -5 to 0) — only B*F
+                {"x1": 0, "y1": -5, "x2": 10, "y2": -5,
+                 "section": "FB55X120", "floors": ["B3F", "B2F", "B1F"]},
+                {"x1": 10, "y1": -5, "x2": 10, "y2": 0,
+                 "section": "FB55X120", "floors": ["B3F", "B2F", "B1F"]},
+                {"x1": 0, "y1": -5, "x2": 0, "y2": 0,
+                 "section": "FB55X120", "floors": ["B3F", "B2F", "B1F"]},
+            ],
+            "small_beams": [],
+            "columns": [],
+            "walls": [],
+            "stories": [
+                {"name": "B3F", "height": 4.0},
+                {"name": "B2F", "height": 4.0},
+                {"name": "B1F", "height": 4.0},
+                {"name": "1F", "height": 4.2},
+                {"name": "2F", "height": 3.3},
+            ],
+            "sections": {"frame": ["B55X80", "FB55X120"]},
+        }
+        updated, stats = generate_slabs(config, slab_thickness=15, raft_thickness=100)
+        slabs = updated.get("slabs", [])
+
+        # Extension area slabs must exist
+        ext_slabs = []
+        for s in slabs:
+            for cx, cy in s["corners"]:
+                if cy < -0.1:
+                    ext_slabs.append(s)
+                    break
+        assert len(ext_slabs) >= 1, "Extension area should have at least 1 slab"
+
+        # FS only at B3F
+        fs_slabs = [s for s in slabs if s["section"].startswith("FS")]
+        for fs in fs_slabs:
+            assert fs["floors"] == ["B3F"], \
+                f"FS slab should only be at B3F, got {fs['floors']}"
+
+        # B2F and B1F should have S sections, not FS
+        for s in slabs:
+            if s["section"].startswith("FS"):
+                assert "B2F" not in s["floors"]
+                assert "B1F" not in s["floors"]
 
     def test_shared_floors_same_layout(self):
         """Floors sharing identical layout are grouped and share slabs."""

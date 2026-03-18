@@ -155,6 +155,25 @@ def snap_sb_by_ray(px, py, ray_dx, ray_dy, floors, targets, tolerance,
     return None
 
 
+def ray_ray_intersection(p1x, p1y, d1x, d1y, p2x, p2y, d2x, d2y):
+    """Compute intersection point of two rays.
+
+    Ray 1: (p1x,p1y) + t*(d1x,d1y)
+    Ray 2: (p2x,p2y) + s*(d2x,d2y)
+
+    Returns (ix, iy) or None if parallel.
+    """
+    cross = d1x * d2y - d1y * d2x
+    if abs(cross) < 1e-9:
+        return None
+    dx = p2x - p1x
+    dy = p2y - p1y
+    t = (dx * d2y - dy * d2x) / cross
+    ix = round(p1x + t * d1x, 2)
+    iy = round(p1y + t * d1y, 2)
+    return ix, iy
+
+
 # ---------------------------------------------------------------------------
 # 2. Target construction
 # ---------------------------------------------------------------------------
@@ -615,13 +634,64 @@ def cluster_free_endpoints(small_beams, snapped_state, cluster_tolerance=0.30):
         if len(members) < 2:
             continue
 
-        # 3. Compute centroid
-        cx = sum(free_eps[m][2] for m in members) / len(members)
-        cy = sum(free_eps[m][3] for m in members) / len(members)
-        cx = round(cx, 2)
-        cy = round(cy, 2)
+        # 3. Pre-compute ray directions for each member (snapped→free)
+        member_rays = []
+        for m in members:
+            sb_idx, ep_idx, ox, oy, fl = free_eps[m]
+            sb = small_beams[sb_idx]
+            if ep_idx == 0:
+                s_x, s_y = sb["x2"], sb["y2"]  # snapped end
+            else:
+                s_x, s_y = sb["x1"], sb["y1"]
+            rdx = ox - s_x
+            rdy = oy - s_y
+            rlen = math.hypot(rdx, rdy)
+            if rlen > 1e-6:
+                member_rays.append((s_x, s_y, rdx / rlen, rdy / rlen))
+            else:
+                member_rays.append((s_x, s_y, 0, 0))
 
-        # 4. Move each member to centroid PROJECTED onto its SB axis
+        # 4. Try ray-ray intersection for non-parallel pairs
+        intersection_point = None
+        if len(members) == 2:
+            r0, r1 = member_rays[0], member_rays[1]
+            result = ray_ray_intersection(r0[0], r0[1], r0[2], r0[3],
+                                          r1[0], r1[1], r1[2], r1[3])
+            if result:
+                ix, iy = result
+                max_d = max(math.hypot(free_eps[m][2] - ix,
+                                       free_eps[m][3] - iy) for m in members)
+                if max_d <= cluster_tolerance * 3:
+                    intersection_point = (ix, iy)
+        elif len(members) >= 3:
+            import statistics
+            ixs, iys = [], []
+            for a in range(len(members)):
+                for b in range(a + 1, len(members)):
+                    ra, rb = member_rays[a], member_rays[b]
+                    result = ray_ray_intersection(
+                        ra[0], ra[1], ra[2], ra[3],
+                        rb[0], rb[1], rb[2], rb[3])
+                    if result:
+                        ixs.append(result[0])
+                        iys.append(result[1])
+            if ixs:
+                mid_x = round(statistics.median(ixs), 2)
+                mid_y = round(statistics.median(iys), 2)
+                max_d = max(math.hypot(free_eps[m][2] - mid_x,
+                                       free_eps[m][3] - mid_y) for m in members)
+                if max_d <= cluster_tolerance * 3:
+                    intersection_point = (mid_x, mid_y)
+
+        if intersection_point:
+            cx, cy = intersection_point
+            method = "ray_intersection"
+        else:
+            cx = round(sum(free_eps[m][2] for m in members) / len(members), 2)
+            cy = round(sum(free_eps[m][3] for m in members) / len(members), 2)
+            method = "centroid_projection"
+
+        # 5. Move each member to target PROJECTED onto its SB axis
         member_details = []
         for m in members:
             visited[m] = True
@@ -662,6 +732,8 @@ def cluster_free_endpoints(small_beams, snapped_state, cluster_tolerance=0.30):
             })
 
         corrections.append({
+            "method": method,
+            "target": [cx, cy],
             "centroid": [cx, cy],
             "member_count": len(members),
             "members": member_details,
