@@ -1301,75 +1301,91 @@ def _get_cell_bg_color(cell, theme_map=None):
 def _parse_table_legend(slide, slide_w, phase, theme_map=None):
     """Parse legend from PPT table (2-col: [bg_color | section_name]).
 
+    Processes ALL 2-column tables on the slide (not just the first one),
+    merging legend entries across tables.
+
     Returns (legend_dict, diagnostics, boundary, side) or None if no table found.
     """
-    table_shape = None
+    table_shapes = []
     for shape in _iter_slide_shapes(slide):
         if hasattr(shape, 'has_table') and shape.has_table and len(shape.table.columns) == 2:
-            table_shape = shape
-            break
+            table_shapes.append(shape)
 
-    if table_shape is None:
+    if not table_shapes:
         return None
 
-    table = table_shape.table
     mapping = {}
     entries_diag = []
+    tables_diag = []  # Per-table diagnostics
+    total_rows = 0
 
-    for row in table.rows:
-        cell_0 = row.cells[0]
-        cell_1 = row.cells[1]
+    for table_shape in table_shapes:
+        table = table_shape.table
+        table_entry_count = 0
+        total_rows += len(table.rows)
 
-        # Get background color from first cell
-        color_hex = _get_cell_bg_color(cell_0, theme_map)
-        if not color_hex or color_hex == "FFFFFF":
-            continue
+        for row in table.rows:
+            cell_0 = row.cells[0]
+            cell_1 = row.cells[1]
 
-        # Get section text from second cell
-        text = cell_1.text.strip()
-        if not text:
-            continue
+            # Get background color from first cell
+            color_hex = _get_cell_bg_color(cell_0, theme_map)
+            if not color_hex or color_hex == "FFFFFF":
+                continue
 
-        # Parse using existing label parser
-        etype, section, spec, prefix, is_diaphragm = parse_legend_label(text)
+            # Get section text from second cell
+            text = cell_1.text.strip()
+            if not text:
+                continue
 
-        # PPT-specific: handle column section labels
-        if etype == "unknown":
-            cm = _COLUMN_SECTION_RE.search(text)
-            if cm:
-                w_val, d_val = int(cm.group(1)), int(cm.group(2))
-                lo, hi = sorted([w_val, d_val])
-                etype = "column"
-                section = f"C{lo}X{hi}"
-                spec = 1
-                prefix = "C"
-                is_diaphragm = False
+            # Parse using existing label parser
+            etype, section, spec, prefix, is_diaphragm = parse_legend_label(text)
 
-        if etype == "unknown":
-            continue
+            # PPT-specific: handle column section labels
+            if etype == "unknown":
+                cm = _COLUMN_SECTION_RE.search(text)
+                if cm:
+                    w_val, d_val = int(cm.group(1)), int(cm.group(2))
+                    lo, hi = sorted([w_val, d_val])
+                    etype = "column"
+                    section = f"C{lo}X{hi}"
+                    spec = 1
+                    prefix = "C"
+                    is_diaphragm = False
 
-        # Phase filter
-        if phase == "phase1" and etype == "small_beam":
-            continue
-        if phase == "phase2" and etype not in ("small_beam",):
-            continue
+            if etype == "unknown":
+                continue
 
-        rgb = [int(color_hex[i:i+2], 16) for i in (0, 2, 4)]
-        entry = LegendEntry(
-            element_type=etype,
-            section=section,
-            color_name=color_hex,
-            color_rgb=rgb,
-            specificity=spec,
-            is_diaphragm=is_diaphragm,
-            prefix=prefix,
-            label=text,
-        )
-        mapping.setdefault(color_hex, []).append(entry)
-        entries_diag.append({
-            "label": text,
-            "color": color_hex,
-            "type": etype,
+            # Phase filter
+            if phase == "phase1" and etype == "small_beam":
+                continue
+            if phase == "phase2" and etype not in ("small_beam",):
+                continue
+
+            rgb = [int(color_hex[i:i+2], 16) for i in (0, 2, 4)]
+            entry = LegendEntry(
+                element_type=etype,
+                section=section,
+                color_name=color_hex,
+                color_rgb=rgb,
+                specificity=spec,
+                is_diaphragm=is_diaphragm,
+                prefix=prefix,
+                label=text,
+            )
+            mapping.setdefault(color_hex, []).append(entry)
+            entries_diag.append({
+                "label": text,
+                "color": color_hex,
+                "type": etype,
+            })
+            table_entry_count += 1
+
+        tables_diag.append({
+            "rows": len(table.rows),
+            "entries": table_entry_count,
+            "left": table_shape.left,
+            "width": table_shape.width,
         })
 
     if not mapping:
@@ -1379,19 +1395,34 @@ def _parse_table_legend(slide, slide_w, phase, theme_map=None):
     for c in mapping:
         mapping[c].sort(key=lambda e: -e.specificity)
 
-    # Determine legend side from table position
-    table_cx = table_shape.left + table_shape.width // 2
+    # Determine legend side from table positions
+    # Use majority vote for side; boundary from outermost extent
     slide_cx = slide_w // 2
-    if table_cx < slide_cx:
+    left_count = 0
+    right_count = 0
+    for ts in table_shapes:
+        tcx = ts.left + ts.width // 2
+        if tcx < slide_cx:
+            left_count += 1
+        else:
+            right_count += 1
+
+    if left_count >= right_count:
         side = "left"
-        boundary = table_shape.left + table_shape.width + 200000
+        # Outermost right edge across all tables
+        max_right = max(ts.left + ts.width for ts in table_shapes)
+        boundary = max_right + 200000
     else:
         side = "right"
-        boundary = table_shape.left - 200000
+        # Outermost left edge across all tables
+        min_left = min(ts.left for ts in table_shapes)
+        boundary = min_left - 200000
 
     diagnostics = {
         "legend_source": "table",
-        "table_rows": len(table.rows),
+        "table_count": len(table_shapes),
+        "table_rows": total_rows,
+        "tables": tables_diag,
         "pass1_labels": entries_diag,
         "pass2_labels": [],
         "pass3_orphans": [],
@@ -1651,7 +1682,8 @@ def _validate_legend(slide, slide_num, legend, slide_w, slide_h,
     """
     # Count drawing-area shapes by color
     shape_colors = {}  # color_hex -> count
-    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)):
+    _val_types = (MSO_SHAPE_TYPE.FREEFORM, MSO_SHAPE_TYPE.AUTO_SHAPE, MSO_SHAPE_TYPE.LINE)
+    for shape in _iter_slide_shapes(slide, _val_types):
         cx = shape.left + shape.width // 2
         # Skip legend region shapes
         if legend_side == "left" and cx < legend_boundary:
@@ -1665,7 +1697,7 @@ def _validate_legend(slide, slide_num, legend, slide_w, slide_h,
 
         line_color = _get_shape_color(shape, "line", theme_map)
         fill_color = _get_shape_color(shape, "fill", theme_map)
-        color = line_color or fill_color
+        color = fill_color or line_color
         if color and color != "FFFFFF":
             shape_colors[color] = shape_colors.get(color, 0) + 1
 
@@ -1823,12 +1855,16 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
     elements = []
     slide_area = slide_w * slide_h
 
-    # Collect all freeforms for column dedup
+    # Collect all drawing shapes for column/beam dedup
+    # Include FREEFORM, AUTO_SHAPE (rectangles), and LINE (beams)
     filled_rects = []
     outline_rects = []
     lines = []
 
-    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)):
+    _shape_types = (MSO_SHAPE_TYPE.FREEFORM,
+                    MSO_SHAPE_TYPE.AUTO_SHAPE,
+                    MSO_SHAPE_TYPE.LINE)
+    for shape in _iter_slide_shapes(slide, _shape_types):
         w, h = shape.width, shape.height
         left, top = shape.left, shape.top
 
@@ -1858,10 +1894,14 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
             })
         elif w > 0 and h > 0 and w < 500000 and h < 500000:
             # Small rectangle (column candidate)
-            # Only accept 4-vertex freeforms (true rectangles)
-            vc = _get_freeform_vertex_count(shape)
-            if vc is not None and vc not in COLUMN_REQUIRED_VERTICES:
-                continue
+            # Only accept 4-vertex freeforms (true rectangles);
+            # AUTO_SHAPE rectangles are inherently rectangular (skip vertex check)
+            raw = shape._shape if isinstance(shape, _AbsShape) else shape
+            is_freeform = getattr(raw, 'shape_type', None) == MSO_SHAPE_TYPE.FREEFORM
+            if is_freeform:
+                vc = _get_freeform_vertex_count(shape)
+                if vc is not None and vc not in COLUMN_REQUIRED_VERTICES:
+                    continue
             if fill_color:
                 filled_rects.append({
                     "left": left, "top": top, "width": w, "height": h,
@@ -2064,7 +2104,11 @@ def list_slides(prs):
                     if val not in floor_texts:
                         floor_texts.append(val)
         floor_info = f" (floors: {', '.join(floor_texts)})" if floor_texts else ""
-        print(f"  Slide {i+1}: {', '.join(parts)}{floor_info}")
+        # Count 2-column legend tables
+        n_tables = sum(1 for s in _iter_slide_shapes(slide)
+                       if hasattr(s, 'has_table') and s.has_table and len(s.table.columns) == 2)
+        table_info = f" [{n_tables} legend tables]" if n_tables > 1 else ""
+        print(f"  Slide {i+1}: {', '.join(parts)}{floor_info}{table_info}")
     print()
 
 
@@ -2259,7 +2303,10 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
             warnings.append(f"Slide {sn}: no legend detected, skipping")
             print(f"  WARNING: no legend detected")
             continue
-        print(f"  Legend ({legend_source}): {len(legend)} colors → "
+        table_count = legend_diag.get("table_count", 1) if legend_source == "table" else 0
+        source_label = (f"{legend_source}, {table_count} tables" if table_count > 1
+                        else legend_source)
+        print(f"  Legend ({source_label}): {len(legend)} colors → "
               f"{sum(len(v) for v in legend.values())} entries")
         for color, entries in legend.items():
             for e in entries:
@@ -2277,7 +2324,8 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
         if legend_source == "table":
             # Collect all unique shape colors in the drawing area
             shape_fill_colors = set()
-            for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)):
+            _remap_types = (MSO_SHAPE_TYPE.FREEFORM, MSO_SHAPE_TYPE.AUTO_SHAPE, MSO_SHAPE_TYPE.LINE)
+            for shape in _iter_slide_shapes(slide, _remap_types):
                 cx = shape.left + shape.width // 2
                 if legend_side == "left" and cx < legend_boundary:
                     continue
@@ -2338,22 +2386,26 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
 
         # Per-slide JSON output (when --slides-info-dir is specified)
         if slides_info_dir:
-            slide_output = {
-                "_metadata": {
-                    "slide_num": sn,
-                    "floors": list(floors),
-                    "floor_label": floor_label,
-                    "scale": scale_info,
-                    "legend": {
-                        color: [{"element_type": e.element_type,
-                                 "section": e.section,
-                                 "label": e.label}
-                                for e in entries]
-                        for color, entries in legend.items()
-                    },
-                    "legend_validation": lv,
-                    "stats": stats,
+            slide_meta = {
+                "slide_num": sn,
+                "floors": list(floors),
+                "floor_label": floor_label,
+                "scale": scale_info,
+                "legend_source": legend_source,
+                "legend": {
+                    color: [{"element_type": e.element_type,
+                             "section": e.section,
+                             "label": e.label}
+                            for e in entries]
+                    for color, entries in legend.items()
                 },
+                "legend_validation": lv,
+                "stats": stats,
+            }
+            if legend_source == "table" and legend_diag.get("table_count", 1) > 1:
+                slide_meta["table_count"] = legend_diag["table_count"]
+            slide_output = {
+                "_metadata": slide_meta,
                 "columns": [e for e in slide_elems if e["element_type"] == "column"],
                 "beams": [e for e in slide_elems if e["element_type"] == "beam"],
                 "walls": [e for e in slide_elems if e["element_type"] == "wall"],

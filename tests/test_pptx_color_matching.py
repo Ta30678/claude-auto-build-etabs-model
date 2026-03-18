@@ -508,6 +508,150 @@ class TestParseTableLegend:
         result = _parse_table_legend(slide, 9144000, "all")
         assert result is None
 
+    # --- Multi-table tests ---
+
+    def _make_mock_slide_with_tables(self, tables_data, slide_w=9144000):
+        """Create mock slide with multiple 2-column tables.
+
+        tables_data: list of (rows_data, left, width) tuples
+          rows_data: list of (bg_color_hex_or_None, text)
+          left: table left position in EMU
+          width: table width in EMU
+        """
+        from pptx.enum.dml import MSO_COLOR_TYPE
+        from pptx.dml.color import RGBColor
+
+        shapes = []
+        # Add a non-table shape first
+        other_shape = MagicMock()
+        other_shape.has_table = False
+        shapes.append(other_shape)
+
+        for rows_data, left, width in tables_data:
+            mock_table = MagicMock()
+            mock_table.columns = [MagicMock(), MagicMock()]
+
+            mock_rows = []
+            for bg_hex, text in rows_data:
+                row = MagicMock()
+                cell_0 = MagicMock()
+                cell_1 = MagicMock()
+
+                if bg_hex:
+                    cell_0.fill.type = 1
+                    cell_0.fill.fore_color.type = MSO_COLOR_TYPE.RGB
+                    r = int(bg_hex[0:2], 16)
+                    g = int(bg_hex[2:4], 16)
+                    b = int(bg_hex[4:6], 16)
+                    cell_0.fill.fore_color.rgb = RGBColor(r, g, b)
+                else:
+                    cell_0.fill.type = None
+
+                cell_1.text = text
+                row.cells = [cell_0, cell_1]
+                mock_rows.append(row)
+
+            mock_table.rows = mock_rows
+
+            table_shape = MagicMock()
+            table_shape.has_table = True
+            table_shape.table = mock_table
+            table_shape.left = left
+            table_shape.width = width
+            table_shape.top = 500000
+            table_shape.height = 2000000
+            shapes.append(table_shape)
+
+        mock_slide = MagicMock()
+        mock_slide.shapes = shapes
+        return mock_slide
+
+    def test_two_tables_merged(self):
+        """Two tables with different entries should merge all entries."""
+        table1_rows = [("FF0000", "B55X80"), ("00FF00", "C90X90")]
+        table2_rows = [("0000FF", "SB30X60"), ("FFFF00", "25cm壁")]
+        slide = self._make_mock_slide_with_tables([
+            (table1_rows, 100000, 1500000),
+            (table2_rows, 100000, 1500000),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        legend, diag, _, _ = result
+        assert len(legend) == 4
+        assert legend["FF0000"][0].element_type == "beam"
+        assert legend["00FF00"][0].element_type == "column"
+        assert legend["0000FF"][0].element_type == "small_beam"
+        assert legend["FFFF00"][0].element_type == "wall"
+
+    def test_two_tables_boundary(self):
+        """Both tables on left side — boundary from outermost right edge."""
+        table1_rows = [("FF0000", "B55X80")]
+        table2_rows = [("00FF00", "C90X90")]
+        # Table 1: left=100000, width=1500000 → right=1600000
+        # Table 2: left=200000, width=2000000 → right=2200000
+        slide = self._make_mock_slide_with_tables([
+            (table1_rows, 100000, 1500000),
+            (table2_rows, 200000, 2000000),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        _, _, boundary, side = result
+        assert side == "left"
+        # Max right edge = 2200000 + 200000 margin
+        assert boundary == 2400000
+
+    def test_two_tables_diagnostics(self):
+        """Diagnostics should include table_count and per-table breakdown."""
+        table1_rows = [("FF0000", "B55X80"), ("00FF00", "C90X90")]
+        table2_rows = [("0000FF", "SB30X60")]
+        slide = self._make_mock_slide_with_tables([
+            (table1_rows, 100000, 1500000),
+            (table2_rows, 100000, 1500000),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        _, diag, _, _ = result
+        assert diag["table_count"] == 2
+        assert len(diag["tables"]) == 2
+        assert diag["tables"][0]["rows"] == 2
+        assert diag["tables"][0]["entries"] == 2
+        assert diag["tables"][1]["rows"] == 1
+        assert diag["tables"][1]["entries"] == 1
+        # Backward compat: table_rows = sum of all rows
+        assert diag["table_rows"] == 3
+
+    def test_single_table_backward_compat(self):
+        """Single table should have table_count=1 and tables with one entry."""
+        slide = self._make_mock_slide_with_table([
+            ("FF0000", "B55X80"),
+            ("00FF00", "B40X70"),
+        ])
+        result = _parse_table_legend(slide, 9144000, "all")
+        assert result is not None
+        legend, diag, boundary, side = result
+        assert diag["table_count"] == 1
+        assert len(diag["tables"]) == 1
+        assert diag["table_rows"] == 2
+        # Existing assertions still hold
+        assert "FF0000" in legend
+        assert legend["FF0000"][0].section == "B55X80"
+        assert side == "left"
+
+    def test_phase_filter_across_tables(self):
+        """Phase 1 should filter SB from second table."""
+        table1_rows = [("FF0000", "B55X80")]
+        table2_rows = [("0000FF", "SB30X60"), ("00FF00", "C90X90")]
+        slide = self._make_mock_slide_with_tables([
+            (table1_rows, 100000, 1500000),
+            (table2_rows, 100000, 1500000),
+        ])
+        result = _parse_table_legend(slide, 9144000, "phase1")
+        assert result is not None
+        legend, _, _, _ = result
+        assert "FF0000" in legend  # beam from table 1
+        assert "00FF00" in legend  # column from table 2
+        assert "0000FF" not in legend  # SB filtered out
+
 
 class TestGeometryAwareFuzzyMatch:
     """Test geometry-aware matching to prevent cross-type mismatches."""
