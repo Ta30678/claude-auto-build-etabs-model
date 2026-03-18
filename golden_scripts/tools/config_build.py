@@ -330,14 +330,16 @@ def replicate_rooftop(columns, beams, walls, stories, core_grid_area,
     beam_floors = r2f_plus
 
     for col in columns:
-        if _in_core(col["grid_x"], col["grid_y"], core_grid_area):
+        if (top_floor in col["floors"] or "R1F" in col["floors"]) and \
+                _in_core(col["grid_x"], col["grid_y"], core_grid_area):
             existing = set(col["floors"])
             for f in col_wall_floors:
                 if f not in existing:
                     col["floors"].append(f)
 
     for wall in walls:
-        if (_in_core(wall["x1"], wall["y1"], core_grid_area) and
+        if (top_floor in wall["floors"] or "R1F" in wall["floors"]) and \
+                (_in_core(wall["x1"], wall["y1"], core_grid_area) and
                 _in_core(wall["x2"], wall["y2"], core_grid_area)):
             existing = set(wall["floors"])
             for f in col_wall_floors:
@@ -345,7 +347,8 @@ def replicate_rooftop(columns, beams, walls, stories, core_grid_area,
                     wall["floors"].append(f)
 
     for beam in beams:
-        if (_in_core(beam["x1"], beam["y1"], core_grid_area) and
+        if (top_floor in beam["floors"] or "R1F" in beam["floors"]) and \
+                (_in_core(beam["x1"], beam["y1"], core_grid_area) and
                 _in_core(beam["x2"], beam["y2"], core_grid_area)):
             existing = set(beam["floors"])
             for f in beam_floors:
@@ -355,7 +358,8 @@ def replicate_rooftop(columns, beams, walls, stories, core_grid_area,
     if slabs:
         for slab in slabs:
             corners = slab.get("corners", [])
-            if corners and all(
+            if (top_floor in slab["floors"] or "R1F" in slab["floors"]) and \
+                    corners and all(
                     _in_core(c[0], c[1], core_grid_area) for c in corners):
                 existing = set(slab["floors"])
                 for f in beam_floors:

@@ -72,6 +72,13 @@ _SECTION_RE = re.compile(
 # Regex for wall thickness like "90CM 連續壁" or "25cm壁"
 _WALL_CM_RE = re.compile(r"(\d+)\s*[cC][mM]\s*(?:連續壁|壁)")
 
+# Slab section: S15, FS15, FS100 (lookbehind prevents matching FSB, SB, BS, etc.)
+_SLAB_SECTION_RE = re.compile(r"(?<![A-Za-z])(FS|S)(\d+)", re.IGNORECASE)
+
+# Slab thickness notation: t=15cm, t =15cm, T=15CM
+_SLAB_THICKNESS_RE = re.compile(r"[tT]\s*=?\s*(\d+)\s*(?:cm|CM)?")
+
+
 # Floor label patterns for --scan-floors / --auto-floors
 # Word boundaries prevent false positives (e.g. C490F should NOT match)
 _FLOOR_WB_BEFORE = r"(?<![A-EG-QS-Z\d])"  # Not preceded by letters (except F,R) or digits
@@ -86,7 +93,7 @@ FLOOR_LABEL_RE = re.compile(
 @dataclass
 class LegendEntry:
     """A legend item mapping a color to a structural element type."""
-    element_type: str           # "beam", "small_beam", "column", "wall"
+    element_type: str           # "beam", "small_beam", "column", "wall", "slab"
     section: Optional[str]      # e.g. "B55X80", "SB30X60", or None (generic)
     color_name: str
     color_rgb: list
@@ -425,6 +432,27 @@ def parse_legend_label(label: str):
     if m:
         t = int(m.group(1))
         return "wall", f"W{t}", 1, "W", True
+
+    # 2.5) Slab section: S15, FS15
+    m = _SLAB_SECTION_RE.search(lab)
+    if m:
+        prefix = m.group(1).upper()
+        thickness = int(m.group(2))
+        return "slab", f"{prefix}{thickness}", 1, prefix, False
+
+    # 2.6) Slab thickness notation: t=15cm
+    m = _SLAB_THICKNESS_RE.search(lab)
+    if m:
+        thickness = int(m.group(1))
+        return "slab", f"S{thickness}", 0, "S", False
+
+    # 2.7) Chinese slab keywords: 版, 板
+    if "版" in lab or "板" in lab:
+        return "slab", None, 0, "S", False
+
+    # 2.8) Standalone 's' or 't'
+    if lab.lower() in ("s", "t"):
+        return "slab", None, 0, "S", False
 
     # 3) Generic Chinese keywords
     if "連續壁" in lab:
@@ -1753,7 +1781,7 @@ def _resolve_pptx_legend(color_hex, geom_type, legend, tolerance=15):
     """
     compat = {
         "line": ("beam", "small_beam", "wall"),
-        "rectangle": ("column",),
+        "rectangle": ("column", "slab"),
     }
     compatible_types = compat.get(geom_type, ())
 

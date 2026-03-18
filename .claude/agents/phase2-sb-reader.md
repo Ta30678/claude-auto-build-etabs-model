@@ -1,7 +1,7 @@
 ---
 name: phase2-sb-reader
 description: "Phase 2 小梁驗證專家 (PHASE2-SB-READER)。Per-slide 校正+驗證小梁座標連接性和合理性。用於 /bts-sb。"
-tools: Read, Glob, Grep, Write, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput
+tools: Bash, Read, Glob, Grep, Write, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput
 maxTurns: 50
 ---
 
