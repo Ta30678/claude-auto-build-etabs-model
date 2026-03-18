@@ -59,14 +59,104 @@ from golden_scripts.tools.beam_validate import (
     _find_nearest_grid_value,
     segment_intersection,
     split_beam,
-    snap_beam_point,
     _grid_label_at,
 )
 from golden_scripts.constants import parse_frame_section
 
 
 # ---------------------------------------------------------------------------
-# 1. Target construction
+# 1. Ray-based snap for SB endpoints
+# ---------------------------------------------------------------------------
+
+def snap_sb_by_ray(px, py, ray_dx, ray_dy, floors, targets, tolerance,
+                   grid_data=None):
+    """Snap SB endpoint by extending ray along SB direction.
+
+    Creates a search segment of length 2*tolerance centered on (px, py)
+    along the SB direction (ray_dx, ray_dy), then finds intersections
+    with target segments. For point targets, checks perpendicular distance
+    to ray and projects onto the ray.
+
+    Parameters
+    ----------
+    px, py : float
+        SB endpoint coordinates.
+    ray_dx, ray_dy : float
+        SB direction unit vector.
+    floors : list[str]
+        Floors the SB exists on.
+    targets : list[SnapTarget]
+        Available snap targets.
+    tolerance : float
+        Maximum extension distance along ray AND max perpendicular distance
+        for point targets.
+    grid_data : dict or None
+        Grid data for generating target labels (optional).
+
+    Returns
+    -------
+    tuple or None
+        (snapped_x, snapped_y, distance, target_info_str) or None if no
+        target found along the ray within tolerance.
+    """
+    best_nx, best_ny, best_dist = None, None, tolerance + 1
+    best_info = None
+
+    # Search segment: extend tolerance in both directions from endpoint
+    sx1 = px - ray_dx * tolerance
+    sy1 = py - ray_dy * tolerance
+    sx2 = px + ray_dx * tolerance
+    sy2 = py + ray_dy * tolerance
+
+    for t in targets:
+        # Floor overlap check (skip for grid targets with floors=[])
+        if t.floors:
+            if not floors_overlap(floors, t.floors):
+                continue
+
+        if t.kind == "segment":
+            # Find intersection of search ray segment with target segment
+            result = segment_intersection(
+                sx1, sy1, sx2, sy2, t.x1, t.y1, t.x2, t.y2)
+            if result is None:
+                continue
+            ix, iy, t_ray, t_seg = result
+            d = math.hypot(ix - px, iy - py)
+            if d < best_dist:
+                best_nx = round(ix, 2)
+                best_ny = round(iy, 2)
+                best_dist = d
+                best_info = f"segment ({t.x1},{t.y1})-({t.x2},{t.y2})"
+
+        elif t.kind == "point":
+            # Project point onto ray, check perpendicular distance
+            dot = (t.x1 - px) * ray_dx + (t.y1 - py) * ray_dy
+            if abs(dot) > tolerance:
+                continue  # too far along ray
+            proj_x = px + dot * ray_dx
+            proj_y = py + dot * ray_dy
+            perp_dist = math.hypot(t.x1 - proj_x, t.y1 - proj_y)
+            if perp_dist > tolerance:
+                continue  # too far off-axis
+            d = abs(dot)  # distance along ray
+            if d < best_dist:
+                best_nx = round(proj_x, 2)
+                best_ny = round(proj_y, 2)
+                best_dist = d
+                # Identify target type
+                if t.floors:
+                    best_info = f"column ({t.x1},{t.y1})"
+                else:
+                    label = _grid_label_at(t.x1, t.y1, grid_data) if grid_data else None
+                    best_info = f"grid_intersection {label or f'({t.x1},{t.y1})'}"
+
+    if best_nx is not None:
+        return best_nx, best_ny, round(best_dist, 4), best_info
+    return None
+
+
+# ---------------------------------------------------------------------------
+# 2. Target construction
 # ---------------------------------------------------------------------------
 
 def build_sb_targets(config, grid_data):
@@ -531,23 +621,43 @@ def cluster_free_endpoints(small_beams, snapped_state, cluster_tolerance=0.30):
         cx = round(cx, 2)
         cy = round(cy, 2)
 
-        # 4. Move all members to centroid and mark snapped
+        # 4. Move each member to centroid PROJECTED onto its SB axis
         member_details = []
         for m in members:
             visited[m] = True
             sb_idx, ep_idx, ox, oy, fl = free_eps[m]
-            d = math.hypot(ox - cx, oy - cy)
-            if ep_idx == 0:
-                small_beams[sb_idx]["x1"] = cx
-                small_beams[sb_idx]["y1"] = cy
+            sb = small_beams[sb_idx]
+
+            # SB direction from snapped endpoint to free endpoint
+            if ep_idx == 0:  # free = start, snapped = end
+                sx, sy = sb["x2"], sb["y2"]
+            else:            # free = end, snapped = start
+                sx, sy = sb["x1"], sb["y1"]
+
+            dx_sb = ox - sx
+            dy_sb = oy - sy
+            length = math.hypot(dx_sb, dy_sb)
+            if length > 1e-6:
+                dx_sb /= length
+                dy_sb /= length
+                # Project centroid onto SB direction from snapped endpoint
+                dot = (cx - sx) * dx_sb + (cy - sy) * dy_sb
+                proj_x = round(sx + dot * dx_sb, 2)
+                proj_y = round(sy + dot * dy_sb, 2)
             else:
-                small_beams[sb_idx]["x2"] = cx
-                small_beams[sb_idx]["y2"] = cy
+                proj_x, proj_y = cx, cy
+
+            d = math.hypot(ox - proj_x, oy - proj_y)
+            if ep_idx == 0:
+                sb["x1"], sb["y1"] = proj_x, proj_y
+            else:
+                sb["x2"], sb["y2"] = proj_x, proj_y
             snapped_state[sb_idx][ep_idx] = True
             member_details.append({
                 "sb_index": sb_idx,
                 "endpoint": "start" if ep_idx == 0 else "end",
                 "original_coord": [ox, oy],
+                "projected_coord": [proj_x, proj_y],
                 "snap_distance": round(d, 4),
             })
 
@@ -669,6 +779,15 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
         for i in range(n):
             sb = small_beams[i]
             floors = sb.get("floors", [])
+            # Compute SB direction unit vector
+            sb_dx = sb["x2"] - sb["x1"]
+            sb_dy = sb["y2"] - sb["y1"]
+            sb_len = math.hypot(sb_dx, sb_dy)
+            if sb_len < 1e-6:
+                continue  # zero-length SB, skip
+            sb_dx /= sb_len
+            sb_dy /= sb_len
+
             for ep in range(2):
                 if snapped_state[i][ep]:
                     continue
@@ -677,8 +796,9 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
                 else:
                     px, py = sb["x2"], sb["y2"]
 
-                result = snap_beam_point(px, py, floors, targets,
-                                         tolerance, grid_data)
+                result = snap_sb_by_ray(px, py, sb_dx, sb_dy,
+                                        floors, targets, tolerance,
+                                        grid_data)
                 if result:
                     nx, ny, d, target_info = result
 

@@ -495,8 +495,8 @@ def split_beam(beam, support_points):
     for i in range(len(points) - 1):
         p1 = points[i]
         p2 = points[i + 1]
-        # Skip very short sub-beams (< 0.1m)
-        if math.hypot(p2[0] - p1[0], p2[1] - p1[1]) < 0.1:
+        # Skip very short sub-beams (< 0.3m)
+        if math.hypot(p2[0] - p1[0], p2[1] - p1[1]) < 0.3:
             continue
         sub = dict(extra)
         sub["x1"] = p1[0]

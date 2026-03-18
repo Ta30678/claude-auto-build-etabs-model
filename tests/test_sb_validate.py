@@ -16,7 +16,9 @@ from golden_scripts.tools.sb_validate import (
     find_sb_intermediate_supports,
     split_all_sbs,
     cluster_free_endpoints,
+    snap_sb_by_ray,
 )
+from golden_scripts.tools.config_snap import SnapTarget
 from golden_scripts.tools.beam_validate import split_beam
 
 
@@ -141,6 +143,191 @@ class TestBuildSbTargets:
             t.x1 == 0.0 and t.y1 == 0.0 and t.x2 == 8.50 and t.y2 == 0.0
             for t in seg_targets)
         assert beam_match
+
+
+# ---------------------------------------------------------------------------
+# TestSnapSbByRay
+# ---------------------------------------------------------------------------
+
+class TestSnapSbByRay:
+
+    def test_horizontal_ray_hits_vertical_beam(self):
+        """Horizontal SB ray intersects a vertical beam segment."""
+        targets = [
+            SnapTarget("segment", 8.5, 0.0, 8.5, 6.0, ["1F"]),
+        ]
+        # Horizontal ray from (4.0, 3.0) direction (1, 0)
+        result = snap_sb_by_ray(4.0, 3.0, 1.0, 0.0, ["1F"], targets, 5.0)
+        assert result is not None
+        nx, ny, d, info = result
+        assert abs(nx - 8.5) < 0.01
+        assert abs(ny - 3.0) < 0.01
+        assert abs(d - 4.5) < 0.01
+
+    def test_vertical_ray_hits_horizontal_beam(self):
+        """Vertical SB ray intersects a horizontal beam segment."""
+        targets = [
+            SnapTarget("segment", 0.0, 6.0, 8.5, 6.0, ["1F"]),
+        ]
+        # Vertical ray from (4.0, 3.0) direction (0, 1)
+        result = snap_sb_by_ray(4.0, 3.0, 0.0, 1.0, ["1F"], targets, 5.0)
+        assert result is not None
+        nx, ny, d, info = result
+        assert abs(nx - 4.0) < 0.01
+        assert abs(ny - 6.0) < 0.01
+        assert abs(d - 3.0) < 0.01
+
+    def test_ray_beyond_tolerance_no_snap(self):
+        """Ray intersection beyond tolerance returns None."""
+        targets = [
+            SnapTarget("segment", 8.5, 0.0, 8.5, 6.0, ["1F"]),
+        ]
+        # Horizontal ray from (4.0, 3.0), tolerance only 2.0 → beam at 8.5 is 4.5m away
+        result = snap_sb_by_ray(4.0, 3.0, 1.0, 0.0, ["1F"], targets, 2.0)
+        assert result is None
+
+    def test_parallel_target_no_snap(self):
+        """Ray parallel to target segment produces no intersection."""
+        targets = [
+            # Horizontal beam, same direction as ray
+            SnapTarget("segment", 0.0, 3.0, 8.5, 3.0, ["1F"]),
+        ]
+        # Horizontal ray at Y=3.0 direction (1, 0) — parallel to target
+        result = snap_sb_by_ray(4.0, 3.0, 1.0, 0.0, ["1F"], targets, 5.0)
+        assert result is None
+
+    def test_point_target_projection(self):
+        """Point target on ray line projects correctly."""
+        targets = [
+            SnapTarget("point", 8.5, 3.0, 8.5, 3.0, ["1F"]),
+        ]
+        # Horizontal ray from (4.0, 3.0) direction (1, 0) — column at (8.5, 3.0) is on-axis
+        result = snap_sb_by_ray(4.0, 3.0, 1.0, 0.0, ["1F"], targets, 5.0)
+        assert result is not None
+        nx, ny, d, info = result
+        assert abs(nx - 8.5) < 0.01
+        assert abs(ny - 3.0) < 0.01
+        assert abs(d - 4.5) < 0.01
+        assert "column" in info
+
+    def test_point_target_off_axis_within_tolerance(self):
+        """Point target slightly off-axis but within tolerance snaps to projection."""
+        targets = [
+            # Column at (8.5, 3.1) — 0.1m off the horizontal ray at Y=3.0
+            SnapTarget("point", 8.5, 3.1, 8.5, 3.1, ["1F"]),
+        ]
+        result = snap_sb_by_ray(4.0, 3.0, 1.0, 0.0, ["1F"], targets, 5.0)
+        assert result is not None
+        nx, ny, d, info = result
+        # Projection onto ray: (8.5, 3.0), NOT the column position
+        assert abs(nx - 8.5) < 0.01
+        assert abs(ny - 3.0) < 0.01
+
+    def test_point_target_off_axis_beyond_tolerance(self):
+        """Point target far off-axis returns None."""
+        targets = [
+            SnapTarget("point", 8.5, 5.0, 8.5, 5.0, ["1F"]),
+        ]
+        # Column 2.0m off the horizontal ray → perp_dist > tolerance=0.5
+        result = snap_sb_by_ray(4.0, 3.0, 1.0, 0.0, ["1F"], targets, 0.5)
+        assert result is None
+
+    def test_multiple_intersections_picks_nearest(self):
+        """With multiple intersecting targets, picks the nearest one."""
+        targets = [
+            SnapTarget("segment", 8.5, 0.0, 8.5, 6.0, ["1F"]),  # at X=8.5
+            SnapTarget("segment", 4.5, 0.0, 4.5, 6.0, ["1F"]),  # at X=4.5
+        ]
+        # Horizontal ray from (2.0, 3.0) direction (1, 0)
+        result = snap_sb_by_ray(2.0, 3.0, 1.0, 0.0, ["1F"], targets, 10.0)
+        assert result is not None
+        nx, ny, d, info = result
+        # Should pick X=4.5 (nearer) not X=8.5
+        assert abs(nx - 4.5) < 0.01
+        assert abs(d - 2.5) < 0.01
+
+    def test_grid_point_target_label(self):
+        """Grid intersection point target gets grid label."""
+        grid_data = {
+            "x": [{"label": "B", "coordinate": 8.5}],
+            "y": [{"label": "2", "coordinate": 3.0}],
+        }
+        targets = [
+            SnapTarget("point", 8.5, 3.0, 8.5, 3.0, []),  # grid target (floors=[])
+        ]
+        result = snap_sb_by_ray(4.0, 3.0, 1.0, 0.0, ["1F"], targets, 5.0,
+                                grid_data=grid_data)
+        assert result is not None
+        _, _, _, info = result
+        assert "grid_intersection" in info
+        assert "B/2" in info
+
+    def test_floor_mismatch_no_snap(self):
+        """Target with non-overlapping floors is skipped."""
+        targets = [
+            SnapTarget("segment", 8.5, 0.0, 8.5, 6.0, ["3F"]),
+        ]
+        result = snap_sb_by_ray(4.0, 3.0, 1.0, 0.0, ["1F"], targets, 5.0)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# TestClusterProjection
+# ---------------------------------------------------------------------------
+
+class TestClusterProjection:
+
+    def test_horizontal_sb_projects_centroid_to_axis(self):
+        """Horizontal SB's free end moves along X-axis only (Y unchanged)."""
+        small_beams = [
+            # Horizontal SB: start snapped at (0, 3), free end at (4.25, 3.0)
+            {"x1": 0.0, "y1": 3.0, "x2": 4.25, "y2": 3.0,
+             "section": "SB25X50", "floors": ["1F"]},
+            # Horizontal SB: start snapped at (8.5, 3), free end at (4.27, 3.0)
+            {"x1": 8.5, "y1": 3.0, "x2": 4.27, "y2": 3.0,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        assert len(corrections) == 1
+        # Both endpoints should stay on Y=3.0 (projected onto their horizontal axis)
+        assert small_beams[0]["y2"] == 3.0
+        assert small_beams[1]["y2"] == 3.0
+
+    def test_vertical_sb_projects_centroid_to_axis(self):
+        """Vertical SB's free end moves along Y-axis only (X unchanged)."""
+        small_beams = [
+            # Vertical SB: start snapped at (4.0, 0.0), free end at (4.0, 3.02)
+            {"x1": 4.0, "y1": 0.0, "x2": 4.0, "y2": 3.02,
+             "section": "SB25X50", "floors": ["1F"]},
+            # Vertical SB: start snapped at (4.0, 6.0), free end at (4.0, 2.98)
+            {"x1": 4.0, "y1": 6.0, "x2": 4.0, "y2": 2.98,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        assert len(corrections) == 1
+        # Both endpoints should stay at X=4.0 (projected onto their vertical axis)
+        assert small_beams[0]["x2"] == 4.0
+        assert small_beams[1]["x2"] == 4.0
+
+    def test_mixed_direction_cluster_preserves_directions(self):
+        """Vertical + horizontal SBs cluster without changing each other's direction."""
+        small_beams = [
+            # Vertical SB: start snapped at (4.25, 0.0), free end at (4.25, 3.02)
+            {"x1": 4.25, "y1": 0.0, "x2": 4.25, "y2": 3.02,
+             "section": "SB25X50", "floors": ["1F"]},
+            # Horizontal SB: start snapped at (0.0, 3.0), free end at (4.27, 3.0)
+            {"x1": 0.0, "y1": 3.0, "x2": 4.27, "y2": 3.0,
+             "section": "SB25X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
+        assert len(corrections) == 1
+        # Vertical SB: X should stay at 4.25 (direction preserved)
+        assert small_beams[0]["x2"] == 4.25
+        # Horizontal SB: Y should stay at 3.0 (direction preserved)
+        assert small_beams[1]["y2"] == 3.0
 
 
 # ---------------------------------------------------------------------------
@@ -572,8 +759,8 @@ class TestPostValidation:
                          if "Zero-length" in w.get("message", "")]
         assert len(zero_warnings) == 1
 
-    def test_direction_change_warning(self):
-        """Horizontal SB whose end snaps to off-axis target → direction change warning."""
+    def test_no_direction_change_with_ray_snap(self):
+        """Horizontal SB with off-axis column: ray snap preserves direction (no warning)."""
         # Column offset in Y from the SB's horizontal line
         config = {
             "columns": [{"grid_x": 5.0, "grid_y": 3.5, "floors": ["1F"]}],
@@ -584,7 +771,7 @@ class TestPostValidation:
         sb_data = {
             "small_beams": [
                 # Horizontal SB: y1==y2==3.0, end at (5.0, 3.0) near column at (5.0, 3.5)
-                # End snaps to (5.0, 3.5), start stays unsnapped → direction changes
+                # Ray snap projects column onto SB axis → (5.0, 3.0), direction preserved
                 {"x1": 0.0, "y1": 3.0, "x2": 5.0, "y2": 3.0,
                  "section": "SB25X50", "floors": ["1F"]},
             ],
@@ -594,7 +781,8 @@ class TestPostValidation:
             no_split=True, no_angle_correct=True)
         dir_warnings = [w for w in report["warnings"]
                         if "Direction changed" in w.get("message", "")]
-        assert len(dir_warnings) >= 1
+        # With ray-based snap, direction should NOT change
+        assert len(dir_warnings) == 0
 
     def test_unsnapped_endpoint_warning(self, simple_grid_data):
         """SB endpoint far from any target → unsnapped warning."""
@@ -795,38 +983,36 @@ class TestIntegration:
 class TestClusterFreeEndpoints:
 
     def test_two_half_snapped_sbs_cluster(self):
-        """Two half-snapped SBs with free ends ~5cm apart converge to centroid."""
+        """Two half-snapped SBs with free ends ~5cm apart: each projected onto its own axis."""
         small_beams = [
-            # SB-A: vertical, start snapped, end free at (4.25, 3.02)
+            # SB-A: vertical, start snapped at (4.25, 0.0), end free at (4.25, 3.02)
             {"x1": 4.25, "y1": 0.0, "x2": 4.25, "y2": 3.02,
              "section": "SB25X50", "floors": ["1F"]},
-            # SB-B: horizontal, start snapped, end free at (4.27, 3.0)
+            # SB-B: horizontal, start snapped at (0.0, 3.0), end free at (4.27, 3.0)
             {"x1": 0.0, "y1": 3.0, "x2": 4.27, "y2": 3.0,
              "section": "SB25X50", "floors": ["1F"]},
         ]
         snapped_state = [[True, False], [True, False]]
         corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
         assert len(corrections) == 1
-        # Centroid of (4.25, 3.02) and (4.27, 3.0) ≈ (4.26, 3.01)
-        cx, cy = corrections[0]["centroid"]
-        assert abs(cx - 4.26) < 0.01
-        assert abs(cy - 3.01) < 0.01
-        # Both endpoints now at centroid
-        assert small_beams[0]["x2"] == cx
-        assert small_beams[0]["y2"] == cy
-        assert small_beams[1]["x2"] == cx
-        assert small_beams[1]["y2"] == cy
+        # SB-A is vertical → X stays at 4.25 (direction preserved)
+        assert small_beams[0]["x2"] == 4.25
+        # SB-B is horizontal → Y stays at 3.0 (direction preserved)
+        assert small_beams[1]["y2"] == 3.0
         # Both marked as snapped
         assert snapped_state[0][1] is True
         assert snapped_state[1][1] is True
 
     def test_three_endpoint_cluster(self):
-        """Three free endpoints within tolerance cluster to centroid."""
+        """Three free endpoints within tolerance cluster: each projected onto its own axis."""
         small_beams = [
+            # Diagonal SB from (0,0) to (5.00, 3.00)
             {"x1": 0.0, "y1": 0.0, "x2": 5.00, "y2": 3.00,
              "section": "SB25X50", "floors": ["1F"]},
+            # Diagonal SB from (10,0) to (5.02, 2.98)
             {"x1": 10.0, "y1": 0.0, "x2": 5.02, "y2": 2.98,
              "section": "SB25X50", "floors": ["1F"]},
+            # Vertical SB from (5.01, 6.0) to (5.01, 3.01)
             {"x1": 5.01, "y1": 6.0, "x2": 5.01, "y2": 3.01,
              "section": "SB25X50", "floors": ["1F"]},
         ]
@@ -834,11 +1020,10 @@ class TestClusterFreeEndpoints:
         corrections = cluster_free_endpoints(small_beams, snapped_state, 0.30)
         assert len(corrections) == 1
         assert corrections[0]["member_count"] == 3
-        # All three free ends at same centroid
-        cx, cy = corrections[0]["centroid"]
-        assert small_beams[0]["x2"] == cx
-        assert small_beams[1]["x2"] == cx
-        assert small_beams[2]["y2"] == cy
+        # All marked as snapped
+        assert all(snapped_state[i][1] for i in range(3))
+        # Vertical SB: X preserved at 5.01
+        assert small_beams[2]["x2"] == 5.01
 
     def test_no_cluster_when_far_apart(self):
         """Free endpoints > 30cm apart do not cluster."""
