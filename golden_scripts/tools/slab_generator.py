@@ -36,6 +36,7 @@ Usage:
 import argparse
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -598,8 +599,47 @@ def _merge_slab_entries(slabs, stories):
 # Output generation
 # ---------------------------------------------------------------------------
 
+def _match_zone(cx, cy, floors, slab_zones, is_foundation):
+    """Match a slab centroid to a slab zone polygon.
+
+    Args:
+        cx, cy: Slab centroid coordinates.
+        floors: Set or list of floor names for this slab.
+        slab_zones: List of zone dicts with "section", "corners", "floors".
+        is_foundation: True if this slab is at the foundation floor.
+
+    Returns:
+        Matched section string (e.g. "S15", "FS100") or None.
+    """
+    floors_set = set(floors) if not isinstance(floors, set) else floors
+
+    for zone in slab_zones:
+        zone_section = zone.get("section", "")
+        zone_corners = zone.get("corners", [])
+        zone_floors = set(zone.get("floors", []))
+
+        if len(zone_corners) < 3:
+            continue
+
+        # FS zones only match foundation slabs; S zones only match regular slabs
+        zone_is_fs = zone_section.upper().startswith("FS")
+        if zone_is_fs != is_foundation:
+            continue
+
+        # Check floor overlap
+        if zone_floors and not (floors_set & zone_floors):
+            continue
+
+        # Point-in-polygon test
+        polygon = [(c[0], c[1]) for c in zone_corners]
+        if point_in_polygon(cx, cy, polygon):
+            return zone_section
+
+    return None
+
+
 def generate_slab_config(slabs, slab_thickness=15, raft_thickness=100,
-                         foundation_floor=None):
+                         foundation_floor=None, slab_zones=None):
     """Convert internal slab list to config format.
 
     When a slab spans both foundation and non-foundation floors, it is split
@@ -616,26 +656,60 @@ def generate_slab_config(slabs, slab_thickness=15, raft_thickness=100,
         corners = slab["corners"]
 
         if foundation_floor and foundation_floor in floors:
-            # FS only at foundation floor
-            raft_thicknesses.add(raft_thickness)
+            # Foundation floor slab
+            fs_section = f"FS{raft_thickness}"
+            if slab_zones:
+                cx, cy = face_centroid([(c[0], c[1]) for c in corners])
+                matched = _match_zone(cx, cy, [foundation_floor], slab_zones,
+                                      is_foundation=True)
+                if matched:
+                    fs_section = matched
+            # Extract thickness from section name for sections tracking
+            fs_m = re.match(r"FS(\d+)", fs_section)
+            if fs_m:
+                raft_thicknesses.add(int(fs_m.group(1)))
+            else:
+                raft_thicknesses.add(raft_thickness)
             slab_entries.append({
                 "corners": corners,
-                "section": f"FS{raft_thickness}",
+                "section": fs_section,
                 "floors": [foundation_floor],
             })
             other_floors = [f for f in floors if f != foundation_floor]
             if other_floors:
-                slab_thicknesses.add(slab_thickness)
+                s_section = f"S{slab_thickness}"
+                if slab_zones:
+                    cx, cy = face_centroid([(c[0], c[1]) for c in corners])
+                    matched = _match_zone(cx, cy, other_floors, slab_zones,
+                                          is_foundation=False)
+                    if matched:
+                        s_section = matched
+                s_m = re.match(r"S(\d+)", s_section)
+                if s_m:
+                    slab_thicknesses.add(int(s_m.group(1)))
+                else:
+                    slab_thicknesses.add(slab_thickness)
                 slab_entries.append({
                     "corners": corners,
-                    "section": f"S{slab_thickness}",
+                    "section": s_section,
                     "floors": other_floors,
                 })
         else:
-            slab_thicknesses.add(slab_thickness)
+            s_section = f"S{slab_thickness}"
+            if slab_zones:
+                cx, cy = face_centroid([(c[0], c[1]) for c in corners])
+                matched = _match_zone(cx, cy, floors, slab_zones,
+                                      is_foundation=False)
+                if matched:
+                    s_section = matched
+            s_m = re.match(r"S(\d+)", s_section)
+            if s_m:
+                slab_thicknesses.add(int(s_m.group(1)))
+            else:
+                slab_thicknesses.add(slab_thickness)
             slab_entries.append({
                 "corners": corners,
-                "section": f"S{slab_thickness}",
+                "section": s_section,
                 "floors": floors,
             })
 
@@ -652,7 +726,7 @@ def generate_slab_config(slabs, slab_thickness=15, raft_thickness=100,
 # Main pipeline
 # ---------------------------------------------------------------------------
 
-def generate_slabs(config, slab_thickness=15, raft_thickness=100):
+def generate_slabs(config, slab_thickness=15, raft_thickness=100, slab_zones=None):
     """Main entry point: config → slab entries.
 
     Processes each floor group independently to avoid mixing segments
@@ -766,7 +840,8 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100):
 
     # Generate config entries
     slab_entries, new_sections = generate_slab_config(
-        merged_slabs, slab_thickness, raft_thickness, foundation_floor)
+        merged_slabs, slab_thickness, raft_thickness, foundation_floor,
+        slab_zones=slab_zones)
 
     stats["total_slabs"] = len(slab_entries)
     stats["foundation_slabs"] = sum(
@@ -809,12 +884,29 @@ def main():
                         help="Default slab thickness in cm (default: 15)")
     parser.add_argument("--raft-thickness", type=int, default=100,
                         help="Default raft thickness in cm (default: 100)")
+    parser.add_argument("--slab-zones",
+                        help="Path to slab zones JSON (standalone or sb_elements_validated.json)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show results without writing output")
     args = parser.parse_args()
 
     with open(args.config, encoding="utf-8") as f:
         config = json.load(f)
+
+    # Load slab zones if provided
+    slab_zones = None
+    if args.slab_zones:
+        with open(args.slab_zones, encoding="utf-8") as f:
+            zones_data = json.load(f)
+        # Auto-detect: standalone zones list or sb_elements with slab_zones key
+        if isinstance(zones_data, list):
+            slab_zones = zones_data
+        elif "slab_zones" in zones_data:
+            slab_zones = zones_data["slab_zones"]
+        else:
+            print(f"  WARNING: No slab_zones found in {args.slab_zones}")
+        if slab_zones:
+            print(f"  Slab zones loaded: {len(slab_zones)} zones from {args.slab_zones}")
 
     print(f"Config loaded: {args.config}")
     print(f"  beams: {len(config.get('beams', []))}")
@@ -829,6 +921,7 @@ def main():
         config,
         slab_thickness=args.slab_thickness,
         raft_thickness=args.raft_thickness,
+        slab_zones=slab_zones,
     )
 
     print(f"\n--- Slab Generation Summary ---")

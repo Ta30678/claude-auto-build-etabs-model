@@ -438,6 +438,14 @@ def apply_transform_to_slide(slide_data, transform):
                 elem["x2"], elem["y2"] = apply_affine(
                     elem["x2"], elem["y2"], transform)
 
+    # Transform slab zone corners
+    for zone in result.get("slab_zones", []):
+        if "corners" in zone:
+            zone["corners"] = [
+                list(apply_affine(c[0], c[1], transform))
+                for c in zone["corners"]
+            ]
+
     # Store transform in metadata
     meta = result.get("_metadata", {})
     meta["grid_calibration"] = {

@@ -207,6 +207,14 @@ python -m golden_scripts.tools.slab_generator \
     --slab-thickness 15 \
     --raft-thickness 100 \
     --output final_config.json
+
+# With slab zone overlay (per-region thickness from PPT slab legend)
+python -m golden_scripts.tools.slab_generator \
+    --config merged_config.json \
+    --slab-thickness 15 \
+    --raft-thickness 100 \
+    --slab-zones sb_elements_validated.json \
+    --output final_config.json
 ```
 
 ### Elements Merge Tool (Phase 1 + Phase 2)

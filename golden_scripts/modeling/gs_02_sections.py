@@ -172,6 +172,12 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
     Always applies rebar (even for existing sections) to ensure
     correct design type (Beam/Column) and bar counts.
     """
+    # [DIAG] Check if SD420 rebar material exists
+    rebar_mats = get_existing_materials(SapModel)
+    print(f"  [DIAG] SD420 in model: {'SD420' in rebar_mats}")
+    print(f"  [DIAG] All materials: {sorted(rebar_mats)}")
+    print(f"  [DIAG] frame_sections count: {len(frame_sections)}")
+
     beam_count, col_count, fail_count = 0, 0, 0
     batch_counter = 0
 
@@ -203,8 +209,11 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
             retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
             if retcode == 0:
                 col_count += 1
+                if col_count <= 3:
+                    print(f"    [DIAG] SetRebarColumn OK: {name}")
             else:
                 fail_count += 1
+                print(f"    [DIAG] SetRebarColumn FAIL: {name} ret={ret}")
         else:
             is_fb = is_foundation_beam(prefix)
             cover_top = FB_COVER_TOP if is_fb else BEAM_COVER_TOP
@@ -217,8 +226,11 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
             retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
             if retcode == 0:
                 beam_count += 1
+                if beam_count <= 3:
+                    print(f"    [DIAG] SetRebarBeam OK: {name}")
             else:
                 fail_count += 1
+                print(f"    [DIAG] SetRebarBeam FAIL: {name} ret={ret}")
 
         batch_counter += 1
         if batch_counter % batch_size == 0:
@@ -343,6 +355,7 @@ def run(SapModel, config):
 
     # Assign rebar to all frame sections
     print("\n--- Assigning rebar ---")
+    print(f"  [DIAG] About to assign rebar to {len(frame_unique)} sections")
     assign_all_rebar(SapModel, frame_unique, existing_materials)
 
     # Checkpoint save after rebar assignment

@@ -1304,8 +1304,8 @@ class TestTableLegendSlab:
         assert legend["00FF00"][0].element_type == "slab"
         assert "0000FF" not in legend  # small_beam filtered
 
-    def test_phase2_excludes_slab_entries(self):
-        """Phase 2 should filter out slab entries (only small_beam)."""
+    def test_phase2_keeps_slab_entries(self):
+        """Phase 2 should keep slab entries (for slab zone overlay) and small_beam."""
         slide = self._make_mock_slide_with_table([
             ("FF0000", "B55X80"),
             ("00FF00", "S15"),
@@ -1316,7 +1316,8 @@ class TestTableLegendSlab:
         legend, _, _, _ = result
         assert "0000FF" in legend  # small_beam kept
         assert "FF0000" not in legend  # beam filtered
-        assert "00FF00" not in legend  # slab filtered
+        assert "00FF00" in legend  # slab kept for slab zone overlay
+        assert legend["00FF00"][0].element_type == "slab"
 
     def test_all_phase_keeps_slab(self):
         """Phase 'all' should keep everything including slab."""

@@ -157,6 +157,7 @@ def normalize_per_slide_input(slide_data):
         "beams": slide_data.get("beams", []),
         "walls": slide_data.get("walls", []),
         "small_beams": slide_data.get("small_beams", []),
+        "slab_zones": slide_data.get("slab_zones", []),
         "sections": {
             "frame": sorted(frame_set),
             "wall": sorted(wall_set),
@@ -314,10 +315,12 @@ def merge_small_beams_only(*element_files):
         (merged_dict, stats_dict)
     """
     all_small_beams = []
+    all_slab_zones = []
     all_metadata = []
 
     for ef in element_files:
         all_small_beams.extend(ef.get("small_beams", []))
+        all_slab_zones.extend(ef.get("slab_zones", []))
         if "_metadata" in ef:
             all_metadata.append(ef["_metadata"])
 
@@ -333,6 +336,7 @@ def merge_small_beams_only(*element_files):
 
     merged = {
         "small_beams": all_small_beams,
+        "slab_zones": all_slab_zones,
         "sections": {
             "frame": sorted(frame_set),
         },
@@ -344,6 +348,7 @@ def merge_small_beams_only(*element_files):
     stats = {
         "input_count": len(element_files),
         "small_beams": {"total": sb_raw, "deduped": len(all_small_beams)},
+        "slab_zones": len(all_slab_zones),
     }
 
     return merged, stats
@@ -452,6 +457,9 @@ def main():
         removed = s["total"] - s["deduped"]
         suffix = f" ({removed} duplicates removed)" if removed else ""
         print(f"  small_beams: {s['total']} -> {s['deduped']}{suffix}")
+        sz_count = stats.get("slab_zones", 0)
+        if sz_count > 0:
+            print(f"  slab_zones: {sz_count}")
         sec = merged.get("sections", {})
         print(f"  frame sections: {len(sec.get('frame', []))}")
         ok = True

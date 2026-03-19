@@ -197,6 +197,7 @@ python -m golden_scripts.tools.slab_generator \
   --config "{Case Folder}/merged_config.json" \
   --slab-thickness {SLAB_THICKNESS} \
   --raft-thickness {RAFT_THICKNESS} \
+  --slab-zones "{Case Folder}/sb_elements_validated.json" \
   --output "{Case Folder}/final_config.json"
 ```
 

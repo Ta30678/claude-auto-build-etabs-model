@@ -498,6 +498,28 @@ def build_config(elements, grid_info, project_name, save_path):
     if rooftop_names:
         replicate_rooftop(columns, beams, walls, config["stories"],
                           core_grid_area)
+        # Summary log
+        top_floor = _find_top_floor(config["stories"])
+        for rn in rooftop_names:
+            n_cols = sum(1 for c in columns if rn in c["floors"])
+            n_beams = sum(1 for b in beams if rn in b["floors"])
+            n_walls = sum(1 for w in walls if rn in w["floors"])
+            print(f"  Rooftop {rn}: {n_cols} columns, {n_beams} beams, {n_walls} walls")
+        if top_floor:
+            total_cols = sum(1 for c in columns if top_floor in c["floors"])
+            total_beams = sum(1 for b in beams if top_floor in b["floors"])
+            print(f"  (Top floor {top_floor}: {total_cols} columns, {total_beams} beams)")
+            # Warn if R2F+ has suspiciously many elements (core filter may be broken)
+            for rn in rooftop_names:
+                if rn in ("RF", "R1F"):
+                    continue
+                n_cols_rn = sum(1 for c in columns if rn in c["floors"])
+                if total_cols > 0 and n_cols_rn > total_cols * 0.5:
+                    w = (f"WARNING: {rn} has {n_cols_rn} columns "
+                         f"(> 50% of {top_floor}'s {total_cols}) — "
+                         f"core_grid_area filter may not be working correctly")
+                    warnings.append(w)
+                    print(f"  {w}")
 
     config["columns"] = columns
     config["beams"] = beams

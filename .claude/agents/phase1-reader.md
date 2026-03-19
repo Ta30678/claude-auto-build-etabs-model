@@ -197,7 +197,7 @@ python -m golden_scripts.tools.plot_elements \
 3. **建築外框 (building_outline)**：polygon 座標 (m)
    - 下構 building_outline 一致性：所有下構樓層（B*F + 1F）共用同一個 building_outline。
 4. **屋突核心區 (core_grid_area)**：從標準層圖面辨識電梯井和樓梯間的 Grid 範圍。即使 PPT 沒有屋突頁面也必須提供。
-   - 注意：core_grid_area 用於 R2F~PRF 的核心區複製。R1F 是頂樓的完整複製（所有構件），不需要 core_grid_area。
+   - 注意：core_grid_area 用於屋突複製。R1F 的梁/版全複製、核心柱/牆才加 R1F（非核心柱已靠 +1 rule 延伸到 R1F）。R2F~PRF 只複製核心區構件。
 5. **強度分配 (strength_map)**：直接使用 Team Lead 提供的 `STRENGTH_TABLE`，不需從圖面掃描強度。將 STRENGTH_TABLE 直接複製到 grid_info.json 的 `strength_map` 欄位。
 6. **大梁驗證報告審閱 (beam validation review)**：審閱 Step E3.5 產生的 per-slide `{floor_label}/beam_report_{floor_label}.json`：
    - 檢視 corrections 摘要（snap 校正數量、最大距離）

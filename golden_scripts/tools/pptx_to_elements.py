@@ -750,6 +750,56 @@ def _get_freeform_vertex_count(shape):
     return count
 
 
+def _get_freeform_vertices_emu(shape):
+    """Extract vertex (x_emu, y_emu) coordinates from a FREEFORM shape's custom geometry.
+
+    Vertices are in local path coordinates, scaled to absolute slide coordinates
+    using the shape's position and path/extent dimensions.
+
+    Returns list of (x_emu, y_emu) tuples, or None if not a freeform.
+    """
+    try:
+        raw = shape._shape if isinstance(shape, _AbsShape) else shape
+        el = raw._element
+    except AttributeError:
+        return None
+
+    paths = el.findall('.//a:custGeom/a:pathLst/a:path', _VERTEX_NS)
+    if not paths:
+        return None
+
+    # Get path coordinate space dimensions
+    path_el = paths[0]
+    path_w = int(path_el.get('w', '0'))
+    path_h = int(path_el.get('h', '0'))
+    if path_w == 0 or path_h == 0:
+        return None
+
+    # Collect local vertices (moveTo + lnTo)
+    local_pts = []
+    for move in path_el.findall('a:moveTo/a:pt', _VERTEX_NS):
+        local_pts.append((int(move.get('x', '0')), int(move.get('y', '0'))))
+    for ln in path_el.findall('a:lnTo/a:pt', _VERTEX_NS):
+        local_pts.append((int(ln.get('x', '0')), int(ln.get('y', '0'))))
+
+    if len(local_pts) < 3:
+        return None
+
+    # Scale from local path coords to absolute slide EMU
+    shape_left = shape.left
+    shape_top = shape.top
+    shape_width = shape.width
+    shape_height = shape.height
+
+    vertices = []
+    for lx, ly in local_pts:
+        abs_x = shape_left + int(lx * shape_width / path_w)
+        abs_y = shape_top + int(ly * shape_height / path_h)
+        vertices.append((abs_x, abs_y))
+
+    return vertices
+
+
 # ─── Line Shape Helpers ──────────────────────────────────────────────────────
 
 def _is_line_shape(shape):
@@ -1275,7 +1325,7 @@ def _parse_table_legend(slide, slide_w, phase, theme_map=None):
             # Phase filter
             if phase == "phase1" and etype == "small_beam":
                 continue
-            if phase == "phase2" and etype not in ("small_beam",):
+            if phase == "phase2" and etype not in ("small_beam", "slab"):
                 continue
 
             rgb = [int(color_hex[i:i+2], 16) for i in (0, 2, 4)]
@@ -1843,6 +1893,119 @@ def _build_rect_color_map(columns, legend, tolerance):
     return color_map
 
 
+def _extract_slab_zones(slide, legend, scale, floors, slide_w, slide_h,
+                        legend_boundary, legend_side, theme_map=None,
+                        tolerance=150):
+    """Extract slab zone polygons from filled shapes matched to slab legend entries.
+
+    Finds filled AUTO_SHAPE rectangles and FREEFORM shapes whose color matches
+    a slab legend entry (S15, FS100, etc.) and extracts their boundary polygons.
+
+    Args:
+        slide: PowerPoint slide object.
+        legend: Color→LegendEntry mapping.
+        scale: EMU-per-meter scale factor.
+        floors: List of floor names for this slide.
+        slide_w, slide_h: Slide dimensions in EMU.
+        legend_boundary: EMU x-coordinate separating legend from drawing.
+        legend_side: "left" or "right".
+        theme_map: Theme color resolution map.
+        tolerance: Chebyshev color matching tolerance.
+
+    Returns:
+        List of slab zone dicts: {"section": "S15", "corners": [[x,y],...],
+                                   "color_hex": "88CC88", "floors": [...]}
+    """
+    zones = []
+
+    # Build slab-only color map from legend
+    slab_entries = {}  # color_hex → LegendEntry
+    for color_hex, entries in legend.items():
+        for e in entries:
+            if e.element_type == "slab" and e.section:
+                slab_entries[color_hex] = e
+                break
+
+    if not slab_entries:
+        return zones
+
+    # Collect filled shapes (AUTO_SHAPE + FREEFORM)
+    _shape_types = (MSO_SHAPE_TYPE.FREEFORM, MSO_SHAPE_TYPE.AUTO_SHAPE)
+    for shape in _iter_slide_shapes(slide, _shape_types):
+        w, h = shape.width, shape.height
+        left, top = shape.left, shape.top
+
+        # Skip shapes in legend region
+        cx = left + w // 2
+        if legend_side == "left" and cx < legend_boundary:
+            continue
+        if legend_side == "right" and cx > legend_boundary:
+            continue
+
+        # Skip tiny shapes (likely not slab zones)
+        if w < 50000 or h < 50000:  # ~5mm in EMU
+            continue
+
+        # Get fill color
+        fill_color = _get_shape_color(shape, "fill", theme_map)
+        if not fill_color:
+            continue
+
+        # Match to slab legend entry (fuzzy)
+        matched_entry = None
+        fr = int(fill_color[0:2], 16)
+        fg = int(fill_color[2:4], 16)
+        fb = int(fill_color[4:6], 16)
+        best_dist = tolerance + 1
+        for leg_hex, entry in slab_entries.items():
+            lr = int(leg_hex[0:2], 16)
+            lg = int(leg_hex[2:4], 16)
+            lb = int(leg_hex[4:6], 16)
+            dist = max(abs(fr - lr), abs(fg - lg), abs(fb - lb))
+            if dist < best_dist:
+                best_dist = dist
+                matched_entry = entry
+
+        if matched_entry is None:
+            continue
+
+        # Extract polygon corners
+        raw = shape._shape if isinstance(shape, _AbsShape) else shape
+        is_freeform = getattr(raw, 'shape_type', None) == MSO_SHAPE_TYPE.FREEFORM
+        vc = _get_freeform_vertex_count(shape) if is_freeform else None
+
+        corners_emu = None
+        if is_freeform and vc and vc >= 3:
+            # Freeform: extract actual vertex coordinates
+            corners_emu = _get_freeform_vertices_emu(shape)
+        elif not is_freeform or (vc and vc in (4, 5)):
+            # AUTO_SHAPE rectangle: 4-corner polygon
+            corners_emu = [
+                (left, top),
+                (left + w, top),
+                (left + w, top + h),
+                (left, top + h),
+            ]
+
+        if not corners_emu or len(corners_emu) < 3:
+            continue
+
+        # Convert EMU to meters
+        corners_m = []
+        for ex, ey in corners_emu:
+            mx, my = _emu_to_m(ex, ey, scale, slide_h)
+            corners_m.append([mx, my])
+
+        zones.append({
+            "section": matched_entry.section,
+            "corners": corners_m,
+            "color_hex": fill_color,
+            "floors": list(floors),
+        })
+
+    return zones
+
+
 def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
                                 phase, slide_w, slide_h, legend_boundary,
                                 legend_side, warnings, theme_map=None,
@@ -2230,6 +2393,7 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
             )
 
     all_elements = []
+    all_slab_zones = []
     per_page_stats = {}
     scale_details = []
     legend_validations = []
@@ -2393,6 +2557,16 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
         per_page_stats[str(sn)] = stats
         print(f"  Elements: {', '.join(f'{k}={v}' for k, v in stats.items() if v > 0) or 'none'}")
 
+        # Collect slab zones for legacy merged output (Phase 2)
+        if phase == "phase2" and not slides_info_dir:
+            _sz = _extract_slab_zones(
+                slide, legend, scale, floors, slide_w, slide_h,
+                legend_boundary, legend_side, theme_map=theme_map,
+                tolerance=rect_tolerance)
+            if _sz:
+                all_slab_zones.extend(_sz)
+                print(f"  Slab zones: {len(_sz)}")
+
         # Per-slide JSON output (when --slides-info-dir is specified)
         if slides_info_dir:
             slide_meta = {
@@ -2420,6 +2594,15 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
                 "walls": [e for e in slide_elems if e["element_type"] == "wall"],
                 "small_beams": [e for e in slide_elems if e["element_type"] == "small_beam"],
             }
+            # Extract slab zones in Phase 2
+            if phase == "phase2":
+                slab_zones = _extract_slab_zones(
+                    slide, legend, scale, floors, slide_w, slide_h,
+                    legend_boundary, legend_side, theme_map=theme_map,
+                    tolerance=rect_tolerance)
+                if slab_zones:
+                    slide_output["slab_zones"] = slab_zones
+                    print(f"  Slab zones: {len(slab_zones)}")
             # Phase 2 per-slide files use sb_ prefix to avoid collision with Phase 1
             if phase == "phase2":
                 slide_json_path = Path(slides_info_dir) / floor_label / "pptx_to_elements" / f"sb_{floor_label}.json"
@@ -2515,6 +2698,8 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
         "small_beams": grouped["small_beams"],
         "sections": sections,
     }
+    if all_slab_zones:
+        output["slab_zones"] = all_slab_zones
     return output
 
 
