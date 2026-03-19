@@ -26,7 +26,7 @@ from constants import (
     COL_COVER, COL_CORNER_BARS, COL_TIE_SPACING,
     COL_REBAR_SIZE, COL_TIE_SIZE, COL_NUM_2DIR_TIE, COL_NUM_3DIR_TIE,
     parse_frame_section, parse_area_section, is_foundation_beam,
-    calc_column_bar_distribution,
+    get_frame_dimensions, calc_column_bar_distribution,
 )
 
 
@@ -62,19 +62,20 @@ def extract_used_grades(config):
     return sorted(grades) if grades else CONCRETE_GRADES
 
 
-def expand_frame_sections(prefix, base_w, base_d, grades=None):
+def expand_frame_sections(prefix, num1, num2, grades=None):
     """Expand one base section across concrete grades (exact size, no ±20cm expansion).
     Returns list of (name, mat_name, depth_m, width_m).
 
     CRITICAL: depth_m goes to T3, width_m goes to T2.
-    Name format is {PREFIX}{WIDTH}X{DEPTH}, API is SetRectangle(name, mat, T3=depth, T2=width).
+    Uses get_frame_dimensions() to handle column C{DEPTH}X{WIDTH} vs beam {PREFIX}{WIDTH}X{DEPTH}.
     """
+    width_cm, depth_cm = get_frame_dimensions(prefix, num1, num2)
     results = []
     for fc in (grades or CONCRETE_GRADES):
-        name = f"{prefix}{base_w}X{base_d}C{fc}"
+        name = f"{prefix}{num1}X{num2}C{fc}"   # raw order for name
         mat = f"C{fc}"
-        depth_m = base_d / 100.0  # T3
-        width_m = base_w / 100.0  # T2
+        depth_m = depth_cm / 100.0  # T3
+        width_m = width_cm / 100.0  # T2
         results.append((name, mat, depth_m, width_m))
     return results
 
@@ -97,23 +98,20 @@ def expand_area_sections(prefix, thickness_cm, grades=None):
 
 
 def create_frame_sections(SapModel, sections_list, existing_materials=None,
-                          batch_size=100, batch_pause=1.0,
-                          skip_existing=None):
+                          batch_size=100, batch_pause=1.0):
     """Create frame sections in ETABS with batching to prevent COM crashes.
     sections_list: list of (name, mat_name, depth_m, width_m)
     batch_size: pause every N sections to let ETABS process
     batch_pause: seconds to pause between batches
-    skip_existing: set of section names already in model (skip these)
+
+    Always applies SetRectangle (even for existing sections) to ensure
+    correct dimensions and rebar/design type.
     """
     count = 0
     skipped = 0
-    skipped_existing = 0
     missing_mats = {}
     batch_counter = 0
     for name, mat, depth_m, width_m in sections_list:
-        if skip_existing is not None and name in skip_existing:
-            skipped_existing += 1
-            continue
         if existing_materials is not None and mat not in existing_materials:
             skipped += 1
             missing_mats.setdefault(mat, []).append(name)
@@ -129,13 +127,11 @@ def create_frame_sections(SapModel, sections_list, existing_materials=None,
             except Exception:
                 pass
             time.sleep(batch_pause)
-            print(f"    ... {batch_counter} sections created so far")
+            print(f"    ... {batch_counter} sections processed so far")
     if missing_mats:
         for mat, names in missing_mats.items():
             sample = names[:3]
             print(f"  Material '{mat}' not found. Sections skipped: {sample}{'...' if len(names) > 3 else ''}")
-    if skipped_existing:
-        print(f"  Skipped {skipped_existing} existing sections")
     if skipped:
         print(f"  Skipped {skipped} frame sections (material not in model)")
     return count
@@ -170,17 +166,16 @@ def create_area_sections(SapModel, sections_list, existing_materials=None):
 
 
 def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
-                     batch_size=100, batch_pause=1.0,
-                     skip_existing=None):
-    """Assign rebar configuration to all created frame sections."""
+                     batch_size=100, batch_pause=1.0):
+    """Assign rebar configuration to all frame sections.
+
+    Always applies rebar (even for existing sections) to ensure
+    correct design type (Beam/Column) and bar counts.
+    """
     beam_count, col_count, fail_count = 0, 0, 0
-    skipped_existing = 0
     batch_counter = 0
 
     for name, mat, depth_m, width_m in frame_sections:
-        if skip_existing is not None and name in skip_existing:
-            skipped_existing += 1
-            continue
         if existing_materials is not None and mat not in existing_materials:
             continue
         prefix, w_cm, d_cm, fc = parse_frame_section(name)
@@ -188,15 +183,16 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
             continue
 
         if prefix == "C":
-            num_r2, num_r3 = calc_column_bar_distribution(w_cm, d_cm)
+            width_cm, depth_cm = get_frame_dimensions(prefix, w_cm, d_cm)
+            num_r3, num_r2 = calc_column_bar_distribution(width_cm, depth_cm)
             ret = SapModel.PropFrame.SetRebarColumn(
                 name, "SD420", "SD420",
                 1,                    # Pattern: Rectangular
                 1,                    # ConfineType: Ties
                 COL_COVER,
                 COL_CORNER_BARS,
-                num_r3,               # bars along depth (T3)
-                num_r2,               # bars along width (T2)
+                num_r3,               # bars along width (T2)
+                num_r2,               # bars along depth (T3)
                 COL_REBAR_SIZE,
                 COL_TIE_SIZE,
                 COL_TIE_SPACING,
@@ -232,8 +228,6 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
                 pass
             time.sleep(batch_pause)
 
-    if skipped_existing:
-        print(f"  Skipped {skipped_existing} existing sections (rebar)")
     print(f"  Rebar assigned: {beam_count} beams, {col_count} columns")
     if fail_count > 0:
         print(f"  WARNING: {fail_count} rebar assignments failed (section may not be concrete)")
@@ -281,8 +275,9 @@ def run(SapModel, config):
         if fc is not None:
             # Full name with Cfc: create only this single grade
             mat = f"C{fc}"
-            depth_m = d / 100.0
-            width_m = w / 100.0
+            width_cm, depth_cm = get_frame_dimensions(prefix, w, d)
+            depth_m = depth_cm / 100.0
+            width_m = width_cm / 100.0
             all_frame.append((sec_name, mat, depth_m, width_m))
             print(f"  {sec_name} -> 1 section (single grade C{fc})")
         else:
@@ -330,26 +325,11 @@ def run(SapModel, config):
     existing_materials = get_existing_materials(SapModel)
     print(f"\nExisting materials in model: {sorted(existing_materials)}")
 
-    # Query existing frame sections (skip in Phase 2 to avoid redundant COM calls)
-    existing_sections = set()
-    try:
-        ret = SapModel.PropFrame.GetNameList(0, [])
-        for item in ret:
-            if isinstance(item, (list, tuple)):
-                for s in item:
-                    if isinstance(s, str):
-                        existing_sections.add(s)
-    except Exception:
-        pass
-    if existing_sections:
-        print(f"Existing frame sections in model: {len(existing_sections)}")
-
     save_path = config.get("project", {}).get("save_path")
 
     # Create in ETABS
     print("\n--- Creating frame sections ---")
-    n_frame = create_frame_sections(SapModel, frame_unique, existing_materials,
-                                    skip_existing=existing_sections or None)
+    n_frame = create_frame_sections(SapModel, frame_unique, existing_materials)
     print(f"  Created {n_frame} frame sections")
 
     # Checkpoint save after frame section creation
@@ -363,8 +343,7 @@ def run(SapModel, config):
 
     # Assign rebar to all frame sections
     print("\n--- Assigning rebar ---")
-    assign_all_rebar(SapModel, frame_unique, existing_materials,
-                     skip_existing=existing_sections or None)
+    assign_all_rebar(SapModel, frame_unique, existing_materials)
 
     # Checkpoint save after rebar assignment
     if save_path:
@@ -378,7 +357,7 @@ def run(SapModel, config):
     # Summary
     print(f"\n  Created: {n_frame} frame, {n_area} area | Skipped: {len(bad_names)} (bad name)")
 
-    if n_frame == 0 and len(sections.get("frame", [])) > 0 and not existing_sections:
+    if n_frame == 0 and len(sections.get("frame", [])) > 0:
         raise RuntimeError("gs_02: 0 frame sections created. Check sections.frame names and materials.")
 
     SapModel.View.RefreshView(0, False)

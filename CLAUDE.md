@@ -411,7 +411,10 @@ Area modifiers (raft):      [0.4, 0.4, 0.4, 0.7, 0.7, 0.7, 1, 1, 1, 1]
 Rigid zone factor: 0.75
 Beam cover: 9cm (regular), 11cm top / 15cm bot (foundation)
 Column cover: 7cm
-Section naming: {PREFIX}{WIDTH}X{DEPTH}[C{fc}]  (e.g. B55X80C350)
+Section naming:
+  Beams:   {PREFIX}{WIDTH}X{DEPTH}[C{fc}]   (e.g. B55X80C350 = 55cm wide, 80cm deep)
+  Columns: C{DEPTH}X{WIDTH}[C{fc}]          (e.g. C100X120C350 = T3=100cm, T2=120cm)
+Column rebar: NumberR3Bars = WIDTH_cm // 10, NumberR2Bars = DEPTH_cm // 10
 API D/B swap: T3=Depth, T2=Width (SetRectangle)
 +1 floor rule: column/wall on plan NF spans from NF elevation to (N+1)F elevation
 Shell types: Membrane (2) for slabs/walls, ShellThick (1) for raft/FS
@@ -440,7 +443,9 @@ Foundation floor = BASE 上一層 (e.g. B3F). BASE has NO objects.
 ### Section Naming Convention
 - `B` = beam, `SB` = small beam, `WB` = wall beam, `FB` = foundation beam
 - `C` = column, `W` = wall, `S` = slab, `FS` = foundation slab
-- Format: `{PREFIX}{WIDTH}X{DEPTH}C{fc}` → e.g. `B55X80C350` = 55cm wide, 80cm deep, fc'=350
+- Beams:   `{PREFIX}{WIDTH}X{DEPTH}[C{fc}]` → e.g. `B55X80C350` = 55cm wide, 80cm deep, fc'=350
+- Columns: `C{DEPTH}X{WIDTH}[C{fc}]`        → e.g. `C100X120C350` = T3=100cm, T2=120cm
+- Column rebar: `NumberR3Bars = WIDTH_cm // 10`, `NumberR2Bars = DEPTH_cm // 10`
 
 ---
 

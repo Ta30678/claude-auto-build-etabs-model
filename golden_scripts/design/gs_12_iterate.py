@@ -20,10 +20,11 @@ sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import (
     UNITS_TON_M,
     parse_frame_section, is_foundation_beam,
-    calc_column_bar_distribution,
+    get_frame_dimensions, calc_column_bar_distribution,
     build_strength_lookup,
     BEAM_MODIFIERS, COL_MODIFIERS,
-    BEAM_COVER_TOP, COL_COVER,
+    BEAM_COVER_TOP, BEAM_COVER_BOT, FB_COVER_TOP, FB_COVER_BOT,
+    COL_COVER,
     COL_CORNER_BARS, COL_TIE_SPACING,
     COL_REBAR_SIZE, COL_TIE_SIZE, COL_NUM_2DIR_TIE, COL_NUM_3DIR_TIE,
     MIN_COL_DIM, MIN_BEAM_W, MIN_BEAM_D,
@@ -374,17 +375,24 @@ def extract_beam_results(SapModel, beams):
     return results
 
 
-def ensure_section_exists(SapModel, prefix, w_cm, d_cm, fc):
-    """Create a frame section if it doesn't already exist."""
-    name = make_section_name(prefix, w_cm, d_cm, fc)
+def ensure_section_exists(SapModel, prefix, num1, num2, fc):
+    """Create a frame section if it doesn't already exist.
+
+    Args:
+        num1, num2: raw parsed numbers from section name.
+            Beams: num1=width, num2=depth.
+            Columns: num1=depth, num2=width.
+    """
+    name = make_section_name(prefix, num1, num2, fc)
     mat = f"C{fc}"
-    depth_m = d_cm / 100.0
-    width_m = w_cm / 100.0
+    width_cm, depth_cm = get_frame_dimensions(prefix, num1, num2)
+    depth_m = depth_cm / 100.0
+    width_m = width_cm / 100.0
 
     SapModel.PropFrame.SetRectangle(name, mat, depth_m, width_m)
 
     if prefix == "C":
-        num_r2, num_r3 = calc_column_bar_distribution(w_cm, d_cm)
+        num_r3, num_r2 = calc_column_bar_distribution(width_cm, depth_cm)
         SapModel.PropFrame.SetRebarColumn(
             name, "SD420", "SD420",
             1, 1, COL_COVER, COL_CORNER_BARS,
@@ -392,10 +400,13 @@ def ensure_section_exists(SapModel, prefix, w_cm, d_cm, fc):
             COL_REBAR_SIZE, COL_TIE_SIZE, COL_TIE_SPACING,
             COL_NUM_2DIR_TIE, COL_NUM_3DIR_TIE, True)
     else:
+        is_fb = is_foundation_beam(prefix)
+        cover_top = FB_COVER_TOP if is_fb else BEAM_COVER_TOP
+        cover_bot = FB_COVER_BOT if is_fb else BEAM_COVER_BOT
         SapModel.PropFrame.SetRebarBeam(
             name, "SD420", "SD420",
-            BEAM_COVER_TOP, BEAM_COVER_TOP,
-            0, 0, 0, 0, True)
+            cover_top, cover_bot,
+            0, 0, 0, 0)
 
     return name
 

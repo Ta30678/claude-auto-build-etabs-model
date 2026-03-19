@@ -1,7 +1,10 @@
 """Test: Section D/B mapping is correct.
 
-Verifies that T3=Depth and T2=Width for all frame sections,
-based on the naming convention {PREFIX}{WIDTH}X{DEPTH}C{fc}.
+Verifies that T3=Depth and T2=Width for all frame sections.
+
+Naming conventions:
+  Beams:   {PREFIX}{WIDTH}X{DEPTH}[C{fc}]  → num1=width(T2),  num2=depth(T3)
+  Columns: C{DEPTH}X{WIDTH}[C{fc}]         → num1=depth(T3),  num2=width(T2)
 """
 import re
 import pytest
@@ -33,8 +36,15 @@ def test_section_db_correct(SapModel):
 
         m = re.match(r'^(B|SB|WB|FB|FSB|FWB|C)(\d+)X(\d+)C?\d*$', name)
         if m:
-            exp_w = int(m.group(2)) / 100.0
-            exp_d = int(m.group(3)) / 100.0
+            prefix = m.group(1)
+            num1 = int(m.group(2))
+            num2 = int(m.group(3))
+            if prefix == "C":
+                exp_d = num1 / 100.0   # Column: first = depth (T3)
+                exp_w = num2 / 100.0   # Column: second = width (T2)
+            else:
+                exp_w = num1 / 100.0   # Beam: first = width (T2)
+                exp_d = num2 / 100.0   # Beam: second = depth (T3)
 
             if abs(t3 - exp_d) > 0.001 or abs(t2 - exp_w) > 0.001:
                 errors.append(

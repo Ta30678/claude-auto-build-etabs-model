@@ -127,12 +127,17 @@ EXT_WALL_OPENING_FACTOR = 0.6
 # ── Parsing Utilities ────────────────────────────────────────
 
 def parse_frame_section(name):
-    """Parse frame section name -> (prefix, width_cm, depth_cm, fc_or_None).
+    """Parse frame section name -> (prefix, num1, num2, fc_or_None).
 
-    Naming: {PREFIX}{WIDTH}X{DEPTH}[C{fc}]
-    B55X80 -> ('B', 55, 80, None)
-    B55X80C350 -> ('B', 55, 80, 350)
-    C90X90C420 -> ('C', 90, 90, 420)
+    Naming:
+      Beams:   {PREFIX}{WIDTH}X{DEPTH}[C{fc}]  → num1=width, num2=depth
+      Columns: C{DEPTH}X{WIDTH}[C{fc}]         → num1=depth, num2=width
+
+    Use get_frame_dimensions(prefix, num1, num2) to get (width_cm, depth_cm).
+
+    B55X80 -> ('B', 55, 80, None)     → width=55, depth=80
+    B55X80C350 -> ('B', 55, 80, 350)  → width=55, depth=80
+    C100X120C420 -> ('C', 100, 120, 420) → depth=100, width=120
     """
     m = re.match(r'^(B|SB|WB|FB|FSB|FWB|C)(\d+)X(\d+)(?:C(\d+))?$', name)
     if m:
@@ -160,18 +165,28 @@ def is_foundation_beam(prefix):
     return prefix in ("FB", "FSB", "FWB")
 
 
+def get_frame_dimensions(prefix, num1, num2):
+    """Convert parsed section numbers to (width_cm, depth_cm).
+
+    Beams:   {PREFIX}{WIDTH}X{DEPTH}  → num1=width,  num2=depth
+    Columns: C{DEPTH}X{WIDTH}        → num1=depth,  num2=width
+
+    Returns (width_cm, depth_cm) for SetRectangle(T3=depth, T2=width).
+    """
+    if prefix == "C":
+        return num2, num1   # swap: width=second, depth=first
+    return num1, num2       # beams: width=first, depth=second
+
+
 def calc_column_bar_distribution(width_cm, depth_cm):
-    """Calculate NumR2, NumR3 for column rebar proportional to W:D ratio."""
-    ratio = width_cm / depth_cm
-    if abs(ratio - 1.0) < 0.1:
-        return 3, 3
-    if ratio > 1:
-        num_r3 = 2
-        num_r2 = max(2, min(6, round(2 * ratio)))
-    else:
-        num_r2 = 2
-        num_r3 = max(2, min(6, round(2 / ratio)))
-    return num_r2, num_r3
+    """Calculate NumR3, NumR2 for column rebar.
+
+    NumberR3Bars = width_cm // 10  (bars on face parallel to 3-axis, scaled by T2)
+    NumberR2Bars = depth_cm // 10  (bars on face parallel to 2-axis, scaled by T3)
+
+    Returns (num_r3, num_r2).
+    """
+    return width_cm // 10, depth_cm // 10
 
 
 def next_story(floor_label, all_stories=None):
