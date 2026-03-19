@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from golden_scripts.tools.sb_validate import (
     validate_small_beams,
     build_sb_targets,
+    build_grid_line_targets,
     correct_sb_angles,
     _compute_section_area,
     find_sb_intermediate_supports,
@@ -1285,3 +1286,259 @@ class TestRayRayIntersection:
         if corrections:
             # Should fallback to centroid because intersection is far away
             assert corrections[0]["method"] == "centroid_projection"
+
+
+# ---------------------------------------------------------------------------
+# TestBuildGridLineTargets
+# ---------------------------------------------------------------------------
+
+class TestBuildGridLineTargets:
+
+    def test_basic_grid_lines(self, simple_grid_data):
+        """2 x-grids + 2 y-grids = 4 grid line segments."""
+        targets = build_grid_line_targets(simple_grid_data, tolerance=1.0)
+        assert len(targets) == 4  # 2 X lines + 2 Y lines
+        for t in targets:
+            assert t.kind == "segment"
+            assert t.floors == []
+
+    def test_x_grid_lines_vertical(self, simple_grid_data):
+        """X grid lines are vertical segments spanning Y extent + margin."""
+        targets = build_grid_line_targets(simple_grid_data, tolerance=1.0)
+        # First 2 targets are X grid lines (vertical)
+        x_targets = [t for t in targets
+                     if abs(t.x1 - t.x2) < 0.001]  # vertical: x1 == x2
+        assert len(x_targets) == 2
+        # Check that they span at least Y range with margin
+        for t in x_targets:
+            assert t.y1 < 0.0  # below y_min with margin
+            assert t.y2 > 6.0  # above y_max with margin
+
+    def test_y_grid_lines_horizontal(self, simple_grid_data):
+        """Y grid lines are horizontal segments spanning X extent + margin."""
+        targets = build_grid_line_targets(simple_grid_data, tolerance=1.0)
+        y_targets = [t for t in targets
+                     if abs(t.y1 - t.y2) < 0.001]  # horizontal: y1 == y2
+        assert len(y_targets) == 2
+        for t in y_targets:
+            assert t.x1 < 0.0  # left of x_min with margin
+            assert t.x2 > 8.5  # right of x_max with margin
+
+    def test_empty_grids(self):
+        """Empty grid data returns no targets."""
+        targets = build_grid_line_targets({"x": [], "y": []}, tolerance=1.0)
+        assert len(targets) == 0
+
+    def test_margin_uses_tolerance(self):
+        """Margin is max(tolerance, 1.0)."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0}],
+            "y": [{"label": "1", "coordinate": 0.0}],
+        }
+        targets = build_grid_line_targets(grid_data, tolerance=3.0)
+        # With margin=3.0, the Y grid line should span from -3.0 to 3.0
+        y_targets = [t for t in targets if abs(t.y1 - t.y2) < 0.001]
+        assert len(y_targets) == 1
+        assert y_targets[0].x1 == -3.0
+        assert y_targets[0].x2 == 3.0
+
+
+# ---------------------------------------------------------------------------
+# TestGridLineSnap (Round 4)
+# ---------------------------------------------------------------------------
+
+class TestGridLineSnap:
+
+    def test_grid_line_snap_free_endpoint(self):
+        """SB endpoint not near any beam/wall/column but on a grid line
+        → Round 4 snaps it to the grid line."""
+        # Grid at X=0, X=8.5, Y=0, Y=6
+        grid_data = {
+            "x": [
+                {"label": "A", "coordinate": 0.0},
+                {"label": "B", "coordinate": 8.50},
+            ],
+            "y": [
+                {"label": "1", "coordinate": 0.0},
+                {"label": "2", "coordinate": 6.00},
+            ],
+        }
+        # Config with beams only at Y=0 and Y=6 (no structure at Y=3)
+        config = {
+            "columns": [],
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 8.5, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [],
+        }
+        # Vertical SB at X=4.25: start snaps to beam at Y=0,
+        # end at Y=3.0 has no beam/wall/column → free after R1-3.
+        # But X grid line at X=0 or X=8.5 won't help (perpendicular).
+        # Y grid line at Y=0 already snapped. Y grid at Y=6 too far.
+        # Instead, let's use a horizontal SB endpoint near an X grid line.
+        sb_data = {
+            "small_beams": [
+                # Horizontal SB: start at (0.0, 3.0) snaps to X=0 beam/grid,
+                # end at (8.45, 3.0) is near X=8.5 grid line but no beam at Y=3
+                {"x1": 0.02, "y1": 3.0, "x2": 8.45, "y2": 3.0,
+                 "section": "SB25X50", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_small_beams(
+            sb_data, config, grid_data, tolerance=1.0,
+            no_split=True, no_angle_correct=True)
+        sb = validated["small_beams"][0]
+        # Start should snap to beam at Y=0 line intersection or grid (0,3)
+        # End at (8.45, 3.0): ray from horizontal SB hits X=8.5 grid line → (8.5, 3.0)
+        assert abs(sb["x2"] - 8.5) < 0.01
+        assert report["grid_line_snapped_endpoints"] >= 1
+        # Check correction has target_type="grid_line"
+        gl_corrections = [c for c in report["corrections"]
+                          if c.get("target_type") == "grid_line"]
+        assert len(gl_corrections) >= 1
+
+    def test_grid_line_snap_skipped_when_already_snapped(self):
+        """SB endpoint already snapped in Round 1-3 is not re-snapped in Round 4."""
+        grid_data = {
+            "x": [
+                {"label": "A", "coordinate": 0.0},
+                {"label": "B", "coordinate": 8.50},
+            ],
+            "y": [
+                {"label": "1", "coordinate": 0.0},
+                {"label": "2", "coordinate": 6.00},
+            ],
+        }
+        config = {
+            "columns": [],
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 8.5, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [],
+        }
+        # Vertical SB spanning two beams: both endpoints should snap in Round 1
+        sb_data = {
+            "small_beams": [
+                {"x1": 4.25, "y1": 0.03, "x2": 4.25, "y2": 5.97,
+                 "section": "SB25X50", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_small_beams(
+            sb_data, config, grid_data, tolerance=1.0,
+            no_split=True, no_angle_correct=True)
+        sb = validated["small_beams"][0]
+        # Both endpoints should be snapped to beams (not grid lines)
+        assert abs(sb["y1"] - 0.0) < 0.01
+        assert abs(sb["y2"] - 6.0) < 0.01
+        # No grid_line corrections (already snapped before Round 4)
+        assert report["grid_line_snapped_endpoints"] == 0
+
+    def test_no_grid_snap_flag(self):
+        """--no-grid-snap disables Round 4 entirely."""
+        grid_data = {
+            "x": [
+                {"label": "A", "coordinate": 0.0},
+                {"label": "B", "coordinate": 8.50},
+            ],
+            "y": [
+                {"label": "1", "coordinate": 0.0},
+                {"label": "2", "coordinate": 6.00},
+            ],
+        }
+        config = {
+            "columns": [],
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 8.5, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [],
+        }
+        sb_data = {
+            "small_beams": [
+                # Horizontal SB with end near X=8.5 grid line
+                {"x1": 0.02, "y1": 3.0, "x2": 8.45, "y2": 3.0,
+                 "section": "SB25X50", "floors": ["1F"]},
+            ],
+        }
+        # With no_grid_snap=True, Round 4 should not run
+        validated_no_gs, report_no_gs = validate_small_beams(
+            sb_data, config, grid_data, tolerance=1.0,
+            no_split=True, no_angle_correct=True, no_grid_snap=True)
+        assert report_no_gs["grid_line_snapped_endpoints"] == 0
+
+        # With no_grid_snap=False (default), Round 4 should snap the end
+        validated_gs, report_gs = validate_small_beams(
+            sb_data, config, grid_data, tolerance=1.0,
+            no_split=True, no_angle_correct=True, no_grid_snap=False)
+        assert report_gs["grid_line_snapped_endpoints"] >= 1
+
+    def test_grid_line_snap_diagonal_sb(self):
+        """Diagonal SB's free endpoint snaps to grid line via Round 4."""
+        grid_data = {
+            "x": [
+                {"label": "A", "coordinate": 0.0},
+                {"label": "B", "coordinate": 8.50},
+            ],
+            "y": [
+                {"label": "1", "coordinate": 0.0},
+                {"label": "2", "coordinate": 6.00},
+            ],
+        }
+        config = {
+            "columns": [],
+            "beams": [
+                # Beam at Y=0 so start can snap in Round 1
+                {"x1": 0.0, "y1": 0.0, "x2": 8.5, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [],
+        }
+        # Diagonal SB: start near beam at Y=0, end near X=8.5 grid line
+        # Start (2.0, 0.03) snaps to beam at (2.0, 0.0) in Round 1
+        # End (8.45, 3.0) has no beam/wall/column → free after R1-3
+        # Ray direction from diagonal SB intersects X=8.5 grid line → Round 4
+        sb_data = {
+            "small_beams": [
+                {"x1": 2.0, "y1": 0.03, "x2": 8.45, "y2": 3.0,
+                 "section": "SB25X50", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_small_beams(
+            sb_data, config, grid_data, tolerance=1.0,
+            no_split=True, no_angle_correct=True)
+        sb = validated["small_beams"][0]
+        # Start should snap to beam at Y=0
+        assert abs(sb["y1"] - 0.0) < 0.01
+        # End should be grid-line-snapped to X=8.5
+        if report["grid_line_snapped_endpoints"] > 0:
+            gl_corrections = [c for c in report["corrections"]
+                              if c.get("target_type") == "grid_line"]
+            assert len(gl_corrections) >= 1
+            assert abs(sb["x2"] - 8.5) < 0.01
+
+    def test_report_has_grid_line_snapped_field(self, simple_grid_data, simple_config):
+        """Report always contains grid_line_snapped_endpoints key."""
+        sb_data = {
+            "small_beams": [
+                {"x1": 4.25, "y1": 0.0, "x2": 4.25, "y2": 6.0,
+                 "section": "SB25X50", "floors": ["1F"]},
+            ],
+        }
+        _, report = validate_small_beams(
+            sb_data, simple_config, simple_grid_data, tolerance=1.0)
+        assert "grid_line_snapped_endpoints" in report
+
+    def test_empty_sbs_has_grid_line_field(self, simple_grid_data, simple_config):
+        """Empty small_beams report still has grid_line_snapped_endpoints=0."""
+        sb_data = {"small_beams": []}
+        _, report = validate_small_beams(
+            sb_data, simple_config, simple_grid_data, tolerance=1.0)
+        assert report["grid_line_snapped_endpoints"] == 0

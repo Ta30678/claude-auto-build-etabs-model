@@ -586,6 +586,10 @@ def main():
     print(f"  frame sections: {config['sections']['frame']}")
     print(f"  wall sections: {config['sections']['wall']}")
 
+    # Stamp integrity before writing
+    from golden_scripts.tools.config_integrity import stamp_config
+    stamp_config(config)
+
     # Write output
     if args.dry_run:
         print("\n[DRY RUN] Output not written.")

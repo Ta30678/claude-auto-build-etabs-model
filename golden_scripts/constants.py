@@ -244,6 +244,69 @@ def parse_story_range(range_str, all_stories):
     return all_stories[i_start:i_end + 1]
 
 
+def expand_floor_range(range_str: str) -> list[str]:
+    """Expand floor range like '3F~14F' into ['3F', '4F', ..., '14F'].
+
+    Supported patterns:
+      B3F~B1F   → [B3F, B2F, B1F]      (basement descending)
+      B3F~1F    → [B3F, B2F, B1F, 1F]   (basement to ground)
+      1F~14F    → [1F, 2F, ..., 14F]     (normal ascending)
+      R1F~R3F   → [R1F, R2F, R3F]        (rooftop ascending)
+      RF        → [RF]                    (single floor)
+    """
+    range_str = range_str.strip()
+    range_str = range_str.replace("\uff5e", "~").replace("-", "~")  # normalize separators
+    if "~" not in range_str:
+        return [range_str]
+
+    start, end = [s.strip() for s in range_str.split("~", 1)]
+
+    # Basement: B3F~B1F
+    ms = re.match(r"^B(\d+)F$", start)
+    me = re.match(r"^B(\d+)F$", end)
+    if ms and me:
+        s, e = int(ms.group(1)), int(me.group(1))
+        step = -1 if s > e else 1
+        return [f"B{i}F" for i in range(s, e + step, step)]
+
+    # Basement to ground: B3F~1F  or  B3F~2F
+    if ms and re.match(r"^(\d+)F$", end):
+        s = int(ms.group(1))
+        e = int(re.match(r"^(\d+)F$", end).group(1))
+        result = [f"B{i}F" for i in range(s, 0, -1)]
+        result.extend(f"{i}F" for i in range(1, e + 1))
+        return result
+
+    # Normal floors: 3F~14F
+    ms = re.match(r"^(\d+)F$", start)
+    me = re.match(r"^(\d+)F$", end)
+    if ms and me:
+        s, e = int(ms.group(1)), int(me.group(1))
+        return [f"{i}F" for i in range(s, e + 1)]
+
+    # Rooftop: R1F~R3F
+    ms = re.match(r"^R(\d+)F$", start)
+    me = re.match(r"^R(\d+)F$", end)
+    if ms and me:
+        s, e = int(ms.group(1)), int(me.group(1))
+        return [f"R{i}F" for i in range(s, e + 1)]
+
+    # Normal floor to RF: 12F~RF (we cannot enumerate without max floor)
+    ms_n = re.match(r"^(\d+)F$", start)
+    me_r = re.match(r"^R(\d*)F$", end)
+    if ms_n and me_r:
+        s = int(ms_n.group(1))
+        r_num = me_r.group(1)
+        result = [f"{i}F" for i in range(s, s + 1)]  # start only
+        result.append(end)
+        print(f"  WARNING: Cannot fully enumerate '{range_str}'; returning [{start}, {end}]")
+        return result
+
+    # Fallback
+    print(f"  WARNING: Cannot expand floor range '{range_str}'; returning as-is")
+    return [start, end]
+
+
 def build_strength_lookup(strength_map_config, all_stories):
     """Convert config strength_map to (story, element_type) -> fc lookup.
 

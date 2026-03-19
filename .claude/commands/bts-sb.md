@@ -198,8 +198,17 @@ python -m golden_scripts.tools.slab_generator \
   --slab-thickness {SLAB_THICKNESS} \
   --raft-thickness {RAFT_THICKNESS} \
   --slab-zones "{Case Folder}/sb_elements_validated.json" \
+  --slide-floor-ranges "{SLIDE_FLOOR_RANGES}" \
+  --debug-dir "{Case Folder}/slab_debug" \
   --output "{Case Folder}/final_config.json"
 ```
+
+**`SLIDE_FLOOR_RANGES`**: 從 Phase 2 的 `PAGE_FLOOR_MAPPING` 組合而成。
+將所有 page-floors 的 floor range 用 `;` 連接，例如：
+`PAGE_FLOOR_MAPPING="1=B3F, 3=1F~2F, 4=3F~14F, 5=R1F~R3F"`
+→ `SLIDE_FLOOR_RANGES="B3F; 1F~2F; 3F~14F; R1F~R3F"`
+
+每個 range 獨立處理，不跨 range 合併版 — 修正共構案 B*F 版只覆蓋塔樓範圍的問題。
 
 ### Phase 2.6: 啟動 CONFIG-BUILDER
 

@@ -132,6 +132,55 @@ def build_sb_targets(config, grid_data):
     return grid_targets, element_targets
 
 
+def build_grid_line_targets(grid_data, tolerance=1.0):
+    """Build grid LINE segment targets for Round 4 fallback snap.
+
+    Converts each grid line into a finite segment spanning the full
+    grid extent (with margin), so ray snap can find intersections.
+
+    Parameters
+    ----------
+    grid_data : dict
+        Normalized grid data with "x" and "y" lists.
+    tolerance : float
+        Snap tolerance — margin is max(tolerance, 1.0).
+
+    Returns
+    -------
+    list[SnapTarget]
+        Grid line segment targets with floors=[] (no floor filtering).
+    """
+    x_grids = grid_data.get("x", [])
+    y_grids = grid_data.get("y", [])
+
+    if not x_grids or not y_grids:
+        return []
+
+    x_coords = [g["coordinate"] for g in x_grids]
+    y_coords = [g["coordinate"] for g in y_grids]
+    x_min, x_max = min(x_coords), max(x_coords)
+    y_min, y_max = min(y_coords), max(y_coords)
+    margin = max(tolerance, 1.0)
+
+    targets = []
+    # X grid lines: vertical segments spanning full Y extent
+    for xg in x_grids:
+        targets.append(SnapTarget(
+            "segment",
+            xg["coordinate"], y_min - margin,
+            xg["coordinate"], y_max + margin,
+            floors=[]))
+    # Y grid lines: horizontal segments spanning full X extent
+    for yg in y_grids:
+        targets.append(SnapTarget(
+            "segment",
+            x_min - margin, yg["coordinate"],
+            x_max + margin, yg["coordinate"],
+            floors=[]))
+
+    return targets
+
+
 # ---------------------------------------------------------------------------
 # 2. Angle correction
 # ---------------------------------------------------------------------------
@@ -481,12 +530,14 @@ def split_all_sbs(sb_data, config, grid_data, split_tolerance=0.30):
 def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
                          split_tolerance=0.30, no_split=False,
                          angle_threshold_deg=5.0, no_angle_correct=False,
-                         cluster_tolerance=0.30, no_cluster=False):
+                         cluster_tolerance=0.30, no_cluster=False,
+                         no_grid_snap=False):
     """Validate and auto-snap small beam endpoints.
 
     Pipeline order:
       Step 0: Angle correction (correct near-orthogonal SBs)
       Step 1-3: 3-round snap with post-round clustering
+      Step 3.5: Round 4 grid-line snap for remaining free endpoints
       Step 4: Post-validation (zero-length, direction changes, unsnapped)
       Step 5: SB splitting (at columns, walls, major beams, larger SBs)
 
@@ -513,6 +564,8 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
         (default 0.30m).
     no_cluster : bool
         If True, skip endpoint clustering.
+    no_grid_snap : bool
+        If True, skip Round 4 grid-line snap for free endpoints.
 
     Returns
     -------
@@ -548,6 +601,7 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
             "angle_corrected_sbs": len(angle_corrections),
             "clustered_endpoints": 0,
             "cluster_count": 0,
+            "grid_line_snapped_endpoints": 0,
             "split_sbs": 0,
             "new_sbs_from_split": 0,
             "total_sbs_after_split": 0,
@@ -676,8 +730,20 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
     _snap_round(base_targets + sb_snap_targets)
     _post_round_cluster()
 
+    # Round 4: grid line snap for remaining free endpoints
+    if not no_grid_snap:
+        grid_line_targets = build_grid_line_targets(grid_data, tolerance)
+        pre_r4_count = len(corrections)
+        _snap_round(grid_line_targets)
+        # Tag Round 4 corrections as grid_line
+        for c in corrections[pre_r4_count:]:
+            c["target_type"] = "grid_line"
+        _post_round_cluster()
+
     # --- Post-validation: unsnapped endpoints ---
     all_targets = base_targets + sb_snap_targets
+    if not no_grid_snap:
+        all_targets = all_targets + build_grid_line_targets(grid_data, tolerance)
     for i in range(n):
         sb = small_beams[i]
         for ep in range(2):
@@ -777,6 +843,8 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
         "angle_corrected_sbs": len(angle_corrections),
         "clustered_endpoints": clustered_eps,
         "cluster_count": len(all_cluster_corrections),
+        "grid_line_snapped_endpoints": sum(
+            1 for c in corrections if c.get("target_type") == "grid_line"),
         **split_report,
     }
 
@@ -814,6 +882,8 @@ def main():
                         "half-snapped SBs (default: 0.30m)")
     parser.add_argument("--no-cluster", action="store_true",
                         help="Skip endpoint clustering step")
+    parser.add_argument("--no-grid-snap", action="store_true",
+                        help="Skip Round 4 grid-line snap for free endpoints")
     parser.add_argument("--report", default=None,
                         help="Path for validation report JSON (optional)")
     parser.add_argument("--dry-run", action="store_true",
@@ -850,6 +920,10 @@ def main():
         print(f"  split tolerance: {args.split_tolerance}m")
     if not args.no_cluster:
         print(f"  cluster tolerance: {args.cluster_tolerance}m")
+    if args.no_grid_snap:
+        print(f"  grid-line snap: disabled")
+    else:
+        print(f"  grid-line snap: enabled (Round 4)")
 
     if n_sbs == 0:
         print("\nNo small beams to validate.")
@@ -869,6 +943,7 @@ def main():
         no_angle_correct=args.no_angle_correct,
         cluster_tolerance=args.cluster_tolerance,
         no_cluster=args.no_cluster,
+        no_grid_snap=args.no_grid_snap,
     )
 
     # Print summary
@@ -883,6 +958,10 @@ def main():
 
     if report.get("angle_corrections"):
         print(f"  Angle corrections: {report['angle_corrected_sbs']}")
+
+    if report.get("grid_line_snapped_endpoints", 0) > 0:
+        print(f"  Grid-line snapped endpoints: "
+              f"{report['grid_line_snapped_endpoints']}")
 
     if report.get("cluster_count", 0) > 0:
         print(f"  Endpoint clusters: {report['cluster_count']} "

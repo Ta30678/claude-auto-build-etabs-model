@@ -21,6 +21,8 @@ from golden_scripts.tools.slab_generator import (
     generate_slabs,
     generate_slab_config,
     group_segments_by_floor,
+    parse_slide_floor_ranges,
+    filter_segments_by_range,
 )
 
 
@@ -661,3 +663,200 @@ class TestPerFloorSlabGeneration:
         assert stats["total_slabs"] == 2
         for s in slabs:
             assert set(s["floors"]) == {"3F", "4F", "5F"}
+
+
+# ---------------------------------------------------------------------------
+# parse_slide_floor_ranges
+# ---------------------------------------------------------------------------
+
+class TestParseSlideFloorRanges:
+    def test_single_floor(self):
+        result = parse_slide_floor_ranges("B3F")
+        assert len(result) == 1
+        assert result[0] == ("B3F", frozenset({"B3F"}))
+
+    def test_multi_range(self):
+        result = parse_slide_floor_ranges("B3F; B2F~B1F; 1F~2F; 3F~14F; R1F~R3F")
+        assert len(result) == 5
+        assert result[0] == ("B3F", frozenset({"B3F"}))
+        assert result[1] == ("B2F~B1F", frozenset({"B2F", "B1F"}))
+        assert result[2] == ("1F~2F", frozenset({"1F", "2F"}))
+        assert result[3][0] == "3F~14F"
+        assert len(result[3][1]) == 12  # 3F through 14F
+        assert result[4] == ("R1F~R3F", frozenset({"R1F", "R2F", "R3F"}))
+
+    def test_whitespace_handling(self):
+        result = parse_slide_floor_ranges("  B3F ;  1F~2F  ")
+        assert len(result) == 2
+        assert result[0][1] == frozenset({"B3F"})
+        assert result[1][1] == frozenset({"1F", "2F"})
+
+    def test_empty_string(self):
+        result = parse_slide_floor_ranges("")
+        assert result == []
+
+    def test_none_input(self):
+        result = parse_slide_floor_ranges(None)
+        assert result == []
+
+    def test_overlapping_detection(self):
+        with pytest.raises(ValueError, match="overlap"):
+            parse_slide_floor_ranges("1F~3F; 2F~5F")
+
+
+# ---------------------------------------------------------------------------
+# filter_segments_by_range
+# ---------------------------------------------------------------------------
+
+class TestFilterSegmentsByRange:
+    def test_exact_match(self):
+        segments = [
+            (0, 0, 10, 0, {"1F", "2F"}),
+            (0, 0, 0, 6, {"3F"}),
+        ]
+        result = filter_segments_by_range(segments, frozenset({"1F", "2F"}))
+        assert len(result) == 1
+        assert result[0][4] == {"1F", "2F"}
+
+    def test_partial_overlap(self):
+        """Segment floors = {1F, 2F, 3F}, filter = {2F, 3F} → floors narrowed."""
+        segments = [
+            (0, 0, 10, 0, {"1F", "2F", "3F"}),
+        ]
+        result = filter_segments_by_range(segments, frozenset({"2F", "3F"}))
+        assert len(result) == 1
+        assert result[0][4] == {"2F", "3F"}
+
+    def test_no_overlap(self):
+        segments = [
+            (0, 0, 10, 0, {"1F"}),
+            (0, 0, 0, 6, {"2F"}),
+        ]
+        result = filter_segments_by_range(segments, frozenset({"3F"}))
+        assert len(result) == 0
+
+    def test_mixed(self):
+        """Some segments match, some don't."""
+        segments = [
+            (0, 0, 10, 0, {"B3F", "B2F", "B1F", "1F", "2F"}),
+            (0, 3, 10, 3, {"2F"}),
+            (5, 0, 5, 6, {"3F"}),
+        ]
+        result = filter_segments_by_range(segments, frozenset({"1F", "2F"}))
+        assert len(result) == 2
+        # First: {B3F,B2F,B1F,1F,2F} ∩ {1F,2F} = {1F,2F}
+        assert result[0][4] == {"1F", "2F"}
+        # Second: {2F} ∩ {1F,2F} = {2F}
+        assert result[1][4] == {"2F"}
+
+
+# ---------------------------------------------------------------------------
+# Per-range slab generation (integration)
+# ---------------------------------------------------------------------------
+
+class TestPerRangeSlabGeneration:
+    """Test per-slide-range slab generation (no cross-range merge)."""
+
+    @pytest.fixture
+    def shared_sub_config(self):
+        """共構 case: B*F beams cover full site (0-10, -5 to 6),
+        upper beams cover tower only (0-10, 0-6)."""
+        return {
+            "beams": [
+                # Tower beams (all floors)
+                {"x1": 0, "y1": 0, "x2": 10, "y2": 0,
+                 "section": "B55X80", "floors": ["B3F", "B2F", "B1F", "1F", "2F"]},
+                {"x1": 10, "y1": 0, "x2": 10, "y2": 6,
+                 "section": "B55X80", "floors": ["B3F", "B2F", "B1F", "1F", "2F"]},
+                {"x1": 10, "y1": 6, "x2": 0, "y2": 6,
+                 "section": "B55X80", "floors": ["B3F", "B2F", "B1F", "1F", "2F"]},
+                {"x1": 0, "y1": 6, "x2": 0, "y2": 0,
+                 "section": "B55X80", "floors": ["B3F", "B2F", "B1F", "1F", "2F"]},
+                # Extension beams (B*F only)
+                {"x1": 0, "y1": -5, "x2": 10, "y2": -5,
+                 "section": "FB55X120", "floors": ["B3F", "B2F", "B1F"]},
+                {"x1": 10, "y1": -5, "x2": 10, "y2": 0,
+                 "section": "FB55X120", "floors": ["B3F", "B2F", "B1F"]},
+                {"x1": 0, "y1": -5, "x2": 0, "y2": 0,
+                 "section": "FB55X120", "floors": ["B3F", "B2F", "B1F"]},
+            ],
+            "small_beams": [],
+            "columns": [],
+            "walls": [],
+            "stories": [
+                {"name": "B3F", "height": 4.0},
+                {"name": "B2F", "height": 4.0},
+                {"name": "B1F", "height": 4.0},
+                {"name": "1F", "height": 4.2},
+                {"name": "2F", "height": 3.3},
+            ],
+            "sections": {"frame": ["B55X80", "FB55X120"]},
+        }
+
+    def test_no_cross_range_merge(self, shared_sub_config):
+        """With slide_floor_ranges, B*F slabs cover full site, upper slabs cover tower only."""
+        ranges = parse_slide_floor_ranges("B3F; B2F~B1F; 1F~2F")
+        updated, stats = generate_slabs(
+            shared_sub_config, slab_thickness=15, raft_thickness=100,
+            slide_floor_ranges=ranges)
+        slabs = updated["slabs"]
+
+        # B3F should have slabs in the extension area (y < 0)
+        b3f_slabs = [s for s in slabs if "B3F" in s["floors"]]
+        b3f_has_extension = any(
+            any(c[1] < -0.1 for c in s["corners"])
+            for s in b3f_slabs
+        )
+        assert b3f_has_extension, \
+            "B3F slabs should cover extension area (full site)"
+
+        # Upper floors (1F, 2F) should NOT have extension area slabs
+        upper_slabs = [s for s in slabs
+                       if ("1F" in s["floors"] or "2F" in s["floors"])
+                       and "B3F" not in s["floors"]]
+        upper_has_extension = any(
+            any(c[1] < -0.1 for c in s["corners"])
+            for s in upper_slabs
+        )
+        assert not upper_has_extension, \
+            "Upper floor slabs should not extend into B*F-only area"
+
+    def test_extension_area_in_own_range(self, shared_sub_config):
+        """B*F range sees extension segments, produces FS at B3F."""
+        ranges = parse_slide_floor_ranges("B3F; B2F~B1F; 1F~2F")
+        updated, stats = generate_slabs(
+            shared_sub_config, slab_thickness=15, raft_thickness=100,
+            slide_floor_ranges=ranges)
+        slabs = updated["slabs"]
+
+        fs_slabs = [s for s in slabs if s["section"].startswith("FS")]
+        assert len(fs_slabs) >= 1, "Should have at least 1 FS slab"
+        for fs in fs_slabs:
+            assert fs["floors"] == ["B3F"], \
+                f"FS should only be at B3F, got {fs['floors']}"
+
+    def test_no_mixed_sub_super_floors(self, shared_sub_config):
+        """No slab should have floors spanning sub and superstructure."""
+        ranges = parse_slide_floor_ranges("B3F; B2F~B1F; 1F~2F")
+        updated, stats = generate_slabs(
+            shared_sub_config, slab_thickness=15, raft_thickness=100,
+            slide_floor_ranges=ranges)
+        slabs = updated["slabs"]
+
+        for s in slabs:
+            floors = set(s["floors"])
+            has_sub = any(f.startswith("B") for f in floors)
+            has_super = any(not f.startswith("B") for f in floors)
+            if s["section"].startswith("FS"):
+                continue  # FS split is handled by generate_slab_config
+            assert not (has_sub and has_super), \
+                f"Slab should not mix sub/super floors: {s['floors']}"
+
+    def test_fallback_without_ranges(self, shared_sub_config):
+        """Without slide_floor_ranges, uses legacy grouping (backward compatible)."""
+        updated, stats = generate_slabs(
+            shared_sub_config, slab_thickness=15, raft_thickness=100)
+        slabs = updated["slabs"]
+        # Should still produce slabs (legacy behavior)
+        assert len(slabs) > 0
+        assert stats["floor_groups"] >= 1

@@ -405,6 +405,8 @@ def main():
     if errors and args.validate:
         print("\nOutput NOT written due to validation errors.")
     else:
+        from golden_scripts.tools.config_integrity import stamp_config
+        stamp_config(merged)
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(merged, f, ensure_ascii=False, indent=2)
         print(f"\nMerged config written to: {args.output}")

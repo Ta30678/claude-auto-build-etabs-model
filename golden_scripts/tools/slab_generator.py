@@ -40,7 +40,7 @@ import re
 import sys
 from pathlib import Path
 
-from golden_scripts.constants import normalize_stories_order
+from golden_scripts.constants import expand_floor_range, normalize_stories_order
 from golden_scripts.tools.config_snap import segment_intersection
 
 
@@ -477,6 +477,143 @@ def group_segments_by_floor(segments):
 
 
 # ---------------------------------------------------------------------------
+# Per-slide floor range support (replaces group_segments_by_floor for 共構)
+# ---------------------------------------------------------------------------
+
+def parse_slide_floor_ranges(ranges_str):
+    """Parse semicolon-separated floor ranges into (label, frozenset) pairs.
+
+    Input:  "B3F; B2F~B1F; 1F~2F; 3F~14F; R1F~R3F"
+    Output: [("B3F", frozenset({"B3F"})),
+             ("B2F~B1F", frozenset({"B2F","B1F"})), ...]
+
+    Raises ValueError on overlapping floors across ranges.
+    """
+    if not ranges_str or not ranges_str.strip():
+        return []
+
+    result = []
+    seen_floors = {}  # floor -> range_label for overlap detection
+
+    for part in ranges_str.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        floors = expand_floor_range(part)
+        floor_set = frozenset(floors)
+
+        # Check for overlaps
+        for f in floors:
+            if f in seen_floors:
+                raise ValueError(
+                    f"Floor '{f}' appears in both '{seen_floors[f]}' and "
+                    f"'{part}' — ranges must not overlap")
+            seen_floors[f] = part
+
+        result.append((part, floor_set))
+
+    return result
+
+
+def filter_segments_by_range(segments, floor_set):
+    """Filter segments whose floors intersect with floor_set.
+
+    Returns new segments with floors narrowed to the intersection.
+    """
+    filtered = []
+    for x1, y1, x2, y2, floors in segments:
+        overlap = floors & floor_set
+        if overlap:
+            filtered.append((x1, y1, x2, y2, overlap))
+    return filtered
+
+
+def write_range_debug(debug_dir, range_label, segments, polygons_raw,
+                      polygons_filtered, slabs):
+    """Write per-range debug output files.
+
+    Output:
+        {debug_dir}/{range_label}/
+        ├── segments.json
+        ├── polygons_raw.json
+        ├── polygons_filtered.json
+        ├── slabs.json
+        └── slabs.png  (if matplotlib available)
+    """
+    range_dir = Path(debug_dir) / range_label
+    range_dir.mkdir(parents=True, exist_ok=True)
+
+    # segments.json
+    seg_data = []
+    for x1, y1, x2, y2, floors in segments:
+        seg_data.append({
+            "x1": round(x1, 4), "y1": round(y1, 4),
+            "x2": round(x2, 4), "y2": round(y2, 4),
+            "floors": sorted(floors),
+        })
+    with open(range_dir / "segments.json", "w", encoding="utf-8") as f:
+        json.dump(seg_data, f, ensure_ascii=False, indent=2)
+
+    # polygons_raw.json
+    raw_data = []
+    for poly in polygons_raw:
+        raw_data.append([[round(x, 4), round(y, 4)] for x, y in poly])
+    with open(range_dir / "polygons_raw.json", "w", encoding="utf-8") as f:
+        json.dump(raw_data, f, ensure_ascii=False, indent=2)
+
+    # polygons_filtered.json
+    filt_data = []
+    for poly, area in polygons_filtered:
+        filt_data.append({
+            "corners": [[round(x, 4), round(y, 4)] for x, y in poly],
+            "area": round(area, 2),
+        })
+    with open(range_dir / "polygons_filtered.json", "w", encoding="utf-8") as f:
+        json.dump(filt_data, f, ensure_ascii=False, indent=2)
+
+    # slabs.json
+    with open(range_dir / "slabs.json", "w", encoding="utf-8") as f:
+        json.dump(slabs, f, ensure_ascii=False, indent=2)
+
+    # slabs.png (guarded import)
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+        ax.set_aspect("equal")
+        ax.set_title(f"Slabs: {range_label} ({len(slabs)} slabs)")
+
+        # Draw segments
+        for x1, y1, x2, y2, _ in segments:
+            ax.plot([x1, x2], [y1, y2], "k-", linewidth=0.5, alpha=0.3)
+
+        # Draw slab polygons with fill
+        colors = plt.cm.Set3.colors
+        for idx, slab in enumerate(slabs):
+            corners = slab["corners"]
+            xs = [c[0] for c in corners] + [corners[0][0]]
+            ys = [c[1] for c in corners] + [corners[0][1]]
+            color = colors[idx % len(colors)]
+            ax.fill(xs, ys, alpha=0.3, color=color)
+            ax.plot(xs, ys, "-", linewidth=0.8, color=color)
+            cx = sum(c[0] for c in corners) / len(corners)
+            cy = sum(c[1] for c in corners) / len(corners)
+            ax.text(cx, cy, slab.get("section", ""),
+                    ha="center", va="center", fontsize=6)
+
+        ax.grid(True, alpha=0.2)
+        fig.tight_layout()
+        fig.savefig(range_dir / "slabs.png", dpi=120)
+        plt.close(fig)
+    except ImportError:
+        pass  # matplotlib not available
+
+    print(f"    Debug output written to: {range_dir}")
+
+
+# ---------------------------------------------------------------------------
 # Step 7: Floor assignment
 # ---------------------------------------------------------------------------
 
@@ -726,7 +863,8 @@ def generate_slab_config(slabs, slab_thickness=15, raft_thickness=100,
 # Main pipeline
 # ---------------------------------------------------------------------------
 
-def generate_slabs(config, slab_thickness=15, raft_thickness=100, slab_zones=None):
+def generate_slabs(config, slab_thickness=15, raft_thickness=100, slab_zones=None,
+                    slide_floor_ranges=None, debug_dir=None):
     """Main entry point: config → slab entries.
 
     Processes each floor group independently to avoid mixing segments
@@ -736,6 +874,11 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100, slab_zones=Non
         config: Complete config dict (must contain beams, small_beams, etc.)
         slab_thickness: Default slab thickness in cm
         raft_thickness: Default raft thickness in cm
+        slab_zones: Optional slab zone overlay for per-region thickness
+        slide_floor_ranges: Optional list of (label, frozenset) from
+            parse_slide_floor_ranges(). When provided, each range is processed
+            independently — no cross-range merging. Fixes 共構 bugs.
+        debug_dir: Optional path for per-range debug output
 
     Returns (updated_config, stats).
     """
@@ -781,14 +924,6 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100, slab_zones=Non
         stats["warnings"].append("Too few segments to form any slab")
         return config, stats
 
-    # Step 2: Group floors by identical segment geometry
-    print("  Step 2: Grouping floors by segment geometry...")
-    floor_groups = group_segments_by_floor(segments)
-    stats["floor_groups"] = len(floor_groups)
-    print(f"    Floor groups: {len(floor_groups)}")
-    for fs, gs in floor_groups:
-        print(f"      {sorted(fs)}: {len(gs)} segments")
-
     stories = normalize_stories_order(config.get("stories", []))
     foundation_floor = None
     for s in stories:
@@ -796,43 +931,108 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100, slab_zones=Non
             if foundation_floor is None:
                 foundation_floor = s["name"]
 
-    # Steps 3-6: Process each group independently
     all_slabs = []
 
-    for floor_set, group_segs in floor_groups:
-        if len(group_segs) < 3:
-            continue
+    if slide_floor_ranges:
+        # --- Per-slide-range mode: each range processed independently ---
+        print("  Step 2: Per-slide floor ranges (no cross-range merge)...")
+        stats["floor_groups"] = len(slide_floor_ranges)
+        print(f"    Ranges: {len(slide_floor_ranges)}")
 
-        print(f"  Processing group {sorted(floor_set)} "
-              f"({len(group_segs)} segments)...")
+        # Warn about uncovered floors
+        all_config_floors = set()
+        for seg in segments:
+            all_config_floors |= seg[4]
+        covered = set()
+        for _, fs in slide_floor_ranges:
+            covered |= fs
+        uncovered = all_config_floors - covered
+        if uncovered:
+            msg = (f"Floors {sorted(uncovered)} in config are not covered "
+                   f"by any slide-floor-range")
+            stats["warnings"].append(msg)
+            print(f"    WARNING: {msg}")
 
-        seg_points = compute_intersections(group_segs)
-        n_ints = sum(len(pts) - 2 for pts in seg_points.values())
-        stats["total_intersections"] += n_ints
+        for range_label, floor_set in slide_floor_ranges:
+            range_segs = filter_segments_by_range(segments, floor_set)
+            print(f"      {range_label} ({sorted(floor_set)}): "
+                  f"{len(range_segs)} segments")
 
-        beam_segs = build_beam_segments(group_segs, seg_points)
-        stats["total_beam_segments"] += len(beam_segs)
+            if len(range_segs) < 3:
+                continue
 
-        if len(beam_segs) < 3:
-            continue
+            seg_points = compute_intersections(range_segs)
+            n_ints = sum(len(pts) - 2 for pts in seg_points.values())
+            stats["total_intersections"] += n_ints
 
-        adj, edge_floors = build_point_adjacency(beam_segs)
-        polygons = walk_slab_polygons(adj)
-        stats["total_polygons_raw"] += len(polygons)
+            beam_segs = build_beam_segments(range_segs, seg_points)
+            stats["total_beam_segments"] += len(beam_segs)
 
-        valid_faces = filter_slabs(polygons, config)
-        stats["total_polygons_filtered"] += len(valid_faces)
+            if len(beam_segs) < 3:
+                continue
 
-        # Assign this group's floors to all slabs
-        group_slabs = assign_floors_simple(
-            valid_faces, floor_set, stories, foundation_floor)
-        all_slabs.extend(group_slabs)
-        print(f"    -> {len(valid_faces)} slabs")
+            adj, edge_floors = build_point_adjacency(beam_segs)
+            polygons = walk_slab_polygons(adj)
+            stats["total_polygons_raw"] += len(polygons)
 
-    # Step 7: Merge identical slabs across groups
-    print("  Step 7: Merging slabs across groups...")
-    merged_slabs = _merge_slab_entries(all_slabs, stories)
-    print(f"    {len(all_slabs)} raw -> {len(merged_slabs)} merged")
+            valid_faces = filter_slabs(polygons, config)
+            stats["total_polygons_filtered"] += len(valid_faces)
+
+            range_slabs = assign_floors_simple(
+                valid_faces, floor_set, stories, foundation_floor)
+            print(f"      -> {len(valid_faces)} slabs")
+
+            if debug_dir:
+                write_range_debug(debug_dir, range_label, range_segs,
+                                  polygons, valid_faces, range_slabs)
+
+            all_slabs.extend(range_slabs)
+
+        # NO _merge_slab_entries — ranges are independent
+        merged_slabs = all_slabs
+        print(f"  Total slabs across ranges: {len(merged_slabs)}")
+
+    else:
+        # --- Legacy mode: geometry-based grouping + merge ---
+        print("  Step 2: Grouping floors by segment geometry...")
+        floor_groups = group_segments_by_floor(segments)
+        stats["floor_groups"] = len(floor_groups)
+        print(f"    Floor groups: {len(floor_groups)}")
+        for fs, gs in floor_groups:
+            print(f"      {sorted(fs)}: {len(gs)} segments")
+
+        for floor_set, group_segs in floor_groups:
+            if len(group_segs) < 3:
+                continue
+
+            print(f"  Processing group {sorted(floor_set)} "
+                  f"({len(group_segs)} segments)...")
+
+            seg_points = compute_intersections(group_segs)
+            n_ints = sum(len(pts) - 2 for pts in seg_points.values())
+            stats["total_intersections"] += n_ints
+
+            beam_segs = build_beam_segments(group_segs, seg_points)
+            stats["total_beam_segments"] += len(beam_segs)
+
+            if len(beam_segs) < 3:
+                continue
+
+            adj, edge_floors = build_point_adjacency(beam_segs)
+            polygons = walk_slab_polygons(adj)
+            stats["total_polygons_raw"] += len(polygons)
+
+            valid_faces = filter_slabs(polygons, config)
+            stats["total_polygons_filtered"] += len(valid_faces)
+
+            group_slabs = assign_floors_simple(
+                valid_faces, floor_set, stories, foundation_floor)
+            all_slabs.extend(group_slabs)
+            print(f"    -> {len(valid_faces)} slabs")
+
+        print("  Step 7: Merging slabs across groups...")
+        merged_slabs = _merge_slab_entries(all_slabs, stories)
+        print(f"    {len(all_slabs)} raw -> {len(merged_slabs)} merged")
 
     if not merged_slabs:
         stats["warnings"].append("No valid slab polygons found after filtering")
@@ -886,6 +1086,13 @@ def main():
                         help="Default raft thickness in cm (default: 100)")
     parser.add_argument("--slab-zones",
                         help="Path to slab zones JSON (standalone or sb_elements_validated.json)")
+    parser.add_argument("--slide-floor-ranges",
+                        help="Semicolon-separated floor ranges from PPT page-floors "
+                             "(e.g. 'B3F; B2F~B1F; 1F~2F; 3F~14F; R1F~R3F'). "
+                             "Each range is processed independently — no cross-range merge.")
+    parser.add_argument("--debug-dir",
+                        help="Directory for per-range debug output "
+                             "(segments, polygons, slabs per range)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show results without writing output")
     args = parser.parse_args()
@@ -908,6 +1115,14 @@ def main():
         if slab_zones:
             print(f"  Slab zones loaded: {len(slab_zones)} zones from {args.slab_zones}")
 
+    # Parse slide floor ranges if provided
+    slide_floor_ranges = None
+    if args.slide_floor_ranges:
+        slide_floor_ranges = parse_slide_floor_ranges(args.slide_floor_ranges)
+        print(f"Slide floor ranges: {len(slide_floor_ranges)} ranges")
+        for label, fs in slide_floor_ranges:
+            print(f"  {label}: {sorted(fs)}")
+
     print(f"Config loaded: {args.config}")
     print(f"  beams: {len(config.get('beams', []))}")
     print(f"  small_beams: {len(config.get('small_beams', []))}")
@@ -922,6 +1137,8 @@ def main():
         slab_thickness=args.slab_thickness,
         raft_thickness=args.raft_thickness,
         slab_zones=slab_zones,
+        slide_floor_ranges=slide_floor_ranges,
+        debug_dir=args.debug_dir,
     )
 
     print(f"\n--- Slab Generation Summary ---")
@@ -952,6 +1169,8 @@ def main():
     if args.dry_run:
         print(f"\n[DRY RUN] No output written.")
     else:
+        from golden_scripts.tools.config_integrity import stamp_config
+        stamp_config(updated_config)
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:

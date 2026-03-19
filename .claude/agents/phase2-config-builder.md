@@ -35,7 +35,10 @@ python run_all.py --config "{CONFIG_PATH}" --steps 2,7,8
 - 每個 step 應印出 `"=== Step N ... complete ==="`
 - 如有 `ERROR` 或 traceback：
   1. 閱讀錯誤訊息，判斷問題來源
-  2. 修正 `final_config.json` 中的對應欄位
+  2. 修正 `final_config.json` 中的**格式性欄位**（如 section 名稱拼寫、floors 排序）
+     ⛔ **不可修改構件陣列內容**（不刪除/新增/修改 small_beams/slabs 元素）
+     💡 技術保護：config 內含 `_integrity` SHA-256 雜湊，`run_all.py` 執行前會自動驗證。
+     任何構件陣列的修改（包括刪除 `_integrity` 本身）都會導致執行中止。
   3. 重跑失敗的 step：`python run_all.py --config "..." --steps {failed_step}`
   4. 如果修正後仍然失敗，SendMessage 告知 Team Lead 錯誤詳情
 - 最多重試 2 次，仍失敗則上報 Team Lead

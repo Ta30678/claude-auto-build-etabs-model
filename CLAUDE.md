@@ -215,6 +215,15 @@ python -m golden_scripts.tools.slab_generator \
     --raft-thickness 100 \
     --slab-zones sb_elements_validated.json \
     --output final_config.json
+
+# Per-slide floor ranges (fixes 共構 bugs — no cross-range merge)
+python -m golden_scripts.tools.slab_generator \
+    --config merged_config.json \
+    --slab-thickness 15 \
+    --raft-thickness 100 \
+    --slide-floor-ranges "B3F; B2F~B1F; 1F~2F; 3F~14F; R1F~R3F" \
+    --debug-dir slab_debug/ \
+    --output final_config.json
 ```
 
 ### Elements Merge Tool (Phase 1 + Phase 2)

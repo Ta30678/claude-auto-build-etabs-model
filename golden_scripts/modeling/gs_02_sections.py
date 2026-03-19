@@ -166,11 +166,13 @@ def create_area_sections(SapModel, sections_list, existing_materials=None):
 
 
 def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
-                     batch_size=100, batch_pause=1.0):
+                     batch_size=100, batch_pause=1.0, save_path=None):
     """Assign rebar configuration to all frame sections.
 
     Always applies rebar (even for existing sections) to ensure
     correct design type (Beam/Column) and bar counts.
+
+    Writes a JSON log to {save_path dir}/rebar_log.json for debugging.
     """
     # [DIAG] Check if SD420 rebar material exists
     rebar_mats = get_existing_materials(SapModel)
@@ -178,6 +180,13 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
     print(f"  [DIAG] All materials: {sorted(rebar_mats)}")
     print(f"  [DIAG] frame_sections count: {len(frame_sections)}")
 
+    # Collect current ETABS units
+    try:
+        current_units = SapModel.GetPresentUnits()
+    except Exception:
+        current_units = "unknown"
+
+    log_entries = []
     beam_count, col_count, fail_count = 0, 0, 0
     batch_counter = 0
 
@@ -188,9 +197,25 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
         if not prefix:
             continue
 
+        entry = {"section": name, "prefix": prefix, "material": mat,
+                 "depth_m": depth_m, "width_m": width_m}
+
         if prefix == "C":
             width_cm, depth_cm = get_frame_dimensions(prefix, w_cm, d_cm)
             num_r3, num_r2 = calc_column_bar_distribution(width_cm, depth_cm)
+            params = {
+                "LongRebarMat": "SD420", "ConfineMat": "SD420",
+                "Pattern": 1, "ConfineType": 1,
+                "Cover": COL_COVER, "CornerBars": COL_CORNER_BARS,
+                "NumR3Bars": num_r3, "NumR2Bars": num_r2,
+                "RebarSize": COL_REBAR_SIZE, "TieSize": COL_TIE_SIZE,
+                "TieSpacing": COL_TIE_SPACING,
+                "Num2DirTie": COL_NUM_2DIR_TIE, "Num3DirTie": COL_NUM_3DIR_TIE,
+                "ToBeDesigned": True,
+            }
+            entry["api_method"] = "SetRebarColumn"
+            entry["params"] = params
+
             ret = SapModel.PropFrame.SetRebarColumn(
                 name, "SD420", "SD420",
                 1,                    # Pattern: Rectangular
@@ -207,30 +232,49 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
                 True                  # ToBeDesigned
             )
             retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+            entry["ret_raw"] = str(ret)
+            entry["retcode"] = retcode
             if retcode == 0:
                 col_count += 1
+                entry["status"] = "OK"
                 if col_count <= 3:
                     print(f"    [DIAG] SetRebarColumn OK: {name}")
             else:
                 fail_count += 1
+                entry["status"] = "FAIL"
                 print(f"    [DIAG] SetRebarColumn FAIL: {name} ret={ret}")
         else:
             is_fb = is_foundation_beam(prefix)
             cover_top = FB_COVER_TOP if is_fb else BEAM_COVER_TOP
             cover_bot = FB_COVER_BOT if is_fb else BEAM_COVER_BOT
+            params = {
+                "LongRebarMat": "SD420", "ConfineMat": "SD420",
+                "CoverTop": cover_top, "CoverBot": cover_bot,
+                "TopArea": 0, "BotArea": 0,
+                "TopAreaComp": 0, "BotAreaComp": 0,
+            }
+            entry["api_method"] = "SetRebarBeam"
+            entry["params"] = params
+
             ret = SapModel.PropFrame.SetRebarBeam(
                 name, "SD420", "SD420",
                 cover_top, cover_bot,
                 0, 0, 0, 0            # Area values (0 = design mode)
             )
             retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
+            entry["ret_raw"] = str(ret)
+            entry["retcode"] = retcode
             if retcode == 0:
                 beam_count += 1
+                entry["status"] = "OK"
                 if beam_count <= 3:
                     print(f"    [DIAG] SetRebarBeam OK: {name}")
             else:
                 fail_count += 1
+                entry["status"] = "FAIL"
                 print(f"    [DIAG] SetRebarBeam FAIL: {name} ret={ret}")
+
+        log_entries.append(entry)
 
         batch_counter += 1
         if batch_counter % batch_size == 0:
@@ -239,6 +283,34 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
             except Exception:
                 pass
             time.sleep(batch_pause)
+
+    # Write JSON log
+    log_data = {
+        "environment": {
+            "sd420_exists": "SD420" in rebar_mats,
+            "all_materials": sorted(rebar_mats),
+            "frame_sections_count": len(frame_sections),
+            "current_units": current_units,
+        },
+        "summary": {
+            "beam_ok": beam_count,
+            "col_ok": col_count,
+            "fail": fail_count,
+            "total_processed": len(log_entries),
+        },
+        "entries": log_entries,
+    }
+    if save_path:
+        log_dir = os.path.dirname(os.path.normpath(save_path))
+    else:
+        log_dir = os.getcwd()
+    log_path = os.path.join(log_dir, "rebar_log.json")
+    try:
+        with open(log_path, "w", encoding="utf-8") as f:
+            json.dump(log_data, f, indent=2, ensure_ascii=False)
+        print(f"  [DIAG] Rebar log written to: {log_path}")
+    except Exception as e:
+        print(f"  [DIAG] Failed to write rebar log: {e}")
 
     print(f"  Rebar assigned: {beam_count} beams, {col_count} columns")
     if fail_count > 0:
@@ -356,7 +428,7 @@ def run(SapModel, config):
     # Assign rebar to all frame sections
     print("\n--- Assigning rebar ---")
     print(f"  [DIAG] About to assign rebar to {len(frame_unique)} sections")
-    assign_all_rebar(SapModel, frame_unique, existing_materials)
+    assign_all_rebar(SapModel, frame_unique, existing_materials, save_path=save_path)
 
     # Checkpoint save after rebar assignment
     if save_path:

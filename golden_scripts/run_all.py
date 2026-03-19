@@ -79,7 +79,7 @@ def _read_etabs_elevations(SapModel):
         return None
 
 
-def run_all(config, steps_to_run=None, dry_run=False):
+def run_all(config, steps_to_run=None, dry_run=False, skip_integrity=False):
     """Run all golden scripts in sequence."""
     start_time = time.time()
 
@@ -91,6 +91,23 @@ def run_all(config, steps_to_run=None, dry_run=False):
     steps_label = steps_to_run if steps_to_run else 'MODELING (1-11)'
     print(f"  Steps: {steps_label}")
     print("=" * 70)
+
+    # Integrity verification — prevents element array tampering
+    if config and not skip_integrity:
+        from tools.config_integrity import verify_integrity
+        ok, message = verify_integrity(config)
+        if not ok:
+            print(f"\n{'='*70}")
+            print(f"  INTEGRITY CHECK FAILED")
+            print(f"{'='*70}")
+            print(f"  {message}")
+            print(f"\n  Element arrays (columns/beams/walls/small_beams/slabs)")
+            print(f"  must not be modified after config generation.")
+            print(f"  Re-run the generating tool to produce a fresh config.")
+            print(f"{'='*70}")
+            return
+    if config:
+        config.pop("_integrity", None)
 
     if dry_run:
         dry_steps = steps_to_run if steps_to_run is not None else set(MODELING_STEPS.keys())
@@ -244,6 +261,8 @@ def main():
                         help="Step numbers (e.g. '1,2,3') or alias ('modeling', 'design')")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would be done without executing")
+    parser.add_argument("--skip-integrity", action="store_true",
+                        help="Skip integrity check (for manually edited configs)")
     args = parser.parse_args()
 
     steps = None
@@ -265,7 +284,7 @@ def main():
         else:
             parser.error("--config is required (unless running only --steps 12)")
 
-    run_all(config, steps, args.dry_run)
+    run_all(config, steps, args.dry_run, args.skip_integrity)
 
 
 if __name__ == "__main__":
