@@ -15,6 +15,7 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 from golden_scripts.tools.pptx_to_elements import (
     _fuzzy_color_match,
     _resolve_pptx_legend,
+    _build_rect_color_map,
     _build_theme_color_map,
     _resolve_scheme_color,
     _apply_brightness,
@@ -28,6 +29,9 @@ from golden_scripts.tools.pptx_to_elements import (
     _iter_text_shapes,
     _SLAB_SECTION_RE,
     _SLAB_THICKNESS_RE,
+    _is_line_shape,
+    _get_line_flip,
+    _line_endpoints_emu,
 )
 
 
@@ -1387,3 +1391,380 @@ class TestSlabGeometryFiltering:
         # (extract_and_classify_shapes) only processes lines as beams/walls.
         # The important thing is the geometry-filtered path doesn't match.
         pass  # Slab not being in line compat is verified by test_slab_in_geometry_compat
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Diagonal Line / Column Filter Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestIsLineShape:
+    """Test _is_line_shape helper."""
+
+    def test_mso_line_returns_true(self):
+        """MSO_SHAPE_TYPE.LINE shape → True."""
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.LINE
+        assert _is_line_shape(shape) is True
+
+    def test_freeform_2_vertices_returns_true(self):
+        """FREEFORM with exactly 2 vertices → True (line segment)."""
+        from lxml import etree
+        ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        sp = etree.Element('sp')
+        cust_geom = etree.SubElement(sp, f'{{{ns_a}}}custGeom')
+        path_lst = etree.SubElement(cust_geom, f'{{{ns_a}}}pathLst')
+        path = etree.SubElement(path_lst, f'{{{ns_a}}}path')
+        etree.SubElement(path, f'{{{ns_a}}}moveTo')
+        etree.SubElement(path, f'{{{ns_a}}}lnTo')
+
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.FREEFORM
+        shape._element = sp
+        assert _is_line_shape(shape) is True
+
+    def test_freeform_4_vertices_returns_false(self):
+        """FREEFORM with 4 vertices → False (rectangle)."""
+        from lxml import etree
+        ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        sp = etree.Element('sp')
+        cust_geom = etree.SubElement(sp, f'{{{ns_a}}}custGeom')
+        path_lst = etree.SubElement(cust_geom, f'{{{ns_a}}}pathLst')
+        path = etree.SubElement(path_lst, f'{{{ns_a}}}path')
+        etree.SubElement(path, f'{{{ns_a}}}moveTo')
+        etree.SubElement(path, f'{{{ns_a}}}lnTo')
+        etree.SubElement(path, f'{{{ns_a}}}lnTo')
+        etree.SubElement(path, f'{{{ns_a}}}lnTo')
+
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.FREEFORM
+        shape._element = sp
+        assert _is_line_shape(shape) is False
+
+    def test_auto_shape_returns_false(self):
+        """AUTO_SHAPE → False."""
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.AUTO_SHAPE
+        assert _is_line_shape(shape) is False
+
+    def test_abs_shape_wrapped_line(self):
+        """_AbsShape wrapping a LINE shape → True."""
+        inner = MagicMock()
+        inner.shape_type = MSO_SHAPE_TYPE.LINE
+        inner.width = 100
+        inner.height = 50
+        proxy = _AbsShape(inner, 0, 0)
+        assert _is_line_shape(proxy) is True
+
+
+class TestGetLineFlip:
+    """Test _get_line_flip helper — all 4 flip combinations."""
+
+    def _make_shape_with_xfrm(self, flipH=None, flipV=None):
+        from lxml import etree
+        ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        sp = etree.Element('sp')
+        sp_pr = etree.SubElement(sp, f'{{{ns_a}}}spPr')
+        attrs = {}
+        if flipH is not None:
+            attrs['flipH'] = '1' if flipH else '0'
+        if flipV is not None:
+            attrs['flipV'] = '1' if flipV else '0'
+        etree.SubElement(sp_pr, f'{{{ns_a}}}xfrm', **attrs)
+
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.LINE
+        shape._element = sp
+        return shape
+
+    def test_no_flip(self):
+        shape = self._make_shape_with_xfrm(flipH=False, flipV=False)
+        assert _get_line_flip(shape) == (False, False)
+
+    def test_flip_h_only(self):
+        shape = self._make_shape_with_xfrm(flipH=True, flipV=False)
+        assert _get_line_flip(shape) == (True, False)
+
+    def test_flip_v_only(self):
+        shape = self._make_shape_with_xfrm(flipH=False, flipV=True)
+        assert _get_line_flip(shape) == (False, True)
+
+    def test_flip_both(self):
+        shape = self._make_shape_with_xfrm(flipH=True, flipV=True)
+        assert _get_line_flip(shape) == (True, True)
+
+    def test_no_xfrm_defaults(self):
+        """Shape without xfrm → (False, False)."""
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.LINE
+        shape._element = MagicMock()
+        shape._element.find = MagicMock(return_value=None)
+        assert _get_line_flip(shape) == (False, False)
+
+
+class TestLineEndpointsEmu:
+    """Test _line_endpoints_emu — all 4 flip→endpoint mappings."""
+
+    def _make_line_shape(self, left, top, w, h, flipH=False, flipV=False):
+        from lxml import etree
+        ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        sp = etree.Element('sp')
+        sp_pr = etree.SubElement(sp, f'{{{ns_a}}}spPr')
+        attrs = {}
+        if flipH:
+            attrs['flipH'] = '1'
+        if flipV:
+            attrs['flipV'] = '1'
+        etree.SubElement(sp_pr, f'{{{ns_a}}}xfrm', **attrs)
+
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.LINE
+        shape._element = sp
+        shape.left = left
+        shape.top = top
+        shape.width = w
+        shape.height = h
+        return shape
+
+    def test_no_flip(self):
+        """No flip: (left, top) → (left+w, top+h)."""
+        shape = self._make_line_shape(100, 200, 300, 400)
+        (x1, y1), (x2, y2) = _line_endpoints_emu(shape)
+        assert (x1, y1) == (100, 200)
+        assert (x2, y2) == (400, 600)
+
+    def test_flip_h(self):
+        """flipH: (left+w, top) → (left, top+h)."""
+        shape = self._make_line_shape(100, 200, 300, 400, flipH=True)
+        (x1, y1), (x2, y2) = _line_endpoints_emu(shape)
+        assert (x1, y1) == (400, 200)
+        assert (x2, y2) == (100, 600)
+
+    def test_flip_v(self):
+        """flipV: (left, top+h) → (left+w, top)."""
+        shape = self._make_line_shape(100, 200, 300, 400, flipV=True)
+        (x1, y1), (x2, y2) = _line_endpoints_emu(shape)
+        assert (x1, y1) == (100, 600)
+        assert (x2, y2) == (400, 200)
+
+    def test_flip_both(self):
+        """Both flipped: (left+w, top+h) → (left, top)."""
+        shape = self._make_line_shape(100, 200, 300, 400, flipH=True, flipV=True)
+        (x1, y1), (x2, y2) = _line_endpoints_emu(shape)
+        assert (x1, y1) == (400, 600)
+        assert (x2, y2) == (100, 200)
+
+
+class TestColumnFilterRemoval:
+    """Test that large columns are accepted after 500k EMU upper bound removal."""
+
+    def test_large_column_with_legend_match_accepted(self):
+        """Column with w=600,000 EMU should now be accepted (was filtered by 500k limit).
+
+        We test via _resolve_pptx_legend: if a rectangle shape color matches
+        a column legend entry, it should resolve regardless of size.
+        """
+        legend = {
+            "00FF00": [_make_entry(element_type="column", section="C100X120",
+                                   color="00FF00")],
+        }
+        entry = _resolve_pptx_legend("00FF00", "rectangle", legend, tolerance=150)
+        assert entry is not None
+        assert entry.element_type == "column"
+        assert entry.section == "C100X120"
+
+
+class TestAxisAlignedLineRegression:
+    """Regression: H lines (h=0) and V lines (w=0) still classified correctly."""
+
+    def test_horizontal_line_h_zero(self):
+        """h=0 → is_line=True, orientation H."""
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.LINE
+        shape.width = 500000
+        shape.height = 0
+        # _is_line_shape should return True
+        assert _is_line_shape(shape) is True
+
+    def test_vertical_line_w_zero(self):
+        """w=0 → is_line=True, orientation V."""
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.LINE
+        shape.width = 0
+        shape.height = 500000
+        assert _is_line_shape(shape) is True
+
+    def test_auto_shape_w_zero_still_line(self):
+        """AUTO_SHAPE with w=0 is still detected as line via w==0 check.
+
+        In extract_and_classify_shapes, the logic is:
+            w, h = shape.width, shape.height
+            is_line = _is_line_shape(shape) or w == 0 or h == 0
+        So AUTO_SHAPE with w=0 becomes a line via the fallback dimension check.
+        """
+        shape = MagicMock()
+        shape.shape_type = MSO_SHAPE_TYPE.AUTO_SHAPE
+        # Simulate how extract_and_classify_shapes uses actual int values
+        w, h = 0, 500000
+        is_line = _is_line_shape(shape) or w == 0 or h == 0
+        assert is_line is True
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Per-slide Batch Color Classification Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestBuildRectColorMap:
+    """Test _build_rect_color_map per-slide batch color→legend mapping."""
+
+    def _make_legend(self, entries):
+        """Build legend dict from list of (hex, element_type, section).
+
+        Legend structure: {hex: [LegendEntry, ...]}
+        """
+        legend = {}
+        for hex_color, etype, section in entries:
+            e = _make_entry(element_type=etype, section=section, color=hex_color)
+            legend.setdefault(hex_color, []).append(e)
+        return legend
+
+    def _make_columns(self, colors):
+        """Build column dicts from list of (color, alt_color|None)."""
+        cols = []
+        for c, alt in colors:
+            cols.append({"color": c, "alt_color": alt,
+                         "left": 0, "top": 0, "width": 100, "height": 100})
+        return cols
+
+    def test_exclusive_closest_wins(self):
+        """Two shape colors compete for one legend entry; closest anchor wins.
+
+        Legend: column = (255,166,77) = FFA64D
+        Shape colors: FF8000 (dist=77), FFFF00 (dist=89)
+        FF8000 is closer → becomes anchor → FFFF00 excluded (dist to anchor=127 > 15).
+        """
+        legend = self._make_legend([("FFA64D", "column", "C100X120")])
+        columns = self._make_columns([
+            ("FF8000", None),  # dist to FFA64D = max(0,38,77) = 77
+            ("FFFF00", None),  # dist to FFA64D = max(0,89,77) = 89
+        ])
+        cmap = _build_rect_color_map(columns, legend, tolerance=150)
+        assert "FF8000" in cmap
+        assert cmap["FF8000"].element_type == "column"
+        # FFFF00 is 127 away from anchor FF8000 → excluded (> 15)
+        assert "FFFF00" not in cmap
+
+    def test_shade_variant_included(self):
+        """Shade variant within ±15 of anchor gets mapped to same entry.
+
+        Legend: column = FFA64D
+        Shape colors: FF8000 (anchor, dist=77), FF8A05 (dist to anchor=max(0,10,5)=10 ≤ 15)
+        """
+        legend = self._make_legend([("FFA64D", "column", "C100X120")])
+        columns = self._make_columns([
+            ("FF8000", None),
+            ("FF8A05", None),  # Chebyshev to FF8000: max(0,10,5)=10
+        ])
+        cmap = _build_rect_color_map(columns, legend, tolerance=150)
+        assert "FF8000" in cmap
+        assert "FF8A05" in cmap
+        assert cmap["FF8A05"].element_type == "column"
+
+    def test_shade_variant_excluded(self):
+        """Color beyond ±15 from anchor is NOT included as shade variant.
+
+        Legend: column = FFA64D
+        Shape colors: FF8000 (anchor), FF6000 (dist to anchor = max(0,32,0)=32 > 15)
+        """
+        legend = self._make_legend([("FFA64D", "column", "C100X120")])
+        columns = self._make_columns([
+            ("FF8000", None),
+            ("FF6000", None),  # Chebyshev to FF8000: max(0,32,0)=32
+        ])
+        cmap = _build_rect_color_map(columns, legend, tolerance=150)
+        assert "FF8000" in cmap
+        assert "FF6000" not in cmap
+
+    def test_multiple_legend_entries(self):
+        """Legend has column + slab; each finds correct anchor.
+
+        Legend: column = FFA64D, slab = FFFF00
+        Shape colors: FF8000 (orange → column), FFFF00 (yellow → slab exact)
+        """
+        legend = self._make_legend([
+            ("FFA64D", "column", "C100X120"),
+            ("FFFF00", "slab", "S15"),
+        ])
+        columns = self._make_columns([
+            ("FF8000", None),
+            ("FFFF00", None),
+        ])
+        cmap = _build_rect_color_map(columns, legend, tolerance=150)
+        assert cmap["FF8000"].element_type == "column"
+        assert cmap["FFFF00"].element_type == "slab"
+
+    def test_no_match_beyond_tolerance(self):
+        """All shape colors beyond tolerance → empty mapping."""
+        legend = self._make_legend([("FF0000", "column", "C90X90")])
+        columns = self._make_columns([
+            ("00FF00", None),  # dist = 255
+            ("0000FF", None),  # dist = 255
+        ])
+        cmap = _build_rect_color_map(columns, legend, tolerance=150)
+        assert len(cmap) == 0
+
+    def test_two_legends_compete_for_same_anchor(self):
+        """Two legend entries both closest to the same shape color.
+
+        Legend: column = FFA64D (dist to FF8000 = 77), slab = FF9933 (dist to FF8000 = 51)
+        Slab is closer → claims FF8000. Column must find next best or get nothing.
+        """
+        legend = self._make_legend([
+            ("FFA64D", "column", "C100X120"),  # dist to FF8000 = 77
+            ("FF9933", "slab", "S15"),          # dist to FF8000 = max(0,25,51)=51
+        ])
+        columns = self._make_columns([("FF8000", None)])
+        cmap = _build_rect_color_map(columns, legend, tolerance=150)
+        # Slab is closer → wins the anchor
+        assert "FF8000" in cmap
+        assert cmap["FF8000"].element_type == "slab"
+
+    def test_empty_columns_returns_empty(self):
+        legend = self._make_legend([("FF0000", "column", "C90X90")])
+        cmap = _build_rect_color_map([], legend, tolerance=150)
+        assert cmap == {}
+
+    def test_empty_legend_returns_empty(self):
+        columns = self._make_columns([("FF8000", None)])
+        cmap = _build_rect_color_map(columns, {}, tolerance=150)
+        assert cmap == {}
+
+    def test_non_rect_legend_entries_ignored(self):
+        """Beam entries in legend should be ignored (not rect-compatible)."""
+        legend = self._make_legend([("FF0000", "beam", "B55X80")])
+        columns = self._make_columns([("FF0000", None)])
+        cmap = _build_rect_color_map(columns, legend, tolerance=150)
+        assert len(cmap) == 0
+
+    def test_user_scenario_column_not_slab(self):
+        """Original bug scenario: slab (FFFF00) was misclassified as column.
+
+        Legend: column = (255,166,77) = FFA64D
+        Shapes: (255,128,0) = FF8000 (true column), (255,255,0) = FFFF00 (slab)
+
+        With per-shape matching at tolerance=150:
+          FF8000 → FFA64D: dist=77 ✓ (correct)
+          FFFF00 → FFA64D: dist=89 ✓ (WRONG — slab misclassified as column)
+
+        With batch classification:
+          Anchor: FF8000 (dist=77, closest) → column
+          FFFF00: dist to anchor FF8000 = 127 > 15 → excluded ✓
+        """
+        legend = self._make_legend([("FFA64D", "column", "C100X120")])
+        columns = self._make_columns([
+            ("FF8000", None),
+            ("FFFF00", None),
+        ])
+        cmap = _build_rect_color_map(columns, legend, tolerance=150)
+        assert "FF8000" in cmap
+        assert cmap["FF8000"].element_type == "column"
+        assert "FFFF00" not in cmap  # slab NOT misclassified as column

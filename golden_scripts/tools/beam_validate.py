@@ -6,13 +6,13 @@ pptx_to_elements.py. The extracted beam endpoint coordinates may not land
 precisely on grid intersections, columns, walls, or other beams due to PPTX
 shape imprecision. This tool validates and auto-snaps floating endpoints,
 splits beams/walls at intermediate supports (columns, walls, other beams),
-and corrects near-orthogonal angle deviations on the final geometry.
+and corrects near-orthogonal angle deviations.
 
 Pipeline order:
-  Step 0: 3-round snap (grid + columns + walls + beams)
-  Step 1: Split beams at columns + walls + other beams
-  Step 2: Split walls at columns + beams + other walls
-  Step 3: Angle correction (2° default, runs on post-split geometry)
+  Step 0: Angle correction (2° default, runs FIRST for accurate ray direction)
+  Step 1: 3-round ray snap with post-round clustering
+  Step 2: Split beams at columns + walls + other beams
+  Step 3: Split walls at columns + beams + other walls
   Step 4: Wall-to-beam re-snap (1.0m default, aligns walls under parallel beams)
 
 Usage:
@@ -57,6 +57,11 @@ from golden_scripts.tools.config_snap import (
     point_to_segment_nearest,
     SnapTarget,
     floors_overlap,
+    segment_intersection as _segment_intersection,
+    _grid_label_at as __grid_label_at,
+    snap_by_ray,
+    ray_ray_intersection,
+    cluster_free_endpoints,
 )
 
 
@@ -138,24 +143,8 @@ def build_beam_targets(elements, grid_data):
     return grid_targets, element_targets
 
 
-def _grid_label_at(x, y, grid_data):
-    """Find the grid intersection label for coordinates (x, y).
-
-    Returns "X_label/Y_label" if both match a grid line, else None.
-    """
-    x_label = None
-    y_label = None
-    for xg in grid_data.get("x", []):
-        if abs(xg["coordinate"] - x) < 0.005:
-            x_label = xg["label"]
-            break
-    for yg in grid_data.get("y", []):
-        if abs(yg["coordinate"] - y) < 0.005:
-            y_label = yg["label"]
-            break
-    if x_label and y_label:
-        return f"{x_label}/{y_label}"
-    return None
+# Re-export from config_snap for backward compatibility
+_grid_label_at = __grid_label_at
 
 
 # ---------------------------------------------------------------------------
@@ -311,30 +300,8 @@ def correct_angles(elements, grid_data, angle_threshold_deg=2.0):
 # 3. Beam splitting
 # ---------------------------------------------------------------------------
 
-def segment_intersection(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2):
-    """Compute intersection point of two line segments.
-
-    Returns (x, y, t_a, t_b) where t_a and t_b are parameter values [0,1]
-    on segment A and B respectively, or None if no intersection.
-    """
-    dax = ax2 - ax1
-    day = ay2 - ay1
-    dbx = bx2 - bx1
-    dby = by2 - by1
-
-    denom = dax * dby - day * dbx
-    if abs(denom) < 1e-12:
-        return None  # parallel or coincident
-
-    t_a = ((bx1 - ax1) * dby - (by1 - ay1) * dbx) / denom
-    t_b = ((bx1 - ax1) * day - (by1 - ay1) * dax) / denom
-
-    if t_a < -1e-9 or t_a > 1 + 1e-9 or t_b < -1e-9 or t_b > 1 + 1e-9:
-        return None  # no intersection within segments
-
-    x = ax1 + t_a * dax
-    y = ay1 + t_a * day
-    return x, y, t_a, t_b
+# Re-export from config_snap for backward compatibility
+segment_intersection = _segment_intersection
 
 
 def find_intermediate_supports(beam, columns, walls, split_tolerance=0.15,
@@ -637,81 +604,7 @@ def split_all_walls(elements, grid_data, split_tolerance=0.15):
     return elements, wall_split_report
 
 
-# ---------------------------------------------------------------------------
-# 4. Single-point snapping
-# ---------------------------------------------------------------------------
-
-def snap_beam_point(px, py, floors, targets, tolerance, grid_data=None):
-    """Find nearest target within tolerance for a beam endpoint.
-
-    For grid intersection targets (floors=[]), floor overlap check is skipped.
-    For element targets, floors must overlap.
-
-    Parameters
-    ----------
-    px, py : float
-        Beam endpoint coordinates.
-    floors : list[str]
-        Floors the beam exists on.
-    targets : list[SnapTarget]
-        Available snap targets.
-    tolerance : float
-        Maximum snap distance in meters.
-    grid_data : dict or None
-        Grid data for generating target labels (optional).
-
-    Returns
-    -------
-    tuple or None
-        (snapped_x, snapped_y, distance, target_info_str) or None if no
-        target within tolerance.
-    """
-    best_nx, best_ny, best_dist = None, None, tolerance + 1
-    best_target = None
-
-    for t in targets:
-        # Skip floor overlap check for grid intersections (floors=[])
-        if t.floors:
-            if not floors_overlap(floors, t.floors):
-                continue
-
-        nx, ny, d = t.nearest(px, py)
-        if d < best_dist:
-            best_dist = d
-            best_nx = round(nx, 2)
-            best_ny = round(ny, 2)
-            best_target = t
-
-    if best_target is None or best_dist > tolerance:
-        return None
-
-    # Build target_info_str
-    target_info = _build_target_info(best_target, best_nx, best_ny, grid_data)
-
-    return best_nx, best_ny, best_dist, target_info
-
-
-def _build_target_info(target, nx, ny, grid_data):
-    """Build a human-readable target info string."""
-    if target.kind == "point" and not target.floors:
-        # Grid intersection
-        label = None
-        if grid_data:
-            label = _grid_label_at(target.x1, target.y1, grid_data)
-        if label:
-            return f"grid_intersection {label}"
-        return f"grid_intersection at ({target.x1}, {target.y1})"
-
-    if target.kind == "point" and target.floors:
-        return f"column at ({target.x1}, {target.y1})"
-
-    if target.kind == "segment" and target.floors:
-        # Could be wall or beam — check by whether the target was added
-        # as wall or beam. Since we can't distinguish after creation,
-        # use a generic label based on what's stored.
-        return f"segment at ({target.x1},{target.y1})-({target.x2},{target.y2})"
-
-    return f"target at ({nx}, {ny})"
+# snap_beam_point removed — replaced by ray-based snap (snap_by_ray)
 
 
 # ---------------------------------------------------------------------------
@@ -731,7 +624,16 @@ def _find_nearest_any(px, py, targets):
             best_target = t
     if best_target is None:
         return None, None, float("inf"), "none"
-    info = _build_target_info(best_target, best_nx, best_ny, None)
+    t = best_target
+    if t.kind == "segment":
+        info = f"segment ({t.x1},{t.y1})-({t.x2},{t.y2})"
+    elif t.kind == "point":
+        if t.floors:
+            info = f"column ({t.x1},{t.y1})"
+        else:
+            info = f"grid_intersection ({t.x1},{t.y1})"
+    else:
+        info = f"{t.kind} ({t.x1},{t.y1})"
     return best_nx, best_ny, best_dist, info
 
 
@@ -879,14 +781,15 @@ def snap_walls_to_beams(elements, tolerance=1.0):
 
 def validate_beams(elements, grid_data, tolerance=1.5,
                    split_tolerance=0.15, no_split=False,
-                   angle_threshold_deg=2.0, no_angle_correct=False):
+                   angle_threshold_deg=2.0, no_angle_correct=False,
+                   cluster_tolerance=0.50, no_cluster=False):
     """Validate and auto-snap major beam endpoints.
 
     Pipeline order:
-      Step 0: 3-round snap (grid + columns + walls + beams)
-      Step 1: Split beams at columns + walls + other beams
-      Step 2: Split walls at columns + beams + other walls
-      Step 3: Angle correction (2° default, on post-split geometry)
+      Step 0: Angle correction (2° default, runs FIRST for accurate ray direction)
+      Step 1: 3-round ray snap with post-round clustering
+      Step 2: Split beams at columns + walls + other beams
+      Step 3: Split walls at columns + beams + other walls
       Step 4: Wall-to-beam re-snap (1.0m default, aligns walls under beams)
 
     Parameters
@@ -905,6 +808,11 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         Max angle deviation to correct (default 2.0 degrees).
     no_angle_correct : bool
         If True, skip angle correction step.
+    cluster_tolerance : float
+        Max distance for clustering free endpoints of half-snapped beams
+        (default 0.50m).
+    no_cluster : bool
+        If True, skip endpoint clustering.
 
     Returns
     -------
@@ -943,10 +851,21 @@ def validate_beams(elements, grid_data, tolerance=1.5,
             "wall_split_details": [],
             "wall_beam_snaps": 0,
             "wall_beam_snap_details": [],
+            "clustered_endpoints": 0,
+            "cluster_count": 0,
         }
         return elements, report
 
-    # --- Step 0: 3-round snap ---
+    # --- Step 0: Angle correction FIRST (ray snap needs accurate direction) ---
+    angle_corrections = []
+    if not no_angle_correct:
+        elements, angle_corrections = correct_angles(
+            elements, grid_data, angle_threshold_deg)
+        # Re-read beams after angle correction (may have changed)
+        beams = elements.get("beams", [])
+        n = len(beams)
+
+    # --- Step 1: 3-round ray snap with post-round clustering ---
 
     # Build targets
     grid_targets, element_targets = build_beam_targets(elements, grid_data)
@@ -958,13 +877,22 @@ def validate_beams(elements, grid_data, tolerance=1.5,
     # Beam segment targets (added after each round)
     beam_snap_targets = []
 
-    # --- Helper: snap one round ---
-    def _snap_round(targets):
-        """Try to snap all unsnapped endpoints. Returns count of newly snapped."""
+    # --- Helper: ray snap one round ---
+    def _snap_round_ray(targets):
+        """Try to ray-snap all unsnapped endpoints. Returns count of newly snapped."""
         count = 0
         for i in range(n):
             beam = beams[i]
             floors = beam.get("floors", [])
+            # Compute beam direction unit vector
+            dx = beam["x2"] - beam["x1"]
+            dy = beam["y2"] - beam["y1"]
+            length = math.hypot(dx, dy)
+            if length < 1e-6:
+                continue  # zero-length beam, skip
+            dx /= length
+            dy /= length
+
             for ep in range(2):  # 0=start, 1=end
                 if snapped_state[i][ep]:
                     continue
@@ -973,7 +901,9 @@ def validate_beams(elements, grid_data, tolerance=1.5,
                 else:
                     px, py = beam["x2"], beam["y2"]
 
-                result = snap_beam_point(px, py, floors, targets, tolerance, grid_data)
+                result = snap_by_ray(px, py, dx, dy, floors, targets,
+                                     tolerance, grid_data,
+                                     point_snap_mode="direct")
                 if result:
                     nx, ny, d, target_info = result
 
@@ -982,12 +912,10 @@ def validate_beams(elements, grid_data, tolerance=1.5,
                         target_type = "grid_intersection"
                     elif target_info.startswith("column"):
                         target_type = "column"
-                    elif target_info.startswith("wall"):
-                        target_type = "wall"
-                    elif target_info.startswith("beam"):
-                        target_type = "beam"
-                    else:
+                    elif target_info.startswith("segment"):
                         target_type = "segment"
+                    else:
+                        target_type = "other"
 
                     corrections.append({
                         "beam_index": i,
@@ -1034,20 +962,28 @@ def validate_beams(elements, grid_data, tolerance=1.5,
                     added += 1
         return added
 
-    # Round 1: grid + columns + walls (NO beam targets)
-    _snap_round(base_targets)
+    all_cluster_corrections = []
 
-    # After round 1: add fully-snapped beams
-    _add_fully_snapped_beams()
+    def _post_round_cluster():
+        """After each snap round: promote fully-snapped → cluster → promote again."""
+        _add_fully_snapped_beams()
+        if not no_cluster:
+            cc = cluster_free_endpoints(beams, snapped_state, cluster_tolerance,
+                                        beam_key_prefix="beam")
+            all_cluster_corrections.extend(cc)
+            _add_fully_snapped_beams()
+
+    # Round 1: grid + columns + walls (NO beam targets)
+    _snap_round_ray(base_targets)
+    _post_round_cluster()
 
     # Round 2: base targets + snapped beam targets
-    _snap_round(base_targets + beam_snap_targets)
-
-    # After round 2: add newly fully-snapped beams
-    _add_fully_snapped_beams()
+    _snap_round_ray(base_targets + beam_snap_targets)
+    _post_round_cluster()
 
     # Round 3: final pass with all targets
-    _snap_round(base_targets + beam_snap_targets)
+    _snap_round_ray(base_targets + beam_snap_targets)
+    _post_round_cluster()
 
     # --- Collect warnings for unsnapped endpoints ---
     all_targets = base_targets + beam_snap_targets
@@ -1098,7 +1034,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
                 "message": "Zero-length beam after snap — both endpoints at same location",
             })
 
-    # --- Step 1: Beam splitting (beams at columns + walls + other beams) ---
+    # --- Step 2: Beam splitting (beams at columns + walls + other beams) ---
     split_report = {
         "split_beams": 0,
         "new_beams_from_split": 0,
@@ -1108,7 +1044,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
     if not no_split:
         elements, split_report = split_all_beams(elements, grid_data, split_tolerance)
 
-    # --- Step 2: Wall splitting (walls at columns + beams + other walls) ---
+    # --- Step 3: Wall splitting (walls at columns + beams + other walls) ---
     wall_split_report = {
         "wall_split_walls": 0,
         "wall_new_from_split": 0,
@@ -1118,17 +1054,12 @@ def validate_beams(elements, grid_data, tolerance=1.5,
     if not no_split:
         elements, wall_split_report = split_all_walls(elements, grid_data, split_tolerance)
 
-    # --- Step 3: Angle correction (on post-split geometry) ---
-    angle_corrections = []
-    if not no_angle_correct:
-        elements, angle_corrections = correct_angles(
-            elements, grid_data, angle_threshold_deg)
-
     # --- Step 4: Wall-to-beam re-snap ---
     elements, wall_beam_snap_details = snap_walls_to_beams(elements, tolerance=1.0)
 
     # --- Build report ---
     snap_distances = [c["snap_distance"] for c in corrections]
+    clustered_eps = sum(c["member_count"] for c in all_cluster_corrections)
     report = {
         "total_beams": n,
         "total_endpoints": n * 2,
@@ -1141,6 +1072,8 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         "angle_corrections": angle_corrections,
         "angle_corrected_beams": sum(1 for a in angle_corrections if a["element_type"] == "beam"),
         "angle_corrected_walls": sum(1 for a in angle_corrections if a["element_type"] == "wall"),
+        "clustered_endpoints": clustered_eps,
+        "cluster_count": len(all_cluster_corrections),
         **split_report,
         **wall_split_report,
         "wall_beam_snaps": len(wall_beam_snap_details),
@@ -1173,6 +1106,11 @@ def main():
                         help="Max perpendicular distance for beam splitting (default: 0.15m)")
     parser.add_argument("--no-split", action="store_true",
                         help="Skip beam splitting step")
+    parser.add_argument("--cluster-tolerance", type=float, default=0.50,
+                        help="Max distance for clustering free endpoints of "
+                        "half-snapped beams (default: 0.50m)")
+    parser.add_argument("--no-cluster", action="store_true",
+                        help="Skip endpoint clustering step")
     parser.add_argument("--report", default=None,
                         help="Path for validation report JSON (optional)")
     parser.add_argument("--dry-run", action="store_true",
@@ -1202,6 +1140,8 @@ def main():
         print(f"  angle threshold: {args.angle_threshold}°")
     if not args.no_split:
         print(f"  split tolerance: {args.split_tolerance}m")
+    if not args.no_cluster:
+        print(f"  cluster tolerance: {args.cluster_tolerance}m")
 
     if n_beams == 0:
         print("\nNo beams to validate.")
@@ -1219,6 +1159,8 @@ def main():
         no_split=args.no_split,
         angle_threshold_deg=args.angle_threshold,
         no_angle_correct=args.no_angle_correct,
+        cluster_tolerance=args.cluster_tolerance,
+        no_cluster=args.no_cluster,
     )
 
     # Print summary
@@ -1230,6 +1172,11 @@ def main():
     if report["snapped_endpoints"] > 0:
         print(f"  Max snap distance: {report['max_snap_distance']:.4f}m")
         print(f"  Avg snap distance: {report['avg_snap_distance']:.4f}m")
+
+    # Cluster summary
+    if report.get("cluster_count", 0) > 0:
+        print(f"  Endpoint clusters: {report['cluster_count']} "
+              f"({report['clustered_endpoints']} endpoints)")
 
     # Angle correction summary
     if report.get("angle_corrections"):

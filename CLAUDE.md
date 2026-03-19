@@ -42,99 +42,27 @@ For operations not covered by `etabs_api`, access the raw API through `etabs.Sap
 
 ```
 claude-auto-build-etabs-model/
-├── CLAUDE.md                              # This file
-├── golden_scripts/                        # Deterministic model-building pipeline
-│   ├── run_all.py                         # Master orchestrator (--config, --steps, --dry-run)
-│   ├── constants.py                       # All hardcoded rules (modifiers, rebar, parsing, story classification)
-│   ├── config_schema.json                 # JSON Schema for model_config.json
-│   ├── example_config.json                # A21 reference config
-│   ├── __init__.py
-│   ├── modeling/                           # 11 sequential build steps
-│   │   ├── __init__.py
-│   │   ├── gs_01_init.py → gs_11_diaphragms.py
-│   ├── design/                            # Analysis-design iteration
-│   │   ├── __init__.py
-│   │   └── gs_12_iterate.py
-│   └── tools/                             # E2K split/merge utilities + config tools
-│       ├── __init__.py
-│       ├── e2k_parser.py                  # General e2k parser (E2KModel class)
-│       ├── e2k_writer.py                  # E2k output (section ordering, formatting)
-│       ├── unit_converter.py              # Unit detection & conversion
-│       ├── pptx_to_elements.py            # PPT structural plan → elements JSON (per-slide or merged output)
-│       ├── config_build.py                # Phase 1: elements.json + grid_info.json → model_config.json (deterministic merge)
-│       ├── elements_merge.py              # Merge per-slide/elements JSONs (Phase 1: all types, Phase 2: small_beams only)
-│       ├── beam_validate.py               # Phase 1: beam endpoint connectivity validation + auto-snap
-│       ├── sb_patch_build.py              # Phase 2: sb_elements_validated.json → sb_patch.json (deterministic extraction)
-│       ├── config_merge.py                # Merge base config + SB/slab patch → merged config
-│       ├── sb_validate.py                 # Phase 2 SB angle correction + snap + split (replaces config_snap in pipeline)
-│       ├── config_snap.py                 # Snap SB endpoints to nearest beams/columns/walls (legacy, imported by sb_validate)
-│       ├── affine_calibrate.py            # Transform PPTX-meter coords to grid-aligned (--mode grid for both Phase 1 & Phase 2)
-│       ├── slab_generator.py              # Graph-based slab polygon generation from beam layout
-│       ├── read_grid.py                   # Read Grid System from ETABS → grid_data.json
-│       ├── gs_split.py                    # Split multi-building → single-building e2k
-│       └── gs_merge.py                    # Merge single-building e2k files → unified model
-├── golden_scripts/qc/                     # QC verification scripts
-│   └── qc_phase1.py                      # Phase 1 QC: config vs ETABS model comparison
-├── tests/                                 # pytest verification suite (requires running ETABS)
-│   ├── conftest.py                        # SapModel fixture, --config option, all_frames cache
-│   ├── test_units.py                      # Units = TON/M (12)
-│   ├── test_sections.py                   # D/B mapping (T3=Depth, T2=Width)
-│   ├── test_modifiers.py                  # Frame + area stiffness modifiers
-│   ├── test_rebar.py                      # Cover values (col=7cm, beam=9cm, FB=11/15cm)
-│   ├── test_rigid_zones.py                # RZ factor = 0.75
-│   ├── test_diaphragms.py                 # Diaphragm definitions exist
-│   ├── test_loads.py                      # DL/LL/EQ patterns, no SDL, DL self-weight=1
-│   ├── test_element_counts.py             # Frames, areas, columns, beams, stories exist
-│   ├── test_affine_calibrate.py           # Affine calibration tool tests (mock data)
-│   ├── test_slab_generator.py             # Slab generator tool tests (mock data)
-│   ├── test_config_build.py               # config_build merge tool tests (mock data)
-│   ├── test_elements_merge.py             # elements_merge tool tests (mock data)
-│   ├── test_beam_validate.py              # beam_validate tool tests (mock data)
-│   ├── test_pptx_color_matching.py        # pptx color matching tests (fuzzy, dual-color)
-│   ├── test_sb_patch_build.py             # sb_patch_build extraction tool tests (mock data)
-│   └── test_sb_validate.py               # sb_validate tool tests (mock data)
-├── skills/
-│   ├── structural-glossary/SKILL.md       # Canonical structural terminology (上構/下構/屋突/共構)
-│   ├── e2k-split/SKILL.md                 # E2K split tool SOP
-│   ├── e2k-merge/SKILL.md                 # E2K merge tool SOP
-│   ├── plan-reader/SKILL.md               # Structural plan image reading SOP
-│   ├── etabs-modeler/SKILL.md             # Manual ETABS modeling skill (legacy)
-│   ├── etabs-modeler/references/          # modifier-rebar-rules.md, section-parsing-rules.md,
-│   │                                      #   verification-queries.md
-│   ├── etabs-modeler/scripts/             # Legacy helper scripts (generate_sections, assign_loads, etc.)
-│   └── etabs-api-lookup.md                # How to look up API docs
+├── golden_scripts/
+│   ├── run_all.py              # Master orchestrator (--config, --steps, --dry-run)
+│   ├── constants.py            # All hardcoded rules (modifiers, rebar, parsing, story classification)
+│   ├── config_schema.json      # JSON Schema for model_config.json
+│   ├── example_config.json     # A21 reference config
+│   ├── modeling/               # gs_01_init → gs_11_diaphragms (11 sequential build steps)
+│   ├── design/                 # gs_12_iterate (analysis-design iteration)
+│   ├── tools/                  # Standalone CLI tools (pptx_to_elements, affine_calibrate, beam_validate,
+│   │                           #   sb_validate, slab_generator, config_build, elements_merge, plot_elements, etc.)
+│   └── qc/                     # QC verification scripts
+├── tests/                      # pytest suite — mock tests (no ETABS) + ETABS verification tests
+│   └── conftest.py             # SapModel fixture (auto-skips when ETABS unavailable)
+├── skills/                     # Skill definitions (structural-glossary, plan-reader, etabs-modeler, etc.)
 ├── .claude/
-│   ├── agents/                            # BTS agent definitions
-│   │   ├── phase1-reader.md               # Phase 1 READER: extraction + grid/outline/core_area → grid_info.json
-│   │   ├── phase1-config-builder.md       # Phase 1 CONFIG-BUILDER: GS execution only (steps 1-6)
-│   │   ├── phase2-sb-reader.md            # Phase 2 SB-READER: per-slide affine calibration + SB validation
-│   │   ├── phase2-config-builder.md       # Phase 2 CONFIG-BUILDER: GS execution only (steps 2,7,8)
-│   │   ├── reader.md                      # READER: reads structural plan images (bts-gs)
-│   │   ├── sb-reader.md                   # SB-READER: small beam coordinate validation (bts-gs)
-│   │   ├── config-builder.md              # CONFIG-BUILDER: generates model_config.json (bts-gs)
-│   │   ├── modeler-a.md                   # MODELER-A: materials/sections/columns/walls (legacy bts)
-│   │   ├── modeler-b.md                   # MODELER-B: beams/slabs/loads/properties (legacy bts)
-│   │   ├── e2k-splitter.md               # E2K-SPLITTER: split multi-building e2k
-│   │   └── e2k-merger.md                 # E2K-MERGER: merge building e2k files
-│   └── commands/
-│       ├── bts-structure.md               # /bts-structure slash command (Phase 1: main structure)
-│       ├── bts-sb.md                      # /bts-sb slash command (Phase 2: small beams + slabs)
-│       ├── bts-props.md                   # /bts-props slash command (Phase 3: properties + loads + diaphragms)
-│       ├── bts-qc1.md                     # /bts-qc1 slash command (Phase 1 QC verification)
-│       ├── bts-gs.md                      # /bts-gs slash command (single-pass Golden Scripts)
-│       ├── bts.md                         # /bts slash command (legacy 4-agent flow)
-│       ├── split.md                       # /split slash command (e2k split)
-│       └── merge.md                       # /merge slash command (e2k merge)
-├── api_docs/                              # Raw ETABS API HTML docs (1693 files)
-│   ├── CSI API ETABS v1.hhc              # Searchable TOC
-│   └── html/                              # Individual method documentation
-├── api_docs_index/                        # Pre-built API index
-│   ├── task_index.md                      # "How do I...?" guide
-│   ├── group_a_analysis.md                # Analysis, Results, Load Cases, Design Codes
-│   ├── group_b_analysis.md                # Modeling, Properties, Database Tables
-│   ├── categories.json                    # Interface-to-category mapping
-│   └── full_toc.json                      # Complete TOC
-└── models/                                # Output model files (.EDB)
+│   ├── agents/                 # BTS agent definitions (phase1-reader, phase2-sb-reader, config-builder, etc.)
+│   └── commands/               # Slash command definitions (/bts-structure, /bts-sb, /bts-props, etc.)
+├── api_docs/                   # Raw ETABS API HTML docs (1693 files)
+│   ├── CSI API ETABS v1.hhc   # Searchable TOC
+│   └── html/                   # Individual method documentation
+├── api_docs_index/             # Pre-built API index (task_index.md, categories.json, full_toc.json)
+└── models/                     # Output model files (.EDB)
 ```
 
 ---
@@ -154,13 +82,23 @@ python run_all.py --config path/to/model_config.json --steps 4,5
 python run_all.py --config path/to/model_config.json --dry-run
 ```
 
-### Run verification tests
+### Run tests
 ```bash
-# Requires ETABS running with the model open
-cd tests
-pytest -v
-pytest -v --config path/to/model_config.json    # with config comparison
-pytest -v -k test_sections                        # run single test
+# Mock tests only (no ETABS needed) — tool logic, color matching, calibration, etc.
+pytest tests/test_pptx_color_matching.py tests/test_beam_validate.py tests/test_sb_validate.py tests/test_slab_generator.py tests/test_affine_calibrate.py tests/test_config_build.py tests/test_elements_merge.py tests/test_sb_patch_build.py tests/test_plot_elements.py -v
+
+# Single test file
+pytest tests/test_pptx_color_matching.py -v
+
+# Single test class or method
+pytest tests/test_pptx_color_matching.py::TestBuildRectColorMap -v
+pytest tests/test_beam_validate.py::TestRaySnap::test_snap_to_nearest -v
+
+# ETABS verification tests (requires ETABS running with model open)
+pytest tests/ -v
+pytest tests/ -v --config path/to/model_config.json    # with config comparison
+
+# ETABS tests auto-skip when ETABS is not running (conftest.py SapModel fixture skips gracefully)
 ```
 
 ### QC Phase 1 (after /bts-structure)
@@ -217,18 +155,18 @@ python -m golden_scripts.tools.pptx_to_elements ... --dry-run
 # Phase 1 (grid mode): per-slide JSON + grid anchors → calibrated JSON
 python -m golden_scripts.tools.affine_calibrate \
     --mode grid \
-    --per-slide "SLIDES INFO/1F~2F/1F~2F.json" \
+    --per-slide "SLIDES INFO/1F~2F/pptx_to_elements/1F~2F.json" \
     --grid-data grid_data.json \
     --grid-anchors "SLIDES INFO/1F~2F/grid_anchors_1F~2F.json" \
-    --output "calibrated/1F~2F/elements.json"
+    --output "SLIDES INFO/1F~2F/calibrated/calibrated.json"
 
 # Phase 2 (grid mode): per-slide SB JSON + Phase 1 grid anchors → calibrated SB
 python -m golden_scripts.tools.affine_calibrate \
     --mode grid \
-    --per-slide "SB SLIDES INFO/1F~2F/sb_1F~2F.json" \
+    --per-slide "SB SLIDES INFO/1F~2F/pptx_to_elements/sb_1F~2F.json" \
     --grid-data grid_data.json \
     --grid-anchors "SLIDES INFO/1F~2F/grid_anchors_1F~2F.json" \
-    --output "sb_calibrated/1F~2F/sb_elements.json"
+    --output "SB SLIDES INFO/1F~2F/calibrated/calibrated.json"
 ```
 
 ### SB Validate Tool (Phase 2 — angle correction + snap + cluster + split)
@@ -273,14 +211,16 @@ python -m golden_scripts.tools.slab_generator \
 
 ### Elements Merge Tool (Phase 1 + Phase 2)
 ```bash
-# Phase 1: Merge per-slide JSONs from calibrated/ directory
+# Phase 1: Merge calibrated JSONs from SLIDES INFO
 python -m golden_scripts.tools.elements_merge \
-    --inputs-dir calibrated/ \
+    --inputs-dir "SLIDES INFO" \
+    --pattern "*/calibrated/calibrated.json" \
     --output elements.json
 
-# Phase 2: Merge per-slide SB JSONs from sb_calibrated/ (small_beams only)
+# Phase 2: Merge calibrated SB JSONs from SB SLIDES INFO
 python -m golden_scripts.tools.elements_merge \
-    --inputs-dir sb_calibrated/ \
+    --inputs-dir "SB SLIDES INFO" \
+    --pattern "*/calibrated/calibrated.json" \
     --phase phase2 \
     --output sb_elements_validated.json
 
@@ -293,30 +233,50 @@ python -m golden_scripts.tools.elements_merge \
 python -m golden_scripts.tools.elements_merge ... --dry-run
 ```
 
-### Beam Validate Tool (Phase 1 — snap + split + angle correction)
+### Plot Elements Tool (Visualization)
 ```bash
-# Per-slide: snap, split (beams+walls at crossings), angle-correct
-python -m golden_scripts.tools.beam_validate \
-    --elements "calibrated/1F~2F/elements.json" \
+# Post-calibration with grid overlay
+python -m golden_scripts.tools.plot_elements \
+    --elements "SLIDES INFO/1F/calibrated/calibrated.json" \
     --grid-data grid_data.json \
-    --output "calibrated/1F~2F/elements.json" \
+    --output "SLIDES INFO/1F/calibrated/calibrated.png"
+
+# Post-extraction (no grid, PPT-meter coords)
+python -m golden_scripts.tools.plot_elements \
+    --elements "SLIDES INFO/1F/pptx_to_elements/1F.json" \
+    --output "SLIDES INFO/1F/pptx_to_elements/1F.png"
+
+# Options
+python -m golden_scripts.tools.plot_elements \
+    --elements elements.json --output plot.png \
+    --dpi 150 --no-labels --title "Custom Title"
+```
+
+### Beam Validate Tool (Phase 1 — angle correction + ray snap + clustering + split)
+```bash
+# Per-slide: angle-correct, ray-snap (3 rounds + clustering), split (beams+walls at crossings)
+python -m golden_scripts.tools.beam_validate \
+    --elements "SLIDES INFO/1F~2F/calibrated/calibrated.json" \
+    --grid-data grid_data.json \
+    --output "SLIDES INFO/1F~2F/calibrated/calibrated.json" \
     --tolerance 1.5 \
     --report "SLIDES INFO/1F~2F/beam_report_1F~2F.json"
 
-# Custom angle threshold + split tolerance
+# Custom angle threshold + split tolerance + cluster tolerance
 python -m golden_scripts.tools.beam_validate \
     --elements elements.json \
     --grid-data grid_data.json \
     --output elements.json \
     --angle-threshold 2.0 \
-    --split-tolerance 0.15
+    --split-tolerance 0.15 \
+    --cluster-tolerance 0.50
 
-# Disable angle correction or splitting
+# Disable angle correction, splitting, or clustering
 python -m golden_scripts.tools.beam_validate \
     --elements elements.json \
     --grid-data grid_data.json \
     --output elements.json \
-    --no-angle-correct --no-split
+    --no-angle-correct --no-split --no-cluster
 
 # Preview without writing
 python -m golden_scripts.tools.beam_validate ... --dry-run
@@ -496,11 +456,11 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
   1. `read_grid.py` → `grid_data.json` (read Grid from ETABS as ground truth)
   2. `pptx_to_elements.py --scan-floors` → `PAGE_FLOOR_MAPPING` (floor label detection)
 - **Data flow**:
-  READER-A: `pptx_to_elements.py --slides-info-dir "SLIDES INFO" --page-floors "{上構}"` → per-slide JSONs (parallel)
-  READER-B: `pptx_to_elements.py --slides-info-dir "SLIDES INFO" --page-floors "{下構}"` → per-slide JSONs (parallel)
-  READERs: Grid anchor identification → `affine_calibrate.py --mode grid` → `beam_validate.py` (per-slide angle+snap+split) → `calibrated/{floor}.json` (parallel)
+  READER-A: `pptx_to_elements.py --slides-info-dir "SLIDES INFO" --page-floors "{上構}"` → `SLIDES INFO/{fl}/pptx_to_elements/{fl}.json` + `.png` (parallel)
+  READER-B: `pptx_to_elements.py --slides-info-dir "SLIDES INFO" --page-floors "{下構}"` → `SLIDES INFO/{fl}/pptx_to_elements/{fl}.json` + `.png` (parallel)
+  READERs: Grid anchor identification → `affine_calibrate.py --mode grid` → `beam_validate.py` → `plot_elements.py` → `SLIDES INFO/{fl}/calibrated/calibrated.json` + `.png` (parallel)
   Readers → `grid_info.json` (Grid驗證 + outline + core_area)
-  Team Lead: `elements_merge.py --inputs-dir calibrated/` → `elements.json` → `config_build.py` → `model_config.json`
+  Team Lead: `elements_merge.py --inputs-dir "SLIDES INFO" --pattern "*/calibrated/calibrated.json"` → `elements.json` → `config_build.py` → `model_config.json`
   CONFIG-BUILDER: `run_all.py --steps 1,2,3,4,5,6` → ETABS model
 - **Output**: `model_config.json` (small_beams=[], slabs=[]) + ETABS model with Grid+Story+柱+牆+大梁
 
@@ -509,11 +469,11 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 - **Builds**: Small Beams (SB/FSB) + Slabs (S/FS)
 - **Pre-steps** (Team Lead):
   1. Verify Phase 1 outputs: `model_config.json`, `grid_data.json`, `SLIDES INFO/` (grid_anchors + screenshots)
-  2. `pptx_to_elements.py --phase phase2 --slides-info-dir "SB SLIDES INFO"` → per-slide SB JSONs
+  2. `pptx_to_elements.py --phase phase2 --slides-info-dir "SB SLIDES INFO"` → per-slide SB JSONs + `.png`
 - **Data flow**:
-  SB-READER-A ∥ SB-READER-B: per-slide `affine_calibrate.py --mode grid` (reusing Phase 1 grid_anchors) → `sb_calibrated/{fl}/sb_elements.json`
-  SB-READERs: per-slide `sb_validate.py` → overwrite `sb_calibrated/{fl}/sb_elements.json` + AI validation → `sb_validation_{fl}.json`
-  Team Lead: `elements_merge.py --phase phase2 --inputs-dir sb_calibrated/` → `sb_elements_validated.json`
+  SB-READER-A ∥ SB-READER-B: per-slide `affine_calibrate.py --mode grid` (reusing Phase 1 grid_anchors) → `SB SLIDES INFO/{fl}/calibrated/calibrated.json`
+  SB-READERs: per-slide `sb_validate.py` → overwrite `SB SLIDES INFO/{fl}/calibrated/calibrated.json` + `plot_elements.py` → `.png` + AI validation → `sb_validation_{fl}.json`
+  Team Lead: `elements_merge.py --inputs-dir "SB SLIDES INFO" --pattern "*/calibrated/calibrated.json" --phase phase2` → `sb_elements_validated.json`
   Team Lead: `sb_patch_build.py` → `config_merge` → `slab_generator.py` → `final_config.json`
   CONFIG-BUILDER: `run_all.py --steps 2,7,8` → ETABS model
 - **Output**: `final_config.json` (complete config with validated SB + auto-generated slabs) + ETABS model with +小梁+版
@@ -531,26 +491,28 @@ Splits the single-pass `/bts-gs` into 3 phased commands to reduce token consumpt
 ├── 結構配置圖/
 │   ├── SLIDES INFO/                        # ═══ Phase 1 專用 ═══
 │   │   └── {floor_label}/
-│   │       ├── {floor_label}.json          # Phase 1: 大梁/柱/牆 (PPT-meter)
+│   │       ├── pptx_to_elements/           # 原始提取
+│   │       │   ├── {floor_label}.json      # Phase 1: 大梁/柱/牆 (PPT-meter)
+│   │       │   └── {floor_label}.png       # 提取結果繪圖 (auto-generated)
+│   │       ├── calibrated/                 # 校正後
+│   │       │   ├── calibrated.json         # 校正+驗證後的構件
+│   │       │   └── calibrated.png          # 校正結果繪圖
 │   │       ├── grid_anchors_{fl}.json      # Phase 1: grid anchors (Phase 2 讀取複用)
 │   │       ├── beam_report_{fl}.json       # Phase 1: beam validation report
 │   │       └── screenshots/                # Phase 1: 截圖 (Phase 2 讀取複用)
 │   │
 │   ├── SB SLIDES INFO/                     # ═══ Phase 2 專用 ═══
 │   │   └── {floor_label}/
-│   │       ├── sb_{floor_label}.json       # Phase 2: 小梁 (PPT-meter)
+│   │       ├── pptx_to_elements/           # 原始提取
+│   │       │   ├── sb_{floor_label}.json   # Phase 2: 小梁 (PPT-meter)
+│   │       │   └── sb_{floor_label}.png    # 提取結果繪圖 (auto-generated)
+│   │       ├── calibrated/                 # 校正後
+│   │       │   ├── calibrated.json         # 校正+驗證後的小梁
+│   │       │   └── calibrated.png          # 校正結果繪圖
 │   │       ├── sb_report_{fl}.json         # Phase 2: sb_validate report
 │   │       └── sb_validation_{fl}.json     # Phase 2: AI validation result (OK/WARN/REJECT)
 │   │
 │   └── grid_info.json                      # Phase 1 READER output (outline/stories — AI)
-│
-├── calibrated/                             # ═══ Phase 1 專用 ═══
-│   └── {floor_label}/
-│       └── elements.json                   # Phase 1: calibrated beams/columns/walls
-│
-├── sb_calibrated/                          # ═══ Phase 2 專用 ═══
-│   └── {floor_label}/
-│       └── sb_elements.json                # Phase 2: calibrated + validated SBs
 │
 ├── elements.json                           # Phase 1 merged
 ├── grid_data.json                          # Phase 0.3 ETABS Grid (ground truth)

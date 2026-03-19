@@ -79,7 +79,7 @@ python -m golden_scripts.tools.pptx_to_elements \
 
 其中 `PPT_PATH`、`PAGE_FLOOR_MAPPING`、`SLIDES_INFO_DIR` 由 Team Lead 提供。
 - `SLIDES_INFO_DIR` 通常為 `{CASE_FOLDER}/結構配置圖/SLIDES INFO`
-- 不需要 `--output`：每頁自動輸出為 `{SLIDES_INFO_DIR}/{floor_label}/{floor_label}.json`
+- 不需要 `--output`：每頁自動輸出為 `{SLIDES_INFO_DIR}/{floor_label}/pptx_to_elements/{floor_label}.json`
 - 截圖自動存到 `{SLIDES_INFO_DIR}/{floor_label}/screenshots/`
 - 如 Team Lead 指定 `--auto-floors`，改用 `--auto-floors` 取代 `--page-floors`
 
@@ -93,7 +93,7 @@ python -m golden_scripts.tools.pptx_to_elements \
 對你負責的每個 per-slide JSON 和對應截圖：
 
 1. **讀取截圖**：`{SLIDES_INFO_DIR}/{floor_label}/screenshots/{floor_label}_full.png`
-2. **讀取 per-slide JSON**：`{SLIDES_INFO_DIR}/{floor_label}/{floor_label}.json`（PPT-米座標）
+2. **讀取 per-slide JSON**：`{SLIDES_INFO_DIR}/{floor_label}/pptx_to_elements/{floor_label}.json`（PPT-米座標）
 3. **讀取 grid_data.json**：取得 ETABS Grid 名稱和座標
 
 **3.5 確認 Grid Name 順序（MANDATORY — 防止 label 配反）**：
@@ -139,10 +139,10 @@ python -m golden_scripts.tools.pptx_to_elements \
 ```bash
 python -m golden_scripts.tools.affine_calibrate \
   --mode grid \
-  --per-slide "{SLIDES_INFO_DIR}/{floor_label}/{floor_label}.json" \
+  --per-slide "{SLIDES_INFO_DIR}/{floor_label}/pptx_to_elements/{floor_label}.json" \
   --grid-data "{CASE_FOLDER}/grid_data.json" \
   --grid-anchors "{SLIDES_INFO_DIR}/{floor_label}/grid_anchors_{floor_label}.json" \
-  --output "{CASE_FOLDER}/calibrated/{floor_label}/elements.json"
+  --output "{SLIDES_INFO_DIR}/{floor_label}/calibrated/calibrated.json"
 ```
 
 檢查：
@@ -155,14 +155,23 @@ python -m golden_scripts.tools.affine_calibrate \
 
 ```bash
 python -m golden_scripts.tools.beam_validate \
-  --elements "{CASE_FOLDER}/calibrated/{floor_label}/elements.json" \
+  --elements "{SLIDES_INFO_DIR}/{floor_label}/calibrated/calibrated.json" \
   --grid-data "{CASE_FOLDER}/grid_data.json" \
-  --output "{CASE_FOLDER}/calibrated/{floor_label}/elements.json" \
+  --output "{SLIDES_INFO_DIR}/{floor_label}/calibrated/calibrated.json" \
   --tolerance 1.5 \
   --report "{SLIDES_INFO_DIR}/{floor_label}/beam_report_{floor_label}.json"
 ```
 
 - 輸出覆寫 calibrated 檔案（驗證+分割後的梁取代原始資料）
+
+### Step E3.6: 校正後繪圖
+
+```bash
+python -m golden_scripts.tools.plot_elements \
+  --elements "{SLIDES_INFO_DIR}/{floor_label}/calibrated/calibrated.json" \
+  --grid-data "{CASE_FOLDER}/grid_data.json" \
+  --output "{SLIDES_INFO_DIR}/{floor_label}/calibrated/calibrated.png"
+```
 - Report 存到 SLIDES INFO 供視覺審閱
 - WARNING = 0 → OK；> 0 → 對照 PPT 截圖確認
 - split_beams > 0 → 確認分割位置合理（中間柱/牆）

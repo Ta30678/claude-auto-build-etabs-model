@@ -40,7 +40,7 @@ import sys
 from pathlib import Path
 
 from golden_scripts.constants import normalize_stories_order
-from golden_scripts.tools.beam_validate import segment_intersection
+from golden_scripts.tools.config_snap import segment_intersection
 
 
 # ---------------------------------------------------------------------------

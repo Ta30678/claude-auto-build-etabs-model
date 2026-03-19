@@ -87,6 +87,344 @@ def cluster_axis_values(values, threshold=0.05):
 
 
 # ---------------------------------------------------------------------------
+# 1a2. Shared geometry functions (used by beam_validate + sb_validate)
+# ---------------------------------------------------------------------------
+
+def segment_intersection(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2):
+    """Compute intersection point of two line segments.
+
+    Returns (x, y, t_a, t_b) where t_a and t_b are parameter values [0,1]
+    on segment A and B respectively, or None if no intersection.
+    """
+    dax = ax2 - ax1
+    day = ay2 - ay1
+    dbx = bx2 - bx1
+    dby = by2 - by1
+
+    denom = dax * dby - day * dbx
+    if abs(denom) < 1e-12:
+        return None  # parallel or coincident
+
+    t_a = ((bx1 - ax1) * dby - (by1 - ay1) * dbx) / denom
+    t_b = ((bx1 - ax1) * day - (by1 - ay1) * dax) / denom
+
+    if t_a < -1e-9 or t_a > 1 + 1e-9 or t_b < -1e-9 or t_b > 1 + 1e-9:
+        return None  # no intersection within segments
+
+    x = ax1 + t_a * dax
+    y = ay1 + t_a * day
+    return x, y, t_a, t_b
+
+
+def _grid_label_at(x, y, grid_data):
+    """Find the grid intersection label for coordinates (x, y).
+
+    Returns "X_label/Y_label" if both match a grid line, else None.
+    """
+    x_label = None
+    y_label = None
+    for xg in grid_data.get("x", []):
+        if abs(xg["coordinate"] - x) < 0.005:
+            x_label = xg["label"]
+            break
+    for yg in grid_data.get("y", []):
+        if abs(yg["coordinate"] - y) < 0.005:
+            y_label = yg["label"]
+            break
+    if x_label and y_label:
+        return f"{x_label}/{y_label}"
+    return None
+
+
+def snap_by_ray(px, py, ray_dx, ray_dy, floors, targets, tolerance,
+                grid_data=None, point_snap_mode="project"):
+    """Snap endpoint by extending ray along beam direction.
+
+    Creates a search segment of length 2*tolerance centered on (px, py)
+    along the beam direction (ray_dx, ray_dy), then finds intersections
+    with target segments. For point targets, checks perpendicular distance
+    to ray and either projects onto the ray or snaps directly.
+
+    Parameters
+    ----------
+    px, py : float
+        Endpoint coordinates.
+    ray_dx, ray_dy : float
+        Beam direction unit vector.
+    floors : list[str]
+        Floors the beam exists on.
+    targets : list[SnapTarget]
+        Available snap targets.
+    tolerance : float
+        Maximum extension distance along ray AND max perpendicular distance
+        for point targets.
+    grid_data : dict or None
+        Grid data for generating target labels (optional).
+    point_snap_mode : str
+        How to snap to point targets:
+        - "project": snap to ray projection (keeps beam on-axis, good for SBs)
+        - "direct": snap to actual point position (good for major beams/diagonals)
+
+    Returns
+    -------
+    tuple or None
+        (snapped_x, snapped_y, distance, target_info_str) or None if no
+        target found along the ray within tolerance.
+    """
+    best_nx, best_ny, best_dist = None, None, tolerance + 1
+    best_info = None
+
+    # Search segment: extend tolerance in both directions from endpoint
+    sx1 = px - ray_dx * tolerance
+    sy1 = py - ray_dy * tolerance
+    sx2 = px + ray_dx * tolerance
+    sy2 = py + ray_dy * tolerance
+
+    for t in targets:
+        # Floor overlap check (skip for grid targets with floors=[])
+        if t.floors:
+            if not floors_overlap(floors, t.floors):
+                continue
+
+        if t.kind == "segment":
+            # Find intersection of search ray segment with target segment
+            result = segment_intersection(
+                sx1, sy1, sx2, sy2, t.x1, t.y1, t.x2, t.y2)
+            if result is None:
+                continue
+            ix, iy, t_ray, t_seg = result
+            d = math.hypot(ix - px, iy - py)
+            if d < best_dist:
+                best_nx = round(ix, 2)
+                best_ny = round(iy, 2)
+                best_dist = d
+                best_info = f"segment ({t.x1},{t.y1})-({t.x2},{t.y2})"
+
+        elif t.kind == "point":
+            # Check that point is near the ray (directional filter)
+            dot = (t.x1 - px) * ray_dx + (t.y1 - py) * ray_dy
+            if abs(dot) > tolerance:
+                continue  # too far along ray
+            proj_x = px + dot * ray_dx
+            proj_y = py + dot * ray_dy
+            perp_dist = math.hypot(t.x1 - proj_x, t.y1 - proj_y)
+            if perp_dist > tolerance:
+                continue  # too far off-axis
+            if point_snap_mode == "direct":
+                # Snap to the actual point (column/grid intersection).
+                # Best for major beams that may be diagonal.
+                d = math.hypot(t.x1 - px, t.y1 - py)
+                snap_x = round(t.x1, 2)
+                snap_y = round(t.y1, 2)
+            else:
+                # Snap to ray projection (keeps beam on-axis).
+                # Best for SBs that are strictly orthogonal.
+                d = abs(dot)
+                snap_x = round(proj_x, 2)
+                snap_y = round(proj_y, 2)
+            if d < best_dist:
+                best_nx = snap_x
+                best_ny = snap_y
+                best_dist = d
+                # Identify target type
+                if t.floors:
+                    best_info = f"column ({t.x1},{t.y1})"
+                else:
+                    label = _grid_label_at(t.x1, t.y1, grid_data) if grid_data else None
+                    best_info = f"grid_intersection {label or f'({t.x1},{t.y1})'}"
+
+    if best_nx is not None:
+        return best_nx, best_ny, round(best_dist, 4), best_info
+    return None
+
+
+def ray_ray_intersection(p1x, p1y, d1x, d1y, p2x, p2y, d2x, d2y):
+    """Compute intersection point of two rays.
+
+    Ray 1: (p1x,p1y) + t*(d1x,d1y)
+    Ray 2: (p2x,p2y) + s*(d2x,d2y)
+
+    Returns (ix, iy) or None if parallel.
+    """
+    cross = d1x * d2y - d1y * d2x
+    if abs(cross) < 1e-9:
+        return None
+    dx = p2x - p1x
+    dy = p2y - p1y
+    t = (dx * d2y - dy * d2x) / cross
+    ix = round(p1x + t * d1x, 2)
+    iy = round(p1y + t * d1y, 2)
+    return ix, iy
+
+
+def cluster_free_endpoints(beams_list, snapped_state, cluster_tolerance=0.30,
+                           beam_key_prefix="sb"):
+    """Cluster free endpoints of half-snapped beams within tolerance.
+
+    Collects free endpoints from beams where exactly one endpoint is snapped,
+    then groups nearby endpoints (direct radius search, no transitive BFS)
+    that share at least one overlapping floor. Moves all members to the
+    cluster centroid and marks them as snapped.
+
+    Parameters
+    ----------
+    beams_list : list[dict]
+        The beams list (mutated in place).
+    snapped_state : list[list[bool]]
+        Per-beam [start_snapped, end_snapped] (mutated in place).
+    cluster_tolerance : float
+        Max distance between endpoints to form a cluster (default 0.30m).
+    beam_key_prefix : str
+        Prefix for report labels: "sb" for small beams, "beam" for major beams.
+
+    Returns
+    -------
+    list[dict]
+        Cluster correction records.
+    """
+    # 1. Collect half-snapped free endpoints
+    free_eps = []  # [(beam_idx, ep_idx, x, y, floors)]
+    for i, bm in enumerate(beams_list):
+        s0, s1 = snapped_state[i]
+        if s0 and not s1:
+            free_eps.append((i, 1, bm["x2"], bm["y2"], bm.get("floors", [])))
+        elif s1 and not s0:
+            free_eps.append((i, 0, bm["x1"], bm["y1"], bm.get("floors", [])))
+
+    if len(free_eps) < 2:
+        return []
+
+    # 2. Direct radius clustering (no transitive)
+    visited = [False] * len(free_eps)
+    corrections = []
+
+    for seed_idx in range(len(free_eps)):
+        if visited[seed_idx]:
+            continue
+        seed_sb, seed_ep, sx, sy, s_floors = free_eps[seed_idx]
+
+        # Find all unvisited endpoints within tolerance with floor overlap
+        members = [seed_idx]
+        for j in range(seed_idx + 1, len(free_eps)):
+            if visited[j]:
+                continue
+            _, _, jx, jy, j_floors = free_eps[j]
+            dist = math.hypot(jx - sx, jy - sy)
+            if dist <= cluster_tolerance and floors_overlap(s_floors, j_floors):
+                members.append(j)
+
+        if len(members) < 2:
+            continue
+
+        # 3. Pre-compute ray directions for each member (snapped→free)
+        member_rays = []
+        for m in members:
+            sb_idx, ep_idx, ox, oy, fl = free_eps[m]
+            bm = beams_list[sb_idx]
+            if ep_idx == 0:
+                s_x, s_y = bm["x2"], bm["y2"]  # snapped end
+            else:
+                s_x, s_y = bm["x1"], bm["y1"]
+            rdx = ox - s_x
+            rdy = oy - s_y
+            rlen = math.hypot(rdx, rdy)
+            if rlen > 1e-6:
+                member_rays.append((s_x, s_y, rdx / rlen, rdy / rlen))
+            else:
+                member_rays.append((s_x, s_y, 0, 0))
+
+        # 4. Try ray-ray intersection for non-parallel pairs
+        intersection_point = None
+        if len(members) == 2:
+            r0, r1 = member_rays[0], member_rays[1]
+            result = ray_ray_intersection(r0[0], r0[1], r0[2], r0[3],
+                                          r1[0], r1[1], r1[2], r1[3])
+            if result:
+                ix, iy = result
+                max_d = max(math.hypot(free_eps[m][2] - ix,
+                                       free_eps[m][3] - iy) for m in members)
+                if max_d <= cluster_tolerance * 3:
+                    intersection_point = (ix, iy)
+        elif len(members) >= 3:
+            import statistics
+            ixs, iys = [], []
+            for a in range(len(members)):
+                for b in range(a + 1, len(members)):
+                    ra, rb = member_rays[a], member_rays[b]
+                    result = ray_ray_intersection(
+                        ra[0], ra[1], ra[2], ra[3],
+                        rb[0], rb[1], rb[2], rb[3])
+                    if result:
+                        ixs.append(result[0])
+                        iys.append(result[1])
+            if ixs:
+                mid_x = round(statistics.median(ixs), 2)
+                mid_y = round(statistics.median(iys), 2)
+                max_d = max(math.hypot(free_eps[m][2] - mid_x,
+                                       free_eps[m][3] - mid_y) for m in members)
+                if max_d <= cluster_tolerance * 3:
+                    intersection_point = (mid_x, mid_y)
+
+        if intersection_point:
+            cx, cy = intersection_point
+            method = "ray_intersection"
+        else:
+            cx = round(sum(free_eps[m][2] for m in members) / len(members), 2)
+            cy = round(sum(free_eps[m][3] for m in members) / len(members), 2)
+            method = "centroid_projection"
+
+        # 5. Move each member to target PROJECTED onto its beam axis
+        member_details = []
+        for m in members:
+            visited[m] = True
+            sb_idx, ep_idx, ox, oy, fl = free_eps[m]
+            bm = beams_list[sb_idx]
+
+            # Beam direction from snapped endpoint to free endpoint
+            if ep_idx == 0:  # free = start, snapped = end
+                s_x, s_y = bm["x2"], bm["y2"]
+            else:            # free = end, snapped = start
+                s_x, s_y = bm["x1"], bm["y1"]
+
+            dx_bm = ox - s_x
+            dy_bm = oy - s_y
+            length = math.hypot(dx_bm, dy_bm)
+            if length > 1e-6:
+                dx_bm /= length
+                dy_bm /= length
+                # Project centroid onto beam direction from snapped endpoint
+                dot = (cx - s_x) * dx_bm + (cy - s_y) * dy_bm
+                proj_x = round(s_x + dot * dx_bm, 2)
+                proj_y = round(s_y + dot * dy_bm, 2)
+            else:
+                proj_x, proj_y = cx, cy
+
+            d = math.hypot(ox - proj_x, oy - proj_y)
+            if ep_idx == 0:
+                bm["x1"], bm["y1"] = proj_x, proj_y
+            else:
+                bm["x2"], bm["y2"] = proj_x, proj_y
+            snapped_state[sb_idx][ep_idx] = True
+            member_details.append({
+                f"{beam_key_prefix}_index": sb_idx,
+                "endpoint": "start" if ep_idx == 0 else "end",
+                "original_coord": [ox, oy],
+                "projected_coord": [proj_x, proj_y],
+                "snap_distance": round(d, 4),
+            })
+
+        corrections.append({
+            "method": method,
+            "target": [cx, cy],
+            "centroid": [cx, cy],
+            "member_count": len(members),
+            "members": member_details,
+        })
+
+    return corrections
+
+
+# ---------------------------------------------------------------------------
 # 1b. Target construction
 # ---------------------------------------------------------------------------
 

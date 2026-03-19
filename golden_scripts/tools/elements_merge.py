@@ -363,6 +363,10 @@ def main():
         help="Directory containing per-slide JSON files to merge (globs *.json)",
     )
     parser.add_argument(
+        "--pattern",
+        help="Custom glob pattern for --inputs-dir (e.g., '*/calibrated/calibrated.json')",
+    )
+    parser.add_argument(
         "--output", required=True,
         help="Output merged elements JSON file",
     )
@@ -391,9 +395,17 @@ def main():
         if not dir_path.is_dir():
             print(f"ERROR: --inputs-dir is not a directory: {args.inputs_dir}")
             sys.exit(1)
-        if args.phase == "phase2":
-            # Phase 2: scan for sb_elements.json in subdirectories
+        if args.pattern:
+            # Custom glob pattern (e.g., "*/calibrated/calibrated.json")
+            json_files = sorted(dir_path.glob(args.pattern))
+            if not json_files:
+                print(f"ERROR: No files found matching pattern '{args.pattern}' in {args.inputs_dir}")
+                sys.exit(1)
+        elif args.phase == "phase2":
+            # Phase 2: scan for sb_elements.json or calibrated.json in subdirectories
             json_files = sorted(dir_path.glob("*/sb_elements.json"))
+            if not json_files:
+                json_files = sorted(dir_path.glob("*/calibrated/calibrated.json"))
             if not json_files:
                 # Fallback: any JSON with "sb" in name
                 json_files = sorted(f for f in dir_path.glob("*/*.json") if "sb" in f.name.lower())
@@ -402,6 +414,8 @@ def main():
                 sys.exit(1)
         else:
             json_files = sorted(dir_path.glob("*/elements.json"))
+            if not json_files:
+                json_files = sorted(dir_path.glob("*/calibrated/calibrated.json"))
             if not json_files:
                 json_files = sorted(dir_path.glob("*.json"))
             if not json_files:

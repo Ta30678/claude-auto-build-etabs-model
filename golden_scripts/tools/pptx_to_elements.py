@@ -704,9 +704,6 @@ def collect_sections(grouped: dict) -> dict:
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 _COLOR_TOLERANCE_OVERRIDE = None   # Set by --color-tolerance CLI; None = use default (15)
-TICK_MAX_LENGTH_EMU = 300000       # Max length for a tick mark (short line)
-TICK_Y_TOLERANCE_EMU = 100000     # Y-proximity for grouping tick marks
-TEXT_TICK_Y_TOLERANCE_EMU = 300000 # Y-proximity for matching text to ticks
 COLUMN_DEDUP_TOLERANCE_EMU = 5000 # Position tolerance for column dedup
 LEGEND_KEYWORDS = [
     "RC", "大梁", "小梁", "柱", "壁", "連續壁", "剪力牆",
@@ -720,10 +717,8 @@ _PHASE2_LABEL_RE = re.compile(
     re.IGNORECASE,
 )
 SLIDE_AREA_RATIO_MAX = 0.50       # Exclude shapes > 50% of slide area
-MIN_SCALE_MEASUREMENTS = 1        # Require at least 1 measurement per page
-MIN_COLUMN_DIM_EMU = 30000        # Min column shape dimension (~3cm at typical scale)
+# MIN_COLUMN_DIM_EMU = 30000      # Deprecated: legend color is the definitive column filter
 COLUMN_REQUIRED_VERTICES = (4, 5)  # 4- or 5-vertex freeforms (5 = explicit close point)
-MEASUREMENT_RE = re.compile(r"(\d+\.?\d*)\s*m\b")
 # Column section pattern: C100x100, C110x140, etc.
 _COLUMN_SECTION_RE = re.compile(r"C(\d+)\s*[xX]\s*(\d+)")
 
@@ -753,6 +748,64 @@ def _get_freeform_vertex_count(shape):
         count += len(path.findall('a:moveTo', _VERTEX_NS))
         count += len(path.findall('a:lnTo', _VERTEX_NS))
     return count
+
+
+# ─── Line Shape Helpers ──────────────────────────────────────────────────────
+
+def _is_line_shape(shape):
+    """Return True for LINE shapes and 2-vertex FREEFORM line segments."""
+    raw = shape._shape if isinstance(shape, _AbsShape) else shape
+    st = getattr(raw, 'shape_type', None)
+    if st == MSO_SHAPE_TYPE.LINE:
+        return True
+    if st == MSO_SHAPE_TYPE.FREEFORM:
+        vc = _get_freeform_vertex_count(shape)
+        if vc == 2:
+            return True
+    return False
+
+
+def _get_line_flip(shape):
+    """Read flipH/flipV from shape's <a:xfrm> element.
+
+    Returns (flipH: bool, flipV: bool).  Default (False, False).
+    """
+    try:
+        raw = shape._shape if isinstance(shape, _AbsShape) else shape
+        el = raw._element if hasattr(raw, '_element') else raw
+        ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        # Look for xfrm in spPr (standard shapes) or directly
+        xfrm = el.find(f'.//{{{ns_a}}}xfrm')
+        if xfrm is None:
+            # Try PowerPoint namespace
+            ns_p = 'http://schemas.openxmlformats.org/presentationml/2006/main'
+            xfrm = el.find(f'.//{{{ns_p}}}xfrm')
+        if xfrm is None:
+            return (False, False)
+        fh = xfrm.get('flipH', '0') in ('1', 'true')
+        fv = xfrm.get('flipV', '0') in ('1', 'true')
+        return (fh, fv)
+    except Exception:
+        return (False, False)
+
+
+def _line_endpoints_emu(shape):
+    """Compute actual line start/end points in EMU, accounting for flip.
+
+    Returns ((x1, y1), (x2, y2)) in absolute EMU coordinates.
+    """
+    left, top = shape.left, shape.top
+    w, h = shape.width, shape.height
+    flipH, flipV = _get_line_flip(shape)
+
+    if not flipH and not flipV:
+        return ((left, top), (left + w, top + h))
+    elif flipH and not flipV:
+        return ((left + w, top), (left, top + h))
+    elif not flipH and flipV:
+        return ((left, top + h), (left + w, top))
+    else:  # both flipped
+        return ((left + w, top + h), (left, top))
 
 
 # ─── Theme Color Resolution ──────────────────────────────────────────────────
@@ -891,53 +944,6 @@ def _get_shape_color(shape, color_type="line", theme_map=None):
     return None
 
 
-def _find_tick_marks(slide):
-    """Find short line segments (tick marks) on a slide.
-
-    Returns list of (orientation, x, y, length, color) where:
-      orientation: 'V' (vertical, width=0) or 'H' (horizontal, height=0)
-      x, y: left/top position in EMU
-      length: in EMU
-    """
-    ticks = []
-    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.FREEFORM,)):
-        w, h = shape.width, shape.height
-        if w == 0 and 0 < h <= TICK_MAX_LENGTH_EMU:
-            color = _get_shape_color(shape, "line")
-            ticks.append(("V", shape.left, shape.top, h, color))
-        elif h == 0 and 0 < w <= TICK_MAX_LENGTH_EMU:
-            color = _get_shape_color(shape, "line")
-            ticks.append(("H", shape.left, shape.top, w, color))
-    return ticks
-
-
-def _find_measurement_texts(slide):
-    """Find TEXT_BOX shapes containing measurement values like '8.5 m'.
-
-    Returns list of (meters_value, center_x, center_y, text).
-    """
-    measurements = []
-    for shape in _iter_slide_shapes(slide, (MSO_SHAPE_TYPE.TEXT_BOX,)):
-        if not shape.has_text_frame:
-            continue
-        text = shape.text_frame.text.strip()
-        # Only match simple single-value measurement texts
-        # Skip multi-line texts like "27.4 m\n9.0 m\t8.6 m\t9.8 m"
-        lines = text.split("\n")
-        for line in lines:
-            # Skip lines with tabs (multi-value)
-            if "\t" in line:
-                continue
-            m = MEASUREMENT_RE.match(line.strip())
-            if m:
-                val = float(m.group(1))
-                if val < 1.0 or val > 100.0:
-                    continue  # Skip unreasonable values
-                cx = shape.left + shape.width // 2
-                cy = shape.top + shape.height // 2
-                measurements.append((val, cx, cy, line.strip()))
-    return measurements
-
 
 def _estimate_scale_from_shapes(slide, slide_num):
     """Estimate rough EMU/m scale from FREEFORM shape bounding box.
@@ -981,96 +987,6 @@ def _estimate_scale_from_shapes(slide, slide_num):
         "extent_emu": round(extent, 0),
     }
 
-
-def detect_slide_scale(slide, slide_num):
-    """Detect the EMU-per-meter scale for a slide.
-
-    Strategy:
-    1. Find measurement texts (e.g., "8.5 m", "11.0 m")
-    2. Find vertical tick marks (short vertical lines near measurements)
-    3. Group V-ticks by similar Y into dimension lines
-    4. For each measurement text, find the best matching V-tick pair
-    5. Return the average scale (EMU per meter)
-
-    Returns (emu_per_meter, details_dict) or (None, error_msg).
-    """
-    measurements = _find_measurement_texts(slide)
-    if not measurements:
-        return None, f"Slide {slide_num}: no measurement texts found (need 'X.X m' TEXT_BOX)"
-
-    ticks = _find_tick_marks(slide)
-    v_ticks = [(x, y, length) for orient, x, y, length, _ in ticks if orient == "V"]
-
-    if len(v_ticks) < 2:
-        return None, f"Slide {slide_num}: fewer than 2 vertical tick marks found"
-
-    # Sort V-ticks by X position
-    v_ticks.sort(key=lambda t: t[0])
-
-    # Try to match each measurement text to a pair of V-ticks
-    scales = []
-    details = []
-
-    for meters, text_cx, text_cy, text_str in measurements:
-        best_pair = None
-        best_score = float("inf")
-
-        for i in range(len(v_ticks)):
-            for j in range(i + 1, len(v_ticks)):
-                x_i, y_i, _ = v_ticks[i]
-                x_j, y_j, _ = v_ticks[j]
-
-                # V-ticks should be at similar Y
-                if abs(y_i - y_j) > TICK_Y_TOLERANCE_EMU:
-                    continue
-
-                # Text should be between the ticks (X-wise) or close
-                tick_cx = (x_i + x_j) / 2
-                tick_cy = (y_i + y_j) / 2
-
-                # Text should be near the tick Y
-                if abs(text_cy - tick_cy) > TEXT_TICK_Y_TOLERANCE_EMU:
-                    continue
-
-                # Text center should be between ticks (with margin)
-                margin = (x_j - x_i) * 0.3
-                if text_cx < x_i - margin or text_cx > x_j + margin:
-                    continue
-
-                # Score: prefer pair where text is centered between ticks
-                dx = abs(text_cx - tick_cx)
-                dy = abs(text_cy - tick_cy)
-                score = dx + dy
-
-                if score < best_score:
-                    best_score = score
-                    best_pair = (x_i, x_j, meters)
-
-        if best_pair:
-            x_left, x_right, m = best_pair
-            emu_dist = x_right - x_left
-            scale = emu_dist / m
-            scales.append(scale)
-            details.append({
-                "text": text_str,
-                "meters": m,
-                "emu_distance": emu_dist,
-                "emu_per_meter": round(scale, 1),
-            })
-
-    if not scales:
-        return None, f"Slide {slide_num}: could not pair any measurement text with tick marks"
-
-    # Use median scale for robustness
-    scales.sort()
-    median_scale = scales[len(scales) // 2]
-
-    return median_scale, {
-        "slide": slide_num,
-        "measurements": details,
-        "emu_per_meter": round(median_scale, 1),
-        "num_measurements": len(scales),
-    }
 
 
 # ─── Coordinate Conversion ───────────────────────────────────────────────────
@@ -1690,8 +1606,8 @@ def _validate_legend(slide, slide_num, legend, slide_w, slide_h,
             continue
         if legend_side == "right" and cx > legend_boundary:
             continue
-        # Skip very large shapes
-        if shape.width > 0 and shape.height > 0:
+        # Skip very large shapes (but not lines — bounding-box area is meaningless for 1D elements)
+        if not _is_line_shape(shape) and shape.width > 0 and shape.height > 0:
             if (shape.width * shape.height) > slide_w * slide_h * SLIDE_AREA_RATIO_MAX:
                 continue
 
@@ -1839,6 +1755,94 @@ def _resolve_pptx_legend(color_hex, geom_type, legend, tolerance=15):
     return None
 
 
+def _build_rect_color_map(columns, legend, tolerance):
+    """Per-slide batch color→legend mapping for rectangles.
+
+    Instead of per-shape independent matching (which with wide tolerance
+    causes cross-type false matches like slab→column), this function:
+    1. Collects unique rectangle colors on the slide
+    2. For each rectangle-compatible legend entry, finds the closest shape
+       color (anchor) within tolerance
+    3. Exclusive: each anchor color claimed by at most one legend entry
+       (closest distance wins)
+    4. Shade variants within Chebyshev ±15 of anchor also map to the same entry
+
+    Returns dict: shape_color_hex → LegendEntry
+    """
+    # Build filtered legend: only rectangle-compatible types (column, slab)
+    rect_types = ("column", "slab")
+    filtered_entries = []  # list of (legend_color_hex, LegendEntry)
+    for key, entries in legend.items():
+        for e in entries:
+            if e.element_type in rect_types:
+                filtered_entries.append((key, e))
+
+    if not filtered_entries:
+        return {}
+
+    # Collect unique colors from all rectangle shapes
+    unique_colors = set()
+    for col in columns:
+        if col.get("color"):
+            unique_colors.add(col["color"])
+        if col.get("alt_color"):
+            unique_colors.add(col["alt_color"])
+
+    if not unique_colors:
+        return {}
+
+    # For each legend entry, find the closest unique shape color (anchor)
+    # candidates: list of (distance, manhattan, shape_color, legend_hex, entry)
+    candidates = []
+    for leg_hex, entry in filtered_entries:
+        lr = int(leg_hex[0:2], 16)
+        lg = int(leg_hex[2:4], 16)
+        lb = int(leg_hex[4:6], 16)
+        for sc in unique_colors:
+            sr = int(sc[0:2], 16)
+            sg = int(sc[2:4], 16)
+            sb = int(sc[4:6], 16)
+            dist = max(abs(lr - sr), abs(lg - sg), abs(lb - sb))
+            if dist <= tolerance:
+                manhattan = abs(lr - sr) + abs(lg - sg) + abs(lb - sb)
+                candidates.append((dist, manhattan, sc, leg_hex, entry))
+
+    # Greedy assign: sort by (distance, manhattan), each shape color and each
+    # legend entry can only be claimed once
+    candidates.sort(key=lambda c: (c[0], c[1]))
+    claimed_colors = {}   # shape_color → (legend_hex, entry)
+    claimed_legends = {}  # legend_hex → shape_color (anchor)
+    for dist, manhattan, sc, leg_hex, entry in candidates:
+        if sc in claimed_colors:
+            continue
+        if leg_hex in claimed_legends:
+            continue
+        claimed_colors[sc] = (leg_hex, entry)
+        claimed_legends[leg_hex] = sc
+
+    # Build final mapping: anchor + shade variants (Chebyshev ≤ 15 from anchor)
+    color_map = {}  # shape_color_hex → LegendEntry
+    shade_tolerance = 15
+    for leg_hex, anchor_color in claimed_legends.items():
+        entry = claimed_colors[anchor_color][1]
+        # Map the anchor itself
+        color_map[anchor_color] = entry
+        # Map shade variants close to anchor
+        ar = int(anchor_color[0:2], 16)
+        ag = int(anchor_color[2:4], 16)
+        ab = int(anchor_color[4:6], 16)
+        for sc in unique_colors:
+            if sc == anchor_color or sc in color_map:
+                continue
+            sr = int(sc[0:2], 16)
+            sg = int(sc[2:4], 16)
+            sb_val = int(sc[4:6], 16)
+            if max(abs(ar - sr), abs(ag - sg), abs(ab - sb_val)) <= shade_tolerance:
+                color_map[sc] = entry
+
+    return color_map
+
+
 def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
                                 phase, slide_w, slide_h, legend_boundary,
                                 legend_side, warnings, theme_map=None,
@@ -1875,25 +1879,42 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
         if legend_side == "right" and cx > legend_boundary:
             continue
 
-        # Skip extremely large shapes (background/border)
-        if w > 0 and h > 0 and (w * h) > slide_area * SLIDE_AREA_RATIO_MAX:
+        # Determine if shape is a line (H, V, or diagonal)
+        is_line = _is_line_shape(shape) or w == 0 or h == 0
+
+        # Skip extremely large shapes (background/border) — but not lines
+        if not is_line and w > 0 and h > 0 and (w * h) > slide_area * SLIDE_AREA_RATIO_MAX:
             continue
 
         line_color = _get_shape_color(shape, "line", theme_map)
         fill_color = _get_shape_color(shape, "fill", theme_map)
 
-        if w == 0 or h == 0:
-            # Line shape (beam candidate)
+        if is_line:
+            # Line shape (beam candidate) — H, V, or diagonal
             primary_color = line_color or fill_color
             alt_color_line = fill_color if primary_color == line_color else line_color
-            lines.append({
-                "left": left, "top": top, "width": w, "height": h,
-                "color": primary_color,
-                "alt_color": alt_color_line,
-                "orientation": "H" if h == 0 else "V",
-            })
-        elif w > 0 and h > 0 and w < 500000 and h < 500000:
-            # Small rectangle (column candidate)
+            if w == 0 or h == 0:
+                # Axis-aligned line
+                line_entry = {
+                    "left": left, "top": top, "width": w, "height": h,
+                    "color": primary_color,
+                    "alt_color": alt_color_line,
+                    "orientation": "H" if h == 0 else "V",
+                }
+            else:
+                # Diagonal line — pre-compute endpoints accounting for flip
+                (x1e, y1e), (x2e, y2e) = _line_endpoints_emu(shape)
+                line_entry = {
+                    "left": left, "top": top, "width": w, "height": h,
+                    "color": primary_color,
+                    "alt_color": alt_color_line,
+                    "orientation": "D",
+                    "x1_emu": x1e, "y1_emu": y1e,
+                    "x2_emu": x2e, "y2_emu": y2e,
+                }
+            lines.append(line_entry)
+        elif w > 0 and h > 0:
+            # Rectangle (column candidate) — no upper size limit; SLIDE_AREA_RATIO_MAX is the safety net
             # Only accept 4-vertex freeforms (true rectangles);
             # AUTO_SHAPE rectangles are inherently rectangular (skip vertex check)
             raw = shape._shape if isinstance(shape, _AbsShape) else shape
@@ -1920,18 +1941,15 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
 
     # ── Classify columns ──────────────────────────────────────────────
     if phase in ("phase1", "all"):
+        color_map = _build_rect_color_map(columns, legend, tolerance)
         for col in columns:
-            entry = _resolve_pptx_legend(col["color"], "rectangle", legend, tolerance)
+            entry = color_map.get(col["color"])
             # Fallback: try alternate color if primary didn't match column
             if (not entry or entry.element_type != "column") and col.get("alt_color"):
-                alt_entry = _resolve_pptx_legend(col["alt_color"], "rectangle", legend, tolerance)
-                if alt_entry and alt_entry.element_type == "column":
-                    entry = alt_entry
+                entry_alt = color_map.get(col["alt_color"])
+                if entry_alt and entry_alt.element_type == "column":
+                    entry = entry_alt
             if not entry or entry.element_type != "column":
-                continue
-
-            # Skip shapes too small to be columns
-            if col["width"] < MIN_COLUMN_DIM_EMU or col["height"] < MIN_COLUMN_DIM_EMU:
                 continue
 
             cx_emu = col["left"] + col["width"] // 2
@@ -1978,6 +1996,10 @@ def extract_and_classify_shapes(slide, slide_num, legend, scale, floors,
             y_emu = line["top"]
             x1_m, y1_m = _emu_to_m(x1_emu, y_emu, scale, slide_h)
             x2_m, y2_m = _emu_to_m(x2_emu, y_emu, scale, slide_h)
+        elif line["orientation"] == "D":
+            # Diagonal line: use pre-computed endpoints
+            x1_m, y1_m = _emu_to_m(line["x1_emu"], line["y1_emu"], scale, slide_h)
+            x2_m, y2_m = _emu_to_m(line["x2_emu"], line["y2_emu"], scale, slide_h)
         else:
             # Vertical line: X-direction beam
             x_emu = line["left"]
@@ -2050,8 +2072,7 @@ def print_summary(output: dict):
         for sd in meta["scale_details"]:
             if isinstance(sd, dict):
                 print(f"Scale:  Slide {sd.get('slide', '?')}: "
-                      f"{sd.get('emu_per_meter', '?')} EMU/m "
-                      f"({sd.get('num_measurements', 0)} measurements)")
+                      f"{sd.get('emu_per_meter', '?')} EMU/m")
 
     print(f"\nPer-slide element counts:")
     for pn, stats in meta.get("per_page_stats", {}).items():
@@ -2230,15 +2251,9 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
         for sn in sorted(page_floors.keys()):
             if sn < 1 or sn > num_slides:
                 continue
-            scale_val, scale_info = detect_slide_scale(prs.slides[sn - 1], sn)
-            if scale_val is not None:
-                slide_scales[sn] = (scale_val, scale_info)
-            else:
-                # Fallback: estimate from shape extent
-                est_scale, est_info = _estimate_scale_from_shapes(prs.slides[sn - 1], sn)
-                if est_scale is not None:
-                    slide_scales[sn] = (est_scale, est_info)
-                    print(f"  Slide {sn}: using estimated scale {est_scale:.0f} EMU/m (no measurement texts)")
+            est_scale, est_info = _estimate_scale_from_shapes(prs.slides[sn - 1], sn)
+            if est_scale is not None:
+                slide_scales[sn] = (est_scale, est_info)
 
     # Fallback scale: use median of all detected scales (or manual scale)
     fallback_scale = None
@@ -2265,19 +2280,12 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
         # 3) Detect scale (per-slide, with fallback)
         if sn in slide_scales:
             scale, scale_info = slide_scales[sn]
-            if isinstance(scale_info, dict) and scale_info.get("estimated"):
-                print(f"  Scale: {scale:.0f} EMU/m (ESTIMATED from shape extent \u2014 affine_calibrate will correct)")
-            else:
-                print(f"  Scale: {scale:.1f} EMU/m ({scale_info.get('num_measurements', 0) if isinstance(scale_info, dict) else 0} measurements)")
+            print(f"  Scale: {scale:.0f} EMU/m (estimated from shape extent)")
         elif fallback_scale:
             scale = fallback_scale
             scale_info = {"slide": sn, "emu_per_meter": round(scale, 1),
                           "num_measurements": 0, "fallback": True}
-            warnings.append(
-                f"Slide {sn}: no measurement texts, using fallback scale "
-                f"{scale:.1f} EMU/m from other slides"
-            )
-            print(f"  Scale: {scale:.1f} EMU/m (FALLBACK from other slides)")
+            print(f"  Scale: {scale:.0f} EMU/m (fallback from other slides)")
         else:
             warnings.append(f"Slide {sn}: no scale available, skipping")
             print(f"  ERROR: no scale available")
@@ -2372,7 +2380,8 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
         slide_elems = extract_and_classify_shapes(
             slide, sn, legend, scale, floors, phase,
             slide_w, slide_h, legend_boundary, legend_side, warnings,
-            theme_map=theme_map, tolerance=rect_tolerance, line_tolerance=0)
+            theme_map=theme_map, tolerance=rect_tolerance,
+            line_tolerance=100)
         all_elements.extend(slide_elems)
 
         # Per-slide stats
@@ -2413,17 +2422,25 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
             }
             # Phase 2 per-slide files use sb_ prefix to avoid collision with Phase 1
             if phase == "phase2":
-                slide_json_path = Path(slides_info_dir) / floor_label / f"sb_{floor_label}.json"
+                slide_json_path = Path(slides_info_dir) / floor_label / "pptx_to_elements" / f"sb_{floor_label}.json"
             else:
-                slide_json_path = Path(slides_info_dir) / floor_label / f"{floor_label}.json"
+                slide_json_path = Path(slides_info_dir) / floor_label / "pptx_to_elements" / f"{floor_label}.json"
             slide_json_path.parent.mkdir(parents=True, exist_ok=True)
             with open(slide_json_path, "w", encoding="utf-8") as f:
                 json.dump(slide_output, f, ensure_ascii=False, indent=2)
             print(f"  Saved per-slide JSON: {slide_json_path}")
 
+            # Auto-generate PNG plot
+            try:
+                from golden_scripts.tools.plot_elements import plot_elements as _plot
+                png_path = slide_json_path.with_suffix(".png")
+                _plot(slide_json_path, png_path, dpi=200)
+            except Exception as e:
+                print(f"  WARNING: plot generation failed: {e}")
+
     # When --slides-info-dir is set, skip merge and return summary
     if slides_info_dir:
-        slide_files = sorted(Path(slides_info_dir).glob("*/*.json"))
+        slide_files = sorted(Path(slides_info_dir).glob("*/pptx_to_elements/*.json"))
         print(f"\n--- Per-slide JSON output complete ---")
         print(f"  Directory: {slides_info_dir}")
         print(f"  Files: {len(slide_files)}")
@@ -2542,7 +2559,7 @@ def main():
         help="Scan floors, display detections with confidence, and prompt for confirmation")
     parser.add_argument(
         "--scale", type=float, default=None,
-        help="Manual scale in EMU/m (overrides auto-detection from measurement texts)")
+        help="Manual scale in EMU/m (overrides auto-estimation from shape extent)")
     parser.add_argument(
         "--color-map", nargs="*", default=None,
         help='Manual color-to-element mappings for unmatched colors. '

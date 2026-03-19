@@ -83,8 +83,8 @@ python -m golden_scripts.tools.pptx_to_elements \
 ### Phase 0.7: 分配平行提取工作
 
 1. 根據 annotations 中各頁的樓層標註，將頁面分為兩組：
-   - **READER-A**: 上構頁面 → `SLIDES INFO/{floor_label}/` per-slide JSONs + `calibrated/{floor_label}/`
-   - **READER-B**: 下構+屋突頁面 → `SLIDES INFO/{floor_label}/` per-slide JSONs + `calibrated/{floor_label}/`
+   - **READER-A**: 上構頁面 → `SLIDES INFO/{floor_label}/pptx_to_elements/` + `SLIDES INFO/{floor_label}/calibrated/`
+   - **READER-B**: 下構+屋突頁面 → `SLIDES INFO/{floor_label}/pptx_to_elements/` + `SLIDES INFO/{floor_label}/calibrated/`
 2. 設定 `SLIDES_INFO_DIR` = `{Case Folder}/結構配置圖/SLIDES INFO`
 
 ### Phase 1: 建立 Team + 創建任務
@@ -172,7 +172,8 @@ T1 和 T2 都為 "completed"，且額外分配工作也已完成。
 
 ```bash
 python -m golden_scripts.tools.elements_merge \
-    --inputs-dir "{Case Folder}/calibrated" \
+    --inputs-dir "{Case Folder}/結構配置圖/SLIDES INFO" \
+    --pattern "*/calibrated/calibrated.json" \
     --output "{Case Folder}/elements.json"
 ```
 

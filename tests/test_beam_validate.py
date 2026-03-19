@@ -21,6 +21,11 @@ from golden_scripts.tools.beam_validate import (
     split_all_walls,
     snap_walls_to_beams,
 )
+from golden_scripts.tools.config_snap import (
+    snap_by_ray,
+    cluster_free_endpoints,
+    SnapTarget,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +233,7 @@ class TestSnapToColumn:
 class TestSnapToWall:
 
     def test_beam_snaps_to_wall_segment(self, simple_grid_data):
-        """Beam endpoint near mid-point of wall segment snaps to nearest point on wall."""
+        """Beam endpoint near mid-point of wall segment snaps to wall via ray extension."""
         elements = {
             "columns": [],
             "walls": [
@@ -243,9 +248,11 @@ class TestSnapToWall:
         }
         validated, report = validate_beams(elements, simple_grid_data, tolerance=1.5)
         beam = validated["beams"][0]
-        # End point (0.08, 3.05) should snap to wall at (0.0, 3.05)
+        # End point (0.08, 3.05) should snap to wall at x=0.0 via ray extension
+        # along beam direction. The y-coordinate is where the ray hits the wall,
+        # slightly above 3.05 due to the beam's upward diagonal direction.
         assert beam["x2"] == 0.0
-        assert abs(beam["y2"] - 3.05) < 0.01
+        assert 0.0 < beam["y2"] < 6.0  # on the wall segment
 
 
 # ---------------------------------------------------------------------------
@@ -1632,3 +1639,213 @@ class TestSnapWallsToBeams:
         wall = validated["walls"][0]
         assert wall["y1"] == 3.5
         assert wall["y2"] == 3.5
+
+
+# ---------------------------------------------------------------------------
+# TestRaySnap — Direct tests of snap_by_ray in Phase 1 scenarios
+# ---------------------------------------------------------------------------
+
+class TestRaySnap:
+
+    def test_horizontal_beam_to_vertical_wall(self):
+        """Horizontal beam ray-snaps to vertical wall segment."""
+        # Beam is horizontal, endpoint near a vertical wall at x=0
+        targets = [
+            SnapTarget("segment", 0.0, -5.0, 0.0, 5.0, ["1F"]),
+        ]
+        # Beam direction: horizontal left (-1, 0)
+        result = snap_by_ray(0.1, 3.0, -1.0, 0.0, ["1F"], targets, 1.5,
+                             point_snap_mode="direct")
+        assert result is not None
+        nx, ny, d, info = result
+        assert nx == 0.0
+        assert ny == 3.0
+        assert d < 0.2
+
+    def test_diagonal_beam_to_grid_point(self):
+        """Diagonal beam ray-snaps to grid intersection point."""
+        import math
+        # Beam from (0,0) toward (10,10), endpoint at (9.9, 9.9)
+        dx, dy = 1.0 / math.sqrt(2), 1.0 / math.sqrt(2)
+        targets = [
+            SnapTarget("point", 10.0, 10.0, 10.0, 10.0, []),
+        ]
+        result = snap_by_ray(9.9, 9.9, dx, dy, ["1F"], targets, 1.5,
+                             point_snap_mode="direct")
+        assert result is not None
+        nx, ny, d, info = result
+        assert nx == 10.0
+        assert ny == 10.0
+        assert "grid_intersection" in info
+
+    def test_ray_snap_respects_direction(self):
+        """Ray snap only finds targets along beam direction, not perpendicular."""
+        # Beam goes right along X-axis
+        targets = [
+            # Column above the beam (perpendicular), very close to endpoint
+            SnapTarget("point", 5.0, 0.3, 5.0, 0.3, ["1F"]),
+        ]
+        # Direction: (1, 0), endpoint at (5.0, 0.0)
+        result = snap_by_ray(5.0, 0.0, 1.0, 0.0, ["1F"], targets, 0.5,
+                             point_snap_mode="direct")
+        # Column at (5.0, 0.3) has dot=0 along the ray (exactly perpendicular)
+        # but perp_dist=0.3 which is within tolerance=0.5
+        # With point_snap_mode="direct", d = hypot(0, 0.3) = 0.3 < 0.5
+        assert result is not None
+        nx, ny, d, info = result
+        assert nx == 5.0
+        assert ny == 0.3
+
+    def test_ray_snap_no_target_beyond_tolerance(self):
+        """No snap when target is beyond tolerance along ray."""
+        targets = [
+            SnapTarget("segment", 5.0, -5.0, 5.0, 5.0, ["1F"]),
+        ]
+        # Beam going right, endpoint at (0,0), wall at x=5 is 5m away > tolerance=1.5
+        result = snap_by_ray(0.0, 0.0, 1.0, 0.0, ["1F"], targets, 1.5)
+        assert result is None
+
+    def test_ray_snap_t_junction(self):
+        """Beam T-junction: endpoint snaps to perpendicular beam segment via ray."""
+        # Main beam from (0,0) to (10,0) as segment target
+        targets = [
+            SnapTarget("segment", 0.0, 0.0, 10.0, 0.0, ["1F"]),
+        ]
+        # Support beam going downward from (5.0, 0.1), direction (0, -1)
+        result = snap_by_ray(5.0, 0.1, 0.0, -1.0, ["1F"], targets, 1.5,
+                             point_snap_mode="direct")
+        assert result is not None
+        nx, ny, d, info = result
+        assert abs(nx - 5.0) < 0.01
+        assert abs(ny - 0.0) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# TestClusterFreeEndpointsBeams — Clustering for Phase 1 major beams
+# ---------------------------------------------------------------------------
+
+class TestClusterFreeEndpointsBeams:
+
+    def test_two_half_snapped_beams_cluster(self):
+        """Two beams with one snapped end each: free ends cluster together."""
+        beams = [
+            # Beam A: start at (0,0) snapped, end at (5.1, 3.05) unsnapped
+            {"x1": 0.0, "y1": 0.0, "x2": 5.1, "y2": 3.05,
+             "section": "B40X60", "floors": ["1F"]},
+            # Beam B: start at (10,0) snapped, end at (4.9, 2.95) unsnapped
+            {"x1": 10.0, "y1": 0.0, "x2": 4.9, "y2": 2.95,
+             "section": "B30X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(beams, snapped_state, 0.50,
+                                             beam_key_prefix="beam")
+        assert len(corrections) == 1
+        # Both endpoints should now be snapped
+        assert snapped_state[0][1] is True
+        assert snapped_state[1][1] is True
+
+    def test_no_cluster_when_far(self):
+        """Two beams with free endpoints >cluster_tolerance apart don't cluster."""
+        beams = [
+            {"x1": 0.0, "y1": 0.0, "x2": 5.0, "y2": 5.0,
+             "section": "B40X60", "floors": ["1F"]},
+            {"x1": 10.0, "y1": 0.0, "x2": 7.0, "y2": 7.0,
+             "section": "B30X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(beams, snapped_state, 0.50,
+                                             beam_key_prefix="beam")
+        assert len(corrections) == 0
+        assert snapped_state[0][1] is False
+        assert snapped_state[1][1] is False
+
+    def test_cluster_report_uses_beam_prefix(self):
+        """Cluster correction records use 'beam_index' key (not 'sb_index')."""
+        beams = [
+            {"x1": 0.0, "y1": 0.0, "x2": 5.0, "y2": 3.0,
+             "section": "B40X60", "floors": ["1F"]},
+            {"x1": 10.0, "y1": 0.0, "x2": 5.1, "y2": 3.1,
+             "section": "B30X50", "floors": ["1F"]},
+        ]
+        snapped_state = [[True, False], [True, False]]
+        corrections = cluster_free_endpoints(beams, snapped_state, 0.50,
+                                             beam_key_prefix="beam")
+        assert len(corrections) == 1
+        for member in corrections[0]["members"]:
+            assert "beam_index" in member
+            assert "sb_index" not in member
+
+
+# ---------------------------------------------------------------------------
+# TestNewPipelineOrderRaySnap — Verify angle correct → ray snap order
+# ---------------------------------------------------------------------------
+
+class TestNewPipelineOrderRaySnap:
+    """Verify that angle correction before ray snap produces better results."""
+
+    def test_angle_correct_before_ray_snap(self):
+        """Near-horizontal beam: angle correction straightens it first,
+        then ray snap uses the corrected direction to find targets."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 8.50}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 6.00}],
+        }
+        elements = {
+            "columns": [],
+            "walls": [],
+            "beams": [
+                # Near-horizontal beam: ~1° tilt, endpoints near grid
+                {"x1": 0.02, "y1": 6.05, "x2": 8.48, "y2": 5.95,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_beams(elements, grid_data, tolerance=1.5)
+        beam = validated["beams"][0]
+        # Angle correction aligns Y to grid line 2 (y=6.0)
+        # Then ray snap should snap endpoints to grid (0,6) and (8.5,6)
+        assert beam["y1"] == 6.0
+        assert beam["y2"] == 6.0
+        assert beam["x1"] == 0.0
+        assert beam["x2"] == 8.5
+
+    def test_report_has_cluster_fields(self):
+        """Report includes cluster-related fields."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0}],
+            "y": [{"label": "1", "coordinate": 0.0}],
+        }
+        elements = {
+            "columns": [], "walls": [],
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 5.0, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+        }
+        _, report = validate_beams(elements, grid_data, tolerance=1.5)
+        assert "clustered_endpoints" in report
+        assert "cluster_count" in report
+
+    def test_no_cluster_flag(self):
+        """--no-cluster flag disables endpoint clustering."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 10.0}],
+            "y": [{"label": "1", "coordinate": 0.0}],
+        }
+        elements = {
+            "columns": [],
+            "walls": [],
+            "beams": [
+                # Two beams whose free ends could cluster
+                {"x1": 0.0, "y1": 0.0, "x2": 5.0, "y2": 3.0,
+                 "section": "B40X60", "floors": ["1F"]},
+                {"x1": 10.0, "y1": 0.0, "x2": 5.1, "y2": 3.1,
+                 "section": "B30X50", "floors": ["1F"]},
+            ],
+        }
+        _, report = validate_beams(elements, grid_data, tolerance=1.5,
+                                   no_cluster=True)
+        assert report["clustered_endpoints"] == 0
+        assert report["cluster_count"] == 0

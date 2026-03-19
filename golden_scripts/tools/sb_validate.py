@@ -53,129 +53,26 @@ from golden_scripts.tools.config_snap import (
     SnapTarget,
     point_to_segment_nearest,
     floors_overlap,
+    segment_intersection,
+    _grid_label_at,
+    snap_by_ray as snap_sb_by_ray,
+    ray_ray_intersection,
+    cluster_free_endpoints,
 )
 from golden_scripts.tools.beam_validate import (
     _normalize_grid_data_for_bv,
     _find_nearest_grid_value,
-    segment_intersection,
     split_beam,
-    _grid_label_at,
 )
 from golden_scripts.constants import parse_frame_section
 
 
-# ---------------------------------------------------------------------------
-# 1. Ray-based snap for SB endpoints
-# ---------------------------------------------------------------------------
-
-def snap_sb_by_ray(px, py, ray_dx, ray_dy, floors, targets, tolerance,
-                   grid_data=None):
-    """Snap SB endpoint by extending ray along SB direction.
-
-    Creates a search segment of length 2*tolerance centered on (px, py)
-    along the SB direction (ray_dx, ray_dy), then finds intersections
-    with target segments. For point targets, checks perpendicular distance
-    to ray and projects onto the ray.
-
-    Parameters
-    ----------
-    px, py : float
-        SB endpoint coordinates.
-    ray_dx, ray_dy : float
-        SB direction unit vector.
-    floors : list[str]
-        Floors the SB exists on.
-    targets : list[SnapTarget]
-        Available snap targets.
-    tolerance : float
-        Maximum extension distance along ray AND max perpendicular distance
-        for point targets.
-    grid_data : dict or None
-        Grid data for generating target labels (optional).
-
-    Returns
-    -------
-    tuple or None
-        (snapped_x, snapped_y, distance, target_info_str) or None if no
-        target found along the ray within tolerance.
-    """
-    best_nx, best_ny, best_dist = None, None, tolerance + 1
-    best_info = None
-
-    # Search segment: extend tolerance in both directions from endpoint
-    sx1 = px - ray_dx * tolerance
-    sy1 = py - ray_dy * tolerance
-    sx2 = px + ray_dx * tolerance
-    sy2 = py + ray_dy * tolerance
-
-    for t in targets:
-        # Floor overlap check (skip for grid targets with floors=[])
-        if t.floors:
-            if not floors_overlap(floors, t.floors):
-                continue
-
-        if t.kind == "segment":
-            # Find intersection of search ray segment with target segment
-            result = segment_intersection(
-                sx1, sy1, sx2, sy2, t.x1, t.y1, t.x2, t.y2)
-            if result is None:
-                continue
-            ix, iy, t_ray, t_seg = result
-            d = math.hypot(ix - px, iy - py)
-            if d < best_dist:
-                best_nx = round(ix, 2)
-                best_ny = round(iy, 2)
-                best_dist = d
-                best_info = f"segment ({t.x1},{t.y1})-({t.x2},{t.y2})"
-
-        elif t.kind == "point":
-            # Project point onto ray, check perpendicular distance
-            dot = (t.x1 - px) * ray_dx + (t.y1 - py) * ray_dy
-            if abs(dot) > tolerance:
-                continue  # too far along ray
-            proj_x = px + dot * ray_dx
-            proj_y = py + dot * ray_dy
-            perp_dist = math.hypot(t.x1 - proj_x, t.y1 - proj_y)
-            if perp_dist > tolerance:
-                continue  # too far off-axis
-            d = abs(dot)  # distance along ray
-            if d < best_dist:
-                best_nx = round(proj_x, 2)
-                best_ny = round(proj_y, 2)
-                best_dist = d
-                # Identify target type
-                if t.floors:
-                    best_info = f"column ({t.x1},{t.y1})"
-                else:
-                    label = _grid_label_at(t.x1, t.y1, grid_data) if grid_data else None
-                    best_info = f"grid_intersection {label or f'({t.x1},{t.y1})'}"
-
-    if best_nx is not None:
-        return best_nx, best_ny, round(best_dist, 4), best_info
-    return None
-
-
-def ray_ray_intersection(p1x, p1y, d1x, d1y, p2x, p2y, d2x, d2y):
-    """Compute intersection point of two rays.
-
-    Ray 1: (p1x,p1y) + t*(d1x,d1y)
-    Ray 2: (p2x,p2y) + s*(d2x,d2y)
-
-    Returns (ix, iy) or None if parallel.
-    """
-    cross = d1x * d2y - d1y * d2x
-    if abs(cross) < 1e-9:
-        return None
-    dx = p2x - p1x
-    dy = p2y - p1y
-    t = (dx * d2y - dy * d2x) / cross
-    ix = round(p1x + t * d1x, 2)
-    iy = round(p1y + t * d1y, 2)
-    return ix, iy
+# snap_sb_by_ray, ray_ray_intersection, cluster_free_endpoints are now
+# imported from config_snap.py for shared use with beam_validate.py
 
 
 # ---------------------------------------------------------------------------
-# 2. Target construction
+# 1. Target construction
 # ---------------------------------------------------------------------------
 
 def build_sb_targets(config, grid_data):
@@ -574,176 +471,11 @@ def split_all_sbs(sb_data, config, grid_data, split_tolerance=0.30):
     return sb_data, split_report
 
 
-# ---------------------------------------------------------------------------
-# 5. Endpoint clustering
-# ---------------------------------------------------------------------------
-
-def cluster_free_endpoints(small_beams, snapped_state, cluster_tolerance=0.30):
-    """Cluster free endpoints of half-snapped SBs within tolerance.
-
-    Collects free endpoints from SBs where exactly one endpoint is snapped,
-    then groups nearby endpoints (direct radius search, no transitive BFS)
-    that share at least one overlapping floor. Moves all members to the
-    cluster centroid and marks them as snapped.
-
-    Parameters
-    ----------
-    small_beams : list[dict]
-        The small_beams list (mutated in place).
-    snapped_state : list[list[bool]]
-        Per-SB [start_snapped, end_snapped] (mutated in place).
-    cluster_tolerance : float
-        Max distance between endpoints to form a cluster (default 0.30m).
-
-    Returns
-    -------
-    list[dict]
-        Cluster correction records.
-    """
-    # 1. Collect half-snapped free endpoints
-    free_eps = []  # [(sb_idx, ep_idx, x, y, floors)]
-    for i, sb in enumerate(small_beams):
-        s0, s1 = snapped_state[i]
-        if s0 and not s1:
-            free_eps.append((i, 1, sb["x2"], sb["y2"], sb.get("floors", [])))
-        elif s1 and not s0:
-            free_eps.append((i, 0, sb["x1"], sb["y1"], sb.get("floors", [])))
-
-    if len(free_eps) < 2:
-        return []
-
-    # 2. Direct radius clustering (no transitive)
-    visited = [False] * len(free_eps)
-    corrections = []
-
-    for seed_idx in range(len(free_eps)):
-        if visited[seed_idx]:
-            continue
-        seed_sb, seed_ep, sx, sy, s_floors = free_eps[seed_idx]
-
-        # Find all unvisited endpoints within tolerance with floor overlap
-        members = [seed_idx]
-        for j in range(seed_idx + 1, len(free_eps)):
-            if visited[j]:
-                continue
-            _, _, jx, jy, j_floors = free_eps[j]
-            dist = math.hypot(jx - sx, jy - sy)
-            if dist <= cluster_tolerance and floors_overlap(s_floors, j_floors):
-                members.append(j)
-
-        if len(members) < 2:
-            continue
-
-        # 3. Pre-compute ray directions for each member (snapped→free)
-        member_rays = []
-        for m in members:
-            sb_idx, ep_idx, ox, oy, fl = free_eps[m]
-            sb = small_beams[sb_idx]
-            if ep_idx == 0:
-                s_x, s_y = sb["x2"], sb["y2"]  # snapped end
-            else:
-                s_x, s_y = sb["x1"], sb["y1"]
-            rdx = ox - s_x
-            rdy = oy - s_y
-            rlen = math.hypot(rdx, rdy)
-            if rlen > 1e-6:
-                member_rays.append((s_x, s_y, rdx / rlen, rdy / rlen))
-            else:
-                member_rays.append((s_x, s_y, 0, 0))
-
-        # 4. Try ray-ray intersection for non-parallel pairs
-        intersection_point = None
-        if len(members) == 2:
-            r0, r1 = member_rays[0], member_rays[1]
-            result = ray_ray_intersection(r0[0], r0[1], r0[2], r0[3],
-                                          r1[0], r1[1], r1[2], r1[3])
-            if result:
-                ix, iy = result
-                max_d = max(math.hypot(free_eps[m][2] - ix,
-                                       free_eps[m][3] - iy) for m in members)
-                if max_d <= cluster_tolerance * 3:
-                    intersection_point = (ix, iy)
-        elif len(members) >= 3:
-            import statistics
-            ixs, iys = [], []
-            for a in range(len(members)):
-                for b in range(a + 1, len(members)):
-                    ra, rb = member_rays[a], member_rays[b]
-                    result = ray_ray_intersection(
-                        ra[0], ra[1], ra[2], ra[3],
-                        rb[0], rb[1], rb[2], rb[3])
-                    if result:
-                        ixs.append(result[0])
-                        iys.append(result[1])
-            if ixs:
-                mid_x = round(statistics.median(ixs), 2)
-                mid_y = round(statistics.median(iys), 2)
-                max_d = max(math.hypot(free_eps[m][2] - mid_x,
-                                       free_eps[m][3] - mid_y) for m in members)
-                if max_d <= cluster_tolerance * 3:
-                    intersection_point = (mid_x, mid_y)
-
-        if intersection_point:
-            cx, cy = intersection_point
-            method = "ray_intersection"
-        else:
-            cx = round(sum(free_eps[m][2] for m in members) / len(members), 2)
-            cy = round(sum(free_eps[m][3] for m in members) / len(members), 2)
-            method = "centroid_projection"
-
-        # 5. Move each member to target PROJECTED onto its SB axis
-        member_details = []
-        for m in members:
-            visited[m] = True
-            sb_idx, ep_idx, ox, oy, fl = free_eps[m]
-            sb = small_beams[sb_idx]
-
-            # SB direction from snapped endpoint to free endpoint
-            if ep_idx == 0:  # free = start, snapped = end
-                sx, sy = sb["x2"], sb["y2"]
-            else:            # free = end, snapped = start
-                sx, sy = sb["x1"], sb["y1"]
-
-            dx_sb = ox - sx
-            dy_sb = oy - sy
-            length = math.hypot(dx_sb, dy_sb)
-            if length > 1e-6:
-                dx_sb /= length
-                dy_sb /= length
-                # Project centroid onto SB direction from snapped endpoint
-                dot = (cx - sx) * dx_sb + (cy - sy) * dy_sb
-                proj_x = round(sx + dot * dx_sb, 2)
-                proj_y = round(sy + dot * dy_sb, 2)
-            else:
-                proj_x, proj_y = cx, cy
-
-            d = math.hypot(ox - proj_x, oy - proj_y)
-            if ep_idx == 0:
-                sb["x1"], sb["y1"] = proj_x, proj_y
-            else:
-                sb["x2"], sb["y2"] = proj_x, proj_y
-            snapped_state[sb_idx][ep_idx] = True
-            member_details.append({
-                "sb_index": sb_idx,
-                "endpoint": "start" if ep_idx == 0 else "end",
-                "original_coord": [ox, oy],
-                "projected_coord": [proj_x, proj_y],
-                "snap_distance": round(d, 4),
-            })
-
-        corrections.append({
-            "method": method,
-            "target": [cx, cy],
-            "centroid": [cx, cy],
-            "member_count": len(members),
-            "members": member_details,
-        })
-
-    return corrections
+# cluster_free_endpoints is now imported from config_snap.py
 
 
 # ---------------------------------------------------------------------------
-# 6. Main validation
+# 5. Main validation
 # ---------------------------------------------------------------------------
 
 def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
@@ -927,7 +659,8 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
         """After each snap round: promote fully-snapped → cluster → promote again."""
         _add_fully_snapped_sbs()
         if not no_cluster:
-            cc = cluster_free_endpoints(small_beams, snapped_state, cluster_tolerance)
+            cc = cluster_free_endpoints(small_beams, snapped_state, cluster_tolerance,
+                                        beam_key_prefix="sb")
             all_cluster_corrections.extend(cc)
             _add_fully_snapped_sbs()
 
