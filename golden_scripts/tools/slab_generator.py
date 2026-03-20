@@ -42,6 +42,7 @@ from pathlib import Path
 
 from golden_scripts.constants import expand_floor_range, normalize_stories_order, is_substructure_story
 from golden_scripts.tools.config_snap import segment_intersection
+from golden_scripts.tools.geometry import point_in_polygon as _pip_geometry
 
 
 # ---------------------------------------------------------------------------
@@ -336,20 +337,8 @@ def face_centroid(polygon):
 
 
 def point_in_polygon(px, py, polygon):
-    """Ray casting point-in-polygon test.
-
-    polygon: list of (x, y) tuples.
-    """
-    n = len(polygon)
-    inside = False
-    j = n - 1
-    for i in range(n):
-        xi, yi = polygon[i]
-        xj, yj = polygon[j]
-        if ((yi > py) != (yj > py)) and (px < (xj - xi) * (py - yi) / (yj - yi) + xi):
-            inside = not inside
-        j = i
-    return inside
+    """Ray casting point-in-polygon test (delegates to geometry.py)."""
+    return _pip_geometry(px, py, polygon)
 
 
 # ---------------------------------------------------------------------------

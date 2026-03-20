@@ -412,3 +412,117 @@ class TestSnapElementsToGrid:
         assert stats["walls_aligned"] == 1
         assert slide["walls"][0]["y1"] == 17.6
         assert slide["walls"][0]["y2"] == 17.6
+
+
+# ---------------------------------------------------------------------------
+# Outline-Aware Grid Snap
+# ---------------------------------------------------------------------------
+
+class TestOutlineAwareGridSnap:
+    """Test outline-aware rescue logic in snap_elements_to_grid()."""
+
+    L_OUTLINE = [[0, 0], [25.2, 0], [25.2, 16.8], [12.6, 16.8],
+                 [12.6, 24.0], [0, 24.0]]
+
+    GRID_DATA = {
+        "x_grids": [
+            {"label": "1", "coordinate": 0.0},
+            {"label": "2", "coordinate": 8.4},
+            {"label": "3", "coordinate": 12.6},
+            {"label": "4", "coordinate": 16.8},
+            {"label": "5", "coordinate": 25.2},
+        ],
+        "y_grids": [
+            {"label": "A", "coordinate": 0.0},
+            {"label": "B", "coordinate": 8.4},
+            {"label": "C", "coordinate": 16.8},
+            {"label": "D", "coordinate": 24.0},
+        ],
+    }
+
+    def test_column_near_l_corner_rescued(self):
+        """Column near L-corner: nearest grid (16.8, 24.0) is outside,
+        should rescue to a grid intersection inside outline."""
+        slide = {
+            "columns": [
+                {"grid_x": 15.0, "grid_y": 23.5, "x1": 15.0, "y1": 23.5,
+                 "section": "C80X80", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(
+            slide, self.GRID_DATA,
+            col_tolerance=3.0,
+            outline=self.L_OUTLINE, outline_tolerance=0.5)
+        # Nearest grid: gx=16.8 (dist 1.8), gy=24.0 (dist 0.5) → (16.8, 24.0) outside L
+        # Rescue should find (12.6, 24.0) which is on the L boundary
+        assert stats["columns_outline_rescued"] == 1
+        col = slide["columns"][0]
+        assert col["grid_x"] == 12.6
+        assert col["grid_y"] == 24.0
+
+    def test_column_inside_outline_no_rescue(self):
+        """Column that snaps to a grid intersection inside outline — no rescue."""
+        slide = {
+            "columns": [
+                {"grid_x": 8.3, "grid_y": 8.3, "x1": 8.3, "y1": 8.3,
+                 "section": "C80X80", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(
+            slide, self.GRID_DATA,
+            outline=self.L_OUTLINE, outline_tolerance=0.5)
+        assert stats["columns_outline_rescued"] == 0
+        assert stats["columns_snapped"] == 1
+        assert slide["columns"][0]["grid_x"] == 8.4
+        assert slide["columns"][0]["grid_y"] == 8.4
+
+    def test_beam_x_direction_rescued(self):
+        """Beam direction=X near L-notch: nearest Y=24.0 midpoint outside,
+        should rescue to Y=16.8."""
+        slide = {
+            "beams": [
+                {"x1": 16.8, "y1": 23.8, "x2": 25.2, "y2": 23.9,
+                 "direction": "X", "section": "B40X60", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(
+            slide, self.GRID_DATA,
+            beam_tolerance=0.5,
+            outline=self.L_OUTLINE, outline_tolerance=0.5)
+        # avg_y=23.85, nearest Y=24.0 (within 0.5m tolerance)
+        # midpoint X=(16.8+25.2)/2=21.0 at Y=24.0 is outside (X>12.6 & Y>16.8)
+        # rescue searches all Y grids: next is Y=16.8 where midpoint (21.0, 16.8) is on boundary
+        assert stats["beams_outline_rescued"] == 1
+        assert slide["beams"][0]["y1"] == 16.8
+        assert slide["beams"][0]["y2"] == 16.8
+
+    def test_rectangular_outline_no_effect(self):
+        """Rectangular outline: is_non_rectangular=False, no rescue logic active."""
+        rect = [[0, 0], [25.2, 0], [25.2, 24.0], [0, 24.0]]
+        slide = {
+            "columns": [
+                {"grid_x": 16.5, "grid_y": 23.5, "x1": 16.5, "y1": 23.5,
+                 "section": "C80X80", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(
+            slide, self.GRID_DATA,
+            outline=rect, outline_tolerance=0.5)
+        assert stats["columns_outline_rescued"] == 0
+        assert stats["columns_snapped"] == 1
+        # Snaps to nearest: (16.8, 24.0) — which is inside rect
+        assert slide["columns"][0]["grid_x"] == 16.8
+        assert slide["columns"][0]["grid_y"] == 24.0
+
+    def test_no_outline_backward_compatible(self):
+        """outline=None: same behavior as original."""
+        slide = {
+            "columns": [
+                {"grid_x": 16.5, "grid_y": 23.5, "x1": 16.5, "y1": 23.5,
+                 "section": "C80X80", "floors": ["3F"]},
+            ],
+        }
+        stats = snap_elements_to_grid(slide, self.GRID_DATA, outline=None)
+        assert stats["columns_snapped"] == 1
+        assert slide["columns"][0]["grid_x"] == 16.8
+        assert slide["columns"][0]["grid_y"] == 24.0

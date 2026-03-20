@@ -62,10 +62,6 @@ argument-hint: "[樓層區間說明，例如: 2F~23F=p3, 1F=p4, B1~B3F=p5]"
      --scan-floors
    ```
 
-5. **確認參數**（必問）：
-   - `slab_thickness`（一般樓板厚度 cm，例如 15）
-   - `raft_thickness`（基礎版厚度 cm，例如 100）
-
 ### Phase 0.7: 分工
 
 根據樓層分配給兩個 SB-READER：
@@ -171,6 +167,21 @@ python -m golden_scripts.tools.elements_merge \
   --phase phase2 \
   --output "{Case Folder}/sb_elements_validated.json"
 ```
+
+#### Step B2: 自動偵測板厚
+
+讀取 `sb_elements_validated.json` 中的 `slab_zones`：
+
+1. 如果 `slab_zones` 存在且非空：
+   - 掃描所有 zone 的 `section` 欄位
+   - S* sections（如 S15, S20）→ 取最常見的厚度作為 `SLAB_THICKNESS`
+   - FS* sections（如 FS100, FS150）→ 取最常見的厚度作為 `RAFT_THICKNESS`
+   - 如果只有 S* 沒有 FS*，`RAFT_THICKNESS` 預設 100
+   - 如果只有 FS* 沒有 S*，`SLAB_THICKNESS` 預設 15
+   - 印出偵測結果：`Auto-detected: SLAB_THICKNESS=15cm (from 12 S15 zones), RAFT_THICKNESS=100cm (from 4 FS100 zones)`
+
+2. 如果 `slab_zones` 不存在或為空：
+   - 詢問用戶 `slab_thickness` 和 `raft_thickness`
 
 #### Step C: SB Patch
 
@@ -289,7 +300,7 @@ SendMessage(type="shutdown_request", recipient="CONFIG-BUILDER")
 ## 完整 Pipeline 摘要
 
 ```
-Phase 0:    Pre-flight（驗證 Phase 1 產出 + 建目錄 + 掃描 + 確認參數）
+Phase 0:    Pre-flight（驗證 Phase 1 產出 + 建目錄 + 掃描）
 
 Phase 0.7:  分工（上構 vs 下構+屋突，分配 PPT_PATH + PAGE_FLOOR_MAPPING）
 
@@ -301,7 +312,8 @@ Phase 1:    SB-READER-A ∥ SB-READER-B（並行, per-slide）
             AI validation → SB SLIDES INFO/{fl}/sb_validation_{fl}.json
 
 Phase 2.5:  Team Lead 執行合併+工具鏈
-            elements_merge --pattern "*/calibrated/calibrated.json" → sb_elements_validated.json
+            elements_merge → sb_elements_validated.json
+            auto-detect slab thickness from slab_zones (or ask user if none)
             sb_patch_build → sb_patch.json
             config_merge → merged_config.json
             slab_generator → final_config.json

@@ -63,6 +63,7 @@ from golden_scripts.tools.config_snap import (
     ray_ray_intersection,
     cluster_free_endpoints,
 )
+from golden_scripts.tools.geometry import point_in_or_near_polygon, is_non_rectangular
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +181,8 @@ def _find_nearest_grid_value(coord, grid_lines):
     return best_coord, best_dist, best_label
 
 
-def correct_angles(elements, grid_data, angle_threshold_deg=2.0):
+def correct_angles(elements, grid_data, angle_threshold_deg=2.0,
+                   outline=None, outline_tolerance=0.5):
     """Auto-correct near-orthogonal angle deviations for beams and walls.
 
     For each beam/wall with endpoints (x1,y1)→(x2,y2):
@@ -190,8 +192,10 @@ def correct_angles(elements, grid_data, angle_threshold_deg=2.0):
       nearest X grid line, or fallback to average.
     - Otherwise: leave unchanged (true diagonal).
 
-    Angle correction runs AFTER snap + split so that it operates on final
-    geometry without risk of moving endpoints away from correct snap targets.
+    If outline is provided and non-rectangular, the fallback average path checks
+    whether the resulting midpoint is inside the outline. If outside, it tries
+    each grid line sorted by distance and picks the first one where the midpoint
+    is inside. If no valid candidate, the original coordinates are kept.
 
     Parameters
     ----------
@@ -201,6 +205,10 @@ def correct_angles(elements, grid_data, angle_threshold_deg=2.0):
         Grid data with "x" and "y" lists.
     angle_threshold_deg : float
         Maximum angle deviation from horizontal/vertical to correct (default 2.0).
+    outline : list or None
+        Building outline polygon [[x,y],...].
+    outline_tolerance : float
+        Tolerance for outline proximity check (default 0.5m).
 
     Returns
     -------
@@ -213,7 +221,38 @@ def correct_angles(elements, grid_data, angle_threshold_deg=2.0):
     # Max distance to accept a grid line (beyond this, use average)
     grid_max_dist = 2.0
 
+    use_outline = outline and is_non_rectangular(outline)
+
     angle_report = []
+
+    def _outline_aware_fallback_y(item, avg_y):
+        """Pick a Y target that keeps the beam midpoint inside the outline."""
+        mid_x = (item["x1"] + item["x2"]) / 2.0
+        if not use_outline:
+            return round(avg_y, 2), "average"
+        # Check if average is inside
+        if point_in_or_near_polygon(mid_x, avg_y, outline, outline_tolerance):
+            return round(avg_y, 2), "average"
+        # Try each Y grid sorted by distance
+        for g in sorted(y_grids, key=lambda g: abs(g["coordinate"] - avg_y)):
+            yc = g["coordinate"]
+            if point_in_or_near_polygon(mid_x, yc, outline, outline_tolerance):
+                return round(yc, 2), g["label"] + " (outline_rescue)"
+        # No valid candidate — keep original
+        return None, "outline_rescue_skipped"
+
+    def _outline_aware_fallback_x(item, avg_x):
+        """Pick an X target that keeps the beam midpoint inside the outline."""
+        mid_y = (item["y1"] + item["y2"]) / 2.0
+        if not use_outline:
+            return round(avg_x, 2), "average"
+        if point_in_or_near_polygon(avg_x, mid_y, outline, outline_tolerance):
+            return round(avg_x, 2), "average"
+        for g in sorted(x_grids, key=lambda g: abs(g["coordinate"] - avg_x)):
+            xc = g["coordinate"]
+            if point_in_or_near_polygon(xc, mid_y, outline, outline_tolerance):
+                return round(xc, 2), g["label"] + " (outline_rescue)"
+        return None, "outline_rescue_skipped"
 
     for element_type in ("beams", "walls"):
         items = elements.get(element_type, [])
@@ -249,8 +288,10 @@ def correct_angles(elements, grid_data, angle_threshold_deg=2.0):
                     y_target = g2_coord
                     target_label = g2_label
                 else:
-                    y_target = round((y1 + y2) / 2, 2)
-                    target_label = "average"
+                    avg_y = (y1 + y2) / 2.0
+                    y_target, target_label = _outline_aware_fallback_y(item, avg_y)
+                    if y_target is None:
+                        continue  # skip — no valid correction
 
                 item["y1"] = round(y_target, 2)
                 item["y2"] = round(y_target, 2)
@@ -269,8 +310,10 @@ def correct_angles(elements, grid_data, angle_threshold_deg=2.0):
                     x_target = g2_coord
                     target_label = g2_label
                 else:
-                    x_target = round((x1 + x2) / 2, 2)
-                    target_label = "average"
+                    avg_x = (x1 + x2) / 2.0
+                    x_target, target_label = _outline_aware_fallback_x(item, avg_x)
+                    if x_target is None:
+                        continue  # skip — no valid correction
 
                 item["x1"] = round(x_target, 2)
                 item["x2"] = round(x_target, 2)
@@ -895,13 +938,51 @@ def snap_walls_to_beams(elements, tolerance=1.0, var_tolerance=0.5):
 
 
 # ---------------------------------------------------------------------------
+# 6b. Beam follow-up after wall re-snap
+# ---------------------------------------------------------------------------
+
+def _follow_wall_resnap(elements, snap_details):
+    """Update beam endpoints that matched old wall positions to new positions.
+
+    After snap_walls_to_beams() moves wall coordinates, beams that were
+    previously snapped to those wall endpoints become floating. This function
+    finds beam endpoints matching old (before) wall coordinates and moves
+    them to the new (after) coordinates.
+    """
+    MATCH_TOL = 0.05  # 5cm
+    beams = elements.get("beams", [])
+
+    for detail in snap_details:
+        before = detail["before"]
+        after = detail["after"]
+
+        # Check each wall endpoint (x1,y1) and (x2,y2) for changes
+        for coord_key in [("x1", "y1"), ("x2", "y2")]:
+            old_x = before[coord_key[0]]
+            old_y = before[coord_key[1]]
+            new_x = after[coord_key[0]]
+            new_y = after[coord_key[1]]
+
+            if abs(old_x - new_x) < 0.01 and abs(old_y - new_y) < 0.01:
+                continue  # no change for this endpoint
+
+            for beam in beams:
+                for ep in [("x1", "y1"), ("x2", "y2")]:
+                    bx, by = beam[ep[0]], beam[ep[1]]
+                    if abs(bx - old_x) < MATCH_TOL and abs(by - old_y) < MATCH_TOL:
+                        beam[ep[0]] = new_x
+                        beam[ep[1]] = new_y
+
+
+# ---------------------------------------------------------------------------
 # 7. Main validation
 # ---------------------------------------------------------------------------
 
 def validate_beams(elements, grid_data, tolerance=1.5,
                    split_tolerance=0.15, no_split=False,
                    angle_threshold_deg=2.0, no_angle_correct=False,
-                   cluster_tolerance=0.50, no_cluster=False):
+                   cluster_tolerance=0.50, no_cluster=False,
+                   outline=None, outline_tolerance=0.5):
     """Validate and auto-snap major beam endpoints.
 
     Pipeline order:
@@ -932,6 +1013,10 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         (default 0.50m).
     no_cluster : bool
         If True, skip endpoint clustering.
+    outline : list or None
+        Building outline polygon [[x,y],...] for outline-aware corrections.
+    outline_tolerance : float
+        Tolerance for outline proximity check (default 0.5m).
 
     Returns
     -------
@@ -972,6 +1057,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
             "wall_beam_snap_details": [],
             "clustered_endpoints": 0,
             "cluster_count": 0,
+            "snap_rounds": 0,
         }
         return elements, report
 
@@ -979,7 +1065,8 @@ def validate_beams(elements, grid_data, tolerance=1.5,
     angle_corrections = []
     if not no_angle_correct:
         elements, angle_corrections = correct_angles(
-            elements, grid_data, angle_threshold_deg)
+            elements, grid_data, angle_threshold_deg,
+            outline=outline, outline_tolerance=outline_tolerance)
         # Re-read beams after angle correction (may have changed)
         beams = elements.get("beams", [])
         n = len(beams)
@@ -1092,17 +1179,16 @@ def validate_beams(elements, grid_data, tolerance=1.5,
             all_cluster_corrections.extend(cc)
             _add_fully_snapped_beams()
 
-    # Round 1: grid + columns + walls (NO beam targets)
-    _snap_round_ray(base_targets)
-    _post_round_cluster()
-
-    # Round 2: base targets + snapped beam targets
-    _snap_round_ray(base_targets + beam_snap_targets)
-    _post_round_cluster()
-
-    # Round 3: final pass with all targets
-    _snap_round_ray(base_targets + beam_snap_targets)
-    _post_round_cluster()
+    # Convergence loop: snap until no new snaps or MAX_ROUNDS
+    MAX_ROUNDS = 10
+    snap_rounds = 0
+    while snap_rounds < MAX_ROUNDS:
+        snap_rounds += 1
+        targets = base_targets if snap_rounds == 1 else base_targets + beam_snap_targets
+        new_snaps = _snap_round_ray(targets)
+        _post_round_cluster()
+        if new_snaps == 0:
+            break
 
     # --- Collect warnings for unsnapped endpoints ---
     all_targets = base_targets + beam_snap_targets
@@ -1176,6 +1262,10 @@ def validate_beams(elements, grid_data, tolerance=1.5,
     # --- Step 4: Wall-to-beam re-snap ---
     elements, wall_beam_snap_details = snap_walls_to_beams(elements, tolerance=1.0)
 
+    # --- Step 4b: Update beams that followed moved walls ---
+    if wall_beam_snap_details:
+        _follow_wall_resnap(elements, wall_beam_snap_details)
+
     # --- Build report ---
     snap_distances = [c["snap_distance"] for c in corrections]
     clustered_eps = sum(c["member_count"] for c in all_cluster_corrections)
@@ -1197,6 +1287,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         **wall_split_report,
         "wall_beam_snaps": len(wall_beam_snap_details),
         "wall_beam_snap_details": wall_beam_snap_details,
+        "snap_rounds": snap_rounds,
     }
 
     return elements, report
@@ -1230,6 +1321,11 @@ def main():
                         "half-snapped beams (default: 0.50m)")
     parser.add_argument("--no-cluster", action="store_true",
                         help="Skip endpoint clustering step")
+    parser.add_argument("--outline",
+                        help="Path to JSON with building_outline polygon "
+                             "(or model_config.json with building_outline field)")
+    parser.add_argument("--outline-tolerance", type=float, default=0.5,
+                        help="Tolerance for outline proximity check (default: 0.5m)")
     parser.add_argument("--report", default=None,
                         help="Path for validation report JSON (optional)")
     parser.add_argument("--dry-run", action="store_true",
@@ -1242,6 +1338,18 @@ def main():
     with open(args.grid_data, encoding="utf-8") as f:
         grid_data = json.load(f)
     grid_data = _normalize_grid_data_for_bv(grid_data)
+
+    # Load outline if provided
+    outline = None
+    if args.outline:
+        with open(args.outline, encoding="utf-8") as f:
+            outline_data = json.load(f)
+        if isinstance(outline_data, list):
+            outline = outline_data
+        elif isinstance(outline_data, dict):
+            outline = outline_data.get("building_outline")
+        if outline:
+            print(f"Outline loaded: {args.outline} ({len(outline)} vertices)")
 
     n_beams = len(elements.get("beams", []))
     n_cols = len(elements.get("columns", []))
@@ -1280,6 +1388,8 @@ def main():
         no_angle_correct=args.no_angle_correct,
         cluster_tolerance=args.cluster_tolerance,
         no_cluster=args.no_cluster,
+        outline=outline,
+        outline_tolerance=args.outline_tolerance,
     )
 
     # Print summary
@@ -1319,7 +1429,7 @@ def main():
         print(f"  Wall-beam snaps: {report['wall_beam_snaps']}")
         for d in report["wall_beam_snap_details"]:
             print(f"    {d['wall_section']} ({d['direction']}): "
-                  f"Δ={d['distance']}m → {d['target_beam_section']}")
+                  f"Δ={d['distance']}m → {d.get('target_beam_section', d.get('snap_type', ''))}")
 
     if report["warnings"]:
         print(f"\nWARNINGS ({len(report['warnings'])}):")
@@ -1361,7 +1471,7 @@ def main():
             print(f"\nWall-beam snap preview ({len(report['wall_beam_snap_details'])}):")
             for d in report["wall_beam_snap_details"]:
                 print(f"  {d['wall_section']} ({d['direction']}): "
-                      f"Δ={d['distance']}m → {d['target_beam_section']}")
+                      f"Δ={d['distance']}m → {d.get('target_beam_section', d.get('snap_type', ''))}")
     else:
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(validated, f, ensure_ascii=False, indent=2)

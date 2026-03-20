@@ -132,6 +132,20 @@ python -m golden_scripts.tools.pptx_to_elements \
 > **如何取得 PPT-米座標**：per-slide JSON 中的元素座標就是 PPT-米座標。
 > 找到圖面上最靠近某 Grid 線的梁/柱端點，其座標即為該 Grid 線的 PPT-米位置。
 
+### Step E2.5: Preliminary Building Outline（第一個 slide 完成 E2 後）
+
+完成你的**第一個** slide 的 E2 後：
+
+1. 閱讀完整截圖
+2. 辨識建物邊界為 grid intersection 多邊形（使用 grid_data.json 座標）
+3. 寫入 `{SLIDES_INFO_DIR}/preliminary_outline.json`：
+   ```json
+   {"building_outline": [[0,0], [25.2,0], [25.2,16.8], [12.6,16.8], [12.6,24.0], [0,24.0]]}
+   ```
+4. 如果檔案已存在（另一個 READER 已建立），跳過並使用既有檔案。
+
+> **注意**：此 outline 是「初步」版本，供 E3/E3.5 校正時防止元件 snap 到錯誤 grid。最終 building_outline 在 Step E5 由 grid_info.json 輸出。
+
 ### Step E3: Affine 校正
 
 對每個 per-slide JSON 執行校正：
@@ -142,12 +156,14 @@ python -m golden_scripts.tools.affine_calibrate \
   --per-slide "{SLIDES_INFO_DIR}/{floor_label}/pptx_to_elements/{floor_label}.json" \
   --grid-data "{CASE_FOLDER}/grid_data.json" \
   --grid-anchors "{SLIDES_INFO_DIR}/{floor_label}/grid_anchors_{floor_label}.json" \
+  --outline "{SLIDES_INFO_DIR}/preliminary_outline.json" \
   --output "{SLIDES_INFO_DIR}/{floor_label}/calibrated/calibrated.json"
 ```
 
 檢查：
 - max_residual < 0.05m → OK
 - max_residual > 0.05m → 重新檢查 Grid 錨點是否正確
+- Outline rescues > 0 → L 形或不規則建物成功防止 snap 到錯誤 grid
 
 ### Step E3.5: 大梁驗證 + 分割（per-slide）
 
@@ -159,6 +175,7 @@ python -m golden_scripts.tools.beam_validate \
   --grid-data "{CASE_FOLDER}/grid_data.json" \
   --output "{SLIDES_INFO_DIR}/{floor_label}/calibrated/calibrated.json" \
   --tolerance 1.5 \
+  --outline "{SLIDES_INFO_DIR}/preliminary_outline.json" \
   --report "{SLIDES_INFO_DIR}/{floor_label}/beam_report_{floor_label}.json"
 ```
 

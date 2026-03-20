@@ -171,8 +171,11 @@ def snap_by_ray(px, py, ray_dx, ray_dy, floors, targets, tolerance,
         (snapped_x, snapped_y, distance, target_info_str) or None if no
         target found along the ray within tolerance.
     """
-    best_nx, best_ny, best_dist = None, None, tolerance + 1
-    best_info = None
+    # Track best structural (has floors or is a segment) and best grid-only separately.
+    # Structural targets are preferred over grid-only targets because they represent
+    # actual model objects (columns, walls, beams) that create joints in ETABS.
+    best_struct = None   # (nx, ny, dist, info)
+    best_grid = None     # (nx, ny, dist, info)
 
     # Search segment: extend tolerance in both directions from endpoint
     sx1 = px - ray_dx * tolerance
@@ -186,6 +189,8 @@ def snap_by_ray(px, py, ray_dx, ray_dy, floors, targets, tolerance,
             if not floors_overlap(floors, t.floors):
                 continue
 
+        snap_x, snap_y, d, info = None, None, None, None
+
         if t.kind == "segment":
             # Find intersection of search ray segment with target segment
             result = segment_intersection(
@@ -194,11 +199,9 @@ def snap_by_ray(px, py, ray_dx, ray_dy, floors, targets, tolerance,
                 continue
             ix, iy, t_ray, t_seg = result
             d = math.hypot(ix - px, iy - py)
-            if d < best_dist:
-                best_nx = round(ix, 2)
-                best_ny = round(iy, 2)
-                best_dist = d
-                best_info = f"segment ({t.x1},{t.y1})-({t.x2},{t.y2})"
+            snap_x = round(ix, 2)
+            snap_y = round(iy, 2)
+            info = f"segment ({t.x1},{t.y1})-({t.x2},{t.y2})"
 
         elif t.kind == "point":
             # Check that point is near the ray (directional filter)
@@ -222,19 +225,30 @@ def snap_by_ray(px, py, ray_dx, ray_dy, floors, targets, tolerance,
                 d = abs(dot)
                 snap_x = round(proj_x, 2)
                 snap_y = round(proj_y, 2)
-            if d < best_dist:
-                best_nx = snap_x
-                best_ny = snap_y
-                best_dist = d
-                # Identify target type
-                if t.floors:
-                    best_info = f"column ({t.x1},{t.y1})"
-                else:
-                    label = _grid_label_at(t.x1, t.y1, grid_data) if grid_data else None
-                    best_info = f"grid_intersection {label or f'({t.x1},{t.y1})'}"
+            # Identify target type
+            if t.floors:
+                info = f"column ({t.x1},{t.y1})"
+            else:
+                label = _grid_label_at(t.x1, t.y1, grid_data) if grid_data else None
+                info = f"grid_intersection {label or f'({t.x1},{t.y1})'}"
 
-    if best_nx is not None:
-        return best_nx, best_ny, round(best_dist, 4), best_info
+        if snap_x is None:
+            continue
+
+        # Classify: structural targets have floors or are segments (walls/beams)
+        is_structural = bool(t.floors) or t.kind == "segment"
+
+        if is_structural:
+            if best_struct is None or d < best_struct[2]:
+                best_struct = (snap_x, snap_y, d, info)
+        else:
+            if best_grid is None or d < best_grid[2]:
+                best_grid = (snap_x, snap_y, d, info)
+
+    # Prefer structural target; fall back to grid-only
+    chosen = best_struct or best_grid
+    if chosen:
+        return round(chosen[0], 2), round(chosen[1], 2), round(chosen[2], 4), chosen[3]
     return None
 
 

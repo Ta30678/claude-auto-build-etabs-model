@@ -65,6 +65,7 @@ from golden_scripts.tools.beam_validate import (
     split_beam,
 )
 from golden_scripts.constants import parse_frame_section
+from golden_scripts.tools.geometry import point_in_or_near_polygon, is_non_rectangular
 
 
 # snap_sb_by_ray, ray_ray_intersection, cluster_free_endpoints are now
@@ -185,7 +186,8 @@ def build_grid_line_targets(grid_data, tolerance=1.0):
 # 2. Angle correction
 # ---------------------------------------------------------------------------
 
-def correct_sb_angles(sb_data, grid_data, angle_threshold_deg=5.0):
+def correct_sb_angles(sb_data, grid_data, angle_threshold_deg=5.0,
+                      outline=None, outline_tolerance=0.5):
     """Auto-correct near-orthogonal angle deviations for small beams.
 
     Same logic as beam_validate.correct_angles but iterates over
@@ -199,6 +201,10 @@ def correct_sb_angles(sb_data, grid_data, angle_threshold_deg=5.0):
         Grid data with "x" and "y" lists.
     angle_threshold_deg : float
         Max angle deviation from horizontal/vertical to correct.
+    outline : list or None
+        Building outline polygon [[x,y],...].
+    outline_tolerance : float
+        Tolerance for outline proximity check (default 0.5m).
 
     Returns
     -------
@@ -209,6 +215,32 @@ def correct_sb_angles(sb_data, grid_data, angle_threshold_deg=5.0):
     x_grids = grid_data.get("x", [])
     y_grids = grid_data.get("y", [])
     grid_max_dist = 2.0
+
+    use_outline = outline and is_non_rectangular(outline)
+
+    def _outline_aware_fallback_y(sb, avg_y):
+        mid_x = (sb["x1"] + sb["x2"]) / 2.0
+        if not use_outline:
+            return round(avg_y, 2), "average"
+        if point_in_or_near_polygon(mid_x, avg_y, outline, outline_tolerance):
+            return round(avg_y, 2), "average"
+        for g in sorted(y_grids, key=lambda g: abs(g["coordinate"] - avg_y)):
+            yc = g["coordinate"]
+            if point_in_or_near_polygon(mid_x, yc, outline, outline_tolerance):
+                return round(yc, 2), g["label"] + " (outline_rescue)"
+        return None, "outline_rescue_skipped"
+
+    def _outline_aware_fallback_x(sb, avg_x):
+        mid_y = (sb["y1"] + sb["y2"]) / 2.0
+        if not use_outline:
+            return round(avg_x, 2), "average"
+        if point_in_or_near_polygon(avg_x, mid_y, outline, outline_tolerance):
+            return round(avg_x, 2), "average"
+        for g in sorted(x_grids, key=lambda g: abs(g["coordinate"] - avg_x)):
+            xc = g["coordinate"]
+            if point_in_or_near_polygon(xc, mid_y, outline, outline_tolerance):
+                return round(xc, 2), g["label"] + " (outline_rescue)"
+        return None, "outline_rescue_skipped"
 
     angle_report = []
 
@@ -245,8 +277,10 @@ def correct_sb_angles(sb_data, grid_data, angle_threshold_deg=5.0):
                 y_target = g2_coord
                 target_label = g2_label
             else:
-                y_target = round((y1 + y2) / 2, 2)
-                target_label = "average"
+                avg_y = (y1 + y2) / 2.0
+                y_target, target_label = _outline_aware_fallback_y(sb, avg_y)
+                if y_target is None:
+                    continue
 
             sb["y1"] = round(y_target, 2)
             sb["y2"] = round(y_target, 2)
@@ -265,8 +299,10 @@ def correct_sb_angles(sb_data, grid_data, angle_threshold_deg=5.0):
                 x_target = g2_coord
                 target_label = g2_label
             else:
-                x_target = round((x1 + x2) / 2, 2)
-                target_label = "average"
+                avg_x = (x1 + x2) / 2.0
+                x_target, target_label = _outline_aware_fallback_x(sb, avg_x)
+                if x_target is None:
+                    continue
 
             sb["x1"] = round(x_target, 2)
             sb["x2"] = round(x_target, 2)
@@ -531,7 +567,8 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
                          split_tolerance=0.30, no_split=False,
                          angle_threshold_deg=5.0, no_angle_correct=False,
                          cluster_tolerance=0.30, no_cluster=False,
-                         no_grid_snap=False):
+                         no_grid_snap=False,
+                         outline=None, outline_tolerance=0.5):
     """Validate and auto-snap small beam endpoints.
 
     Pipeline order:
@@ -566,6 +603,10 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
         If True, skip endpoint clustering.
     no_grid_snap : bool
         If True, skip Round 4 grid-line snap for free endpoints.
+    outline : list or None
+        Building outline polygon [[x,y],...] for outline-aware corrections.
+    outline_tolerance : float
+        Tolerance for outline proximity check (default 0.5m).
 
     Returns
     -------
@@ -579,7 +620,8 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
     angle_corrections = []
     if not no_angle_correct:
         sb_data, angle_corrections = correct_sb_angles(
-            sb_data, grid_data, angle_threshold_deg)
+            sb_data, grid_data, angle_threshold_deg,
+            outline=outline, outline_tolerance=outline_tolerance)
 
     small_beams = sb_data.get("small_beams", [])
     n = len(small_beams)
@@ -602,6 +644,7 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
             "clustered_endpoints": 0,
             "cluster_count": 0,
             "grid_line_snapped_endpoints": 0,
+            "snap_rounds": 0,
             "split_sbs": 0,
             "new_sbs_from_split": 0,
             "total_sbs_after_split": 0,
@@ -718,19 +761,18 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
             all_cluster_corrections.extend(cc)
             _add_fully_snapped_sbs()
 
-    # Round 1: grid + columns + walls + major beams
-    _snap_round(base_targets)
-    _post_round_cluster()
+    # Convergence loop: snap until no new snaps or MAX_ROUNDS
+    MAX_ROUNDS = 10
+    snap_rounds = 0
+    while snap_rounds < MAX_ROUNDS:
+        snap_rounds += 1
+        targets = base_targets if snap_rounds == 1 else base_targets + sb_snap_targets
+        new_snaps = _snap_round(targets)
+        _post_round_cluster()
+        if new_snaps == 0:
+            break
 
-    # Round 2: + snapped SBs
-    _snap_round(base_targets + sb_snap_targets)
-    _post_round_cluster()
-
-    # Round 3: final pass
-    _snap_round(base_targets + sb_snap_targets)
-    _post_round_cluster()
-
-    # Round 4: grid line snap for remaining free endpoints
+    # Grid line snap for remaining free endpoints (runs once after convergence)
     if not no_grid_snap:
         grid_line_targets = build_grid_line_targets(grid_data, tolerance)
         pre_r4_count = len(corrections)
@@ -845,6 +887,7 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
         "cluster_count": len(all_cluster_corrections),
         "grid_line_snapped_endpoints": sum(
             1 for c in corrections if c.get("target_type") == "grid_line"),
+        "snap_rounds": snap_rounds,
         **split_report,
     }
 
@@ -884,6 +927,12 @@ def main():
                         help="Skip endpoint clustering step")
     parser.add_argument("--no-grid-snap", action="store_true",
                         help="Skip Round 4 grid-line snap for free endpoints")
+    parser.add_argument("--outline",
+                        help="Path to JSON with building_outline polygon "
+                             "(or model_config.json with building_outline field). "
+                             "Auto-extracted from --config if not provided.")
+    parser.add_argument("--outline-tolerance", type=float, default=0.5,
+                        help="Tolerance for outline proximity check (default: 0.5m)")
     parser.add_argument("--report", default=None,
                         help="Path for validation report JSON (optional)")
     parser.add_argument("--dry-run", action="store_true",
@@ -898,6 +947,21 @@ def main():
     with open(args.grid_data, encoding="utf-8") as f:
         grid_data = json.load(f)
     grid_data = _normalize_grid_data_for_bv(grid_data)
+
+    # Load outline: explicit --outline, or auto-extract from config
+    outline = None
+    if args.outline:
+        with open(args.outline, encoding="utf-8") as f:
+            outline_data = json.load(f)
+        if isinstance(outline_data, list):
+            outline = outline_data
+        elif isinstance(outline_data, dict):
+            outline = outline_data.get("building_outline")
+    elif config.get("building_outline"):
+        outline = config["building_outline"]
+    if outline:
+        print(f"Outline: {len(outline)} vertices"
+              f" ({'from --outline' if args.outline else 'auto-extracted from config'})")
 
     n_sbs = len(sb_data.get("small_beams", []))
     n_cols = len(config.get("columns", []))
@@ -944,6 +1008,8 @@ def main():
         cluster_tolerance=args.cluster_tolerance,
         no_cluster=args.no_cluster,
         no_grid_snap=args.no_grid_snap,
+        outline=outline,
+        outline_tolerance=args.outline_tolerance,
     )
 
     # Print summary

@@ -1542,3 +1542,86 @@ class TestGridLineSnap:
         _, report = validate_small_beams(
             sb_data, simple_config, simple_grid_data, tolerance=1.0)
         assert report["grid_line_snapped_endpoints"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Outline-Aware SB Angle Correction
+# ---------------------------------------------------------------------------
+
+class TestOutlineAwareSBAngleCorrection:
+    """Test outline-aware fallback in correct_sb_angles()."""
+
+    L_OUTLINE = [[0, 0], [25.2, 0], [25.2, 16.8], [12.6, 16.8],
+                 [12.6, 24.0], [0, 24.0]]
+    GRID_X = [0, 8.4, 12.6, 16.8, 25.2]
+    GRID_Y = [0, 8.4, 16.8, 24.0]
+
+    @pytest.fixture
+    def grid_data(self):
+        return {
+            "x": [{"label": str(i), "coordinate": c}
+                  for i, c in enumerate(self.GRID_X)],
+            "y": [{"label": chr(65 + i), "coordinate": c}
+                  for i, c in enumerate(self.GRID_Y)],
+        }
+
+    def test_sb_average_outside_rescued_to_grid(self, grid_data):
+        """SB in L-notch: average Y is outside, should rescue to nearest grid inside."""
+        sb_data = {
+            "small_beams": [
+                {"x1": 16.8, "y1": 20.35, "x2": 25.2, "y2": 20.45,
+                 "section": "SB25X50", "floors": ["3F"]},
+            ],
+        }
+        corrected, report = correct_sb_angles(
+            sb_data, grid_data, angle_threshold_deg=5.0,
+            outline=self.L_OUTLINE, outline_tolerance=0.5)
+        # Midpoint X=21.0, avg Y=20.4 → outside (X>12.6 & Y>16.8)
+        # Should rescue to Y=16.8
+        assert len(report) == 1
+        assert "outline_rescue" in report[0]["target_grid_label"]
+        assert corrected["small_beams"][0]["y1"] == 16.8
+        assert corrected["small_beams"][0]["y2"] == 16.8
+
+    def test_sb_average_inside_stays(self, grid_data):
+        """SB inside outline: average is OK, no rescue needed."""
+        sb_data = {
+            "small_beams": [
+                {"x1": 0.0, "y1": 4.15, "x2": 8.4, "y2": 4.25,
+                 "section": "SB25X50", "floors": ["3F"]},
+            ],
+        }
+        corrected, report = correct_sb_angles(
+            sb_data, grid_data, angle_threshold_deg=5.0,
+            outline=self.L_OUTLINE, outline_tolerance=0.5)
+        assert len(report) == 1
+        assert report[0]["target_grid_label"] == "average"
+
+    def test_no_outline_backward_compatible(self, grid_data):
+        """outline=None → same behavior as before."""
+        sb_data = {
+            "small_beams": [
+                {"x1": 16.8, "y1": 20.35, "x2": 25.2, "y2": 20.45,
+                 "section": "SB25X50", "floors": ["3F"]},
+            ],
+        }
+        _, report = correct_sb_angles(
+            sb_data, grid_data, angle_threshold_deg=5.0,
+            outline=None)
+        assert len(report) == 1
+        assert report[0]["target_grid_label"] == "average"
+
+    def test_rectangular_outline_no_effect(self, grid_data):
+        """Rectangular outline → no rescue logic active."""
+        rect = [[0, 0], [25.2, 0], [25.2, 24.0], [0, 24.0]]
+        sb_data = {
+            "small_beams": [
+                {"x1": 16.8, "y1": 20.35, "x2": 25.2, "y2": 20.45,
+                 "section": "SB25X50", "floors": ["3F"]},
+            ],
+        }
+        _, report = correct_sb_angles(
+            sb_data, grid_data, angle_threshold_deg=5.0,
+            outline=rect, outline_tolerance=0.5)
+        assert len(report) == 1
+        assert report[0]["target_grid_label"] == "average"

@@ -68,10 +68,12 @@ python -m golden_scripts.tools.affine_calibrate \
     --per-slide "{SB_SLIDES_INFO_DIR}/{fl}/pptx_to_elements/sb_{fl}.json" \
     --grid-data "{GRID_DATA}" \
     --grid-anchors "{SLIDES_INFO_DIR}/{fl}/grid_anchors_{fl}.json" \
+    --outline "{MODEL_CONFIG}" \
     --output "{SB_SLIDES_INFO_DIR}/{fl}/calibrated/calibrated.json"
 ```
 
 **跨目錄讀取**：`grid_anchors_{fl}.json` 在 Phase 1 的 `SLIDES INFO/` 目錄，不在 Phase 2 目錄。
+**Outline**：`--outline` 指向 `model_config.json`，自動讀取 `building_outline` 防止 SB snap 到錯誤 grid。
 
 **驗證**：檢查 max_residual < 0.05m。如果 > 0.05m，記錄 WARNING 但繼續。
 
@@ -87,6 +89,7 @@ python -m golden_scripts.tools.sb_validate \
 ```
 
 **注意**：`--output` 覆寫 calibrated 檔案（角度校正 + snap + split 後的最終版本）。
+**Outline**：`sb_validate` 會自動從 `--config` 讀取 `building_outline`，無需額外 `--outline` 參數。
 
 ### E2.5: 校正後繪圖
 

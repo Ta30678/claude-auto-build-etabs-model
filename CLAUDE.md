@@ -160,22 +160,42 @@ python -m golden_scripts.tools.affine_calibrate \
     --grid-anchors "SLIDES INFO/1F~2F/grid_anchors_1F~2F.json" \
     --output "SLIDES INFO/1F~2F/calibrated/calibrated.json"
 
+# Phase 1 with outline (L-shaped buildings — prevents snap to wrong grid)
+python -m golden_scripts.tools.affine_calibrate \
+    --mode grid \
+    --per-slide "SLIDES INFO/1F~2F/pptx_to_elements/1F~2F.json" \
+    --grid-data grid_data.json \
+    --grid-anchors "SLIDES INFO/1F~2F/grid_anchors_1F~2F.json" \
+    --outline "SLIDES INFO/preliminary_outline.json" \
+    --output "SLIDES INFO/1F~2F/calibrated/calibrated.json"
+
 # Phase 2 (grid mode): per-slide SB JSON + Phase 1 grid anchors → calibrated SB
 python -m golden_scripts.tools.affine_calibrate \
     --mode grid \
     --per-slide "SB SLIDES INFO/1F~2F/pptx_to_elements/sb_1F~2F.json" \
     --grid-data grid_data.json \
     --grid-anchors "SLIDES INFO/1F~2F/grid_anchors_1F~2F.json" \
+    --outline model_config.json \
     --output "SB SLIDES INFO/1F~2F/calibrated/calibrated.json"
 ```
 
 ### SB Validate Tool (Phase 2 — angle correction + snap + cluster + split)
 ```bash
 # Full SB validation pipeline (replaces config_snap in Phase 2)
+# Note: auto-extracts building_outline from --config if present
 python -m golden_scripts.tools.sb_validate \
     --sb-elements sb_elements_aligned.json \
     --config model_config.json \
     --grid-data grid_data.json \
+    --output sb_elements_validated.json \
+    --report sb_validate_report.json
+
+# Explicit outline override
+python -m golden_scripts.tools.sb_validate \
+    --sb-elements sb_elements_aligned.json \
+    --config model_config.json \
+    --grid-data grid_data.json \
+    --outline preliminary_outline.json \
     --output sb_elements_validated.json \
     --report sb_validate_report.json
 
@@ -277,6 +297,15 @@ python -m golden_scripts.tools.beam_validate \
     --grid-data grid_data.json \
     --output "SLIDES INFO/1F~2F/calibrated/calibrated.json" \
     --tolerance 1.5 \
+    --report "SLIDES INFO/1F~2F/beam_report_1F~2F.json"
+
+# With outline (L-shaped buildings — prevents angle correction to wrong grid)
+python -m golden_scripts.tools.beam_validate \
+    --elements "SLIDES INFO/1F~2F/calibrated/calibrated.json" \
+    --grid-data grid_data.json \
+    --output "SLIDES INFO/1F~2F/calibrated/calibrated.json" \
+    --tolerance 1.5 \
+    --outline "SLIDES INFO/preliminary_outline.json" \
     --report "SLIDES INFO/1F~2F/beam_report_1F~2F.json"
 
 # Custom angle threshold + split tolerance + cluster tolerance

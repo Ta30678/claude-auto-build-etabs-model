@@ -32,6 +32,8 @@ import math
 import sys
 from pathlib import Path
 
+from golden_scripts.tools.geometry import point_in_or_near_polygon, is_non_rectangular
+
 
 # ---------------------------------------------------------------------------
 # 1. Correspondence point collection
@@ -459,7 +461,8 @@ def apply_transform_to_slide(slide_data, transform):
     return result
 
 
-def snap_elements_to_grid(slide_data, grid_data, col_tolerance=0.8, beam_tolerance=0.5):
+def snap_elements_to_grid(slide_data, grid_data, col_tolerance=0.8, beam_tolerance=0.5,
+                          outline=None, outline_tolerance=0.5):
     """Post-affine grid snap: fix residual drift from affine transform.
 
     1. Columns: snap to nearest grid intersection (within col_tolerance)
@@ -467,20 +470,33 @@ def snap_elements_to_grid(slide_data, grid_data, col_tolerance=0.8, beam_toleran
     3. Beams with direction="Y": force x1=x2, snap to nearest grid X
     4. Walls: same as beams
 
+    If outline is provided and non-rectangular, rescue snaps that would
+    place elements outside the building boundary by trying alternative
+    grid lines within tolerance.
+
     Args:
         slide_data: Calibrated slide data (modified in-place).
         grid_data: Grid data (any format — auto-normalized).
         col_tolerance: Max distance (m) for column snap.
         beam_tolerance: Max distance (m) for beam/wall axis snap.
+        outline: Building outline polygon [[x,y],...] or None.
+        outline_tolerance: Tolerance for outline proximity check (default 0.5m).
 
     Returns:
-        dict with snap statistics (columns_snapped, beams_aligned, walls_aligned).
+        dict with snap statistics (columns_snapped, beams_aligned, walls_aligned,
+        columns_outline_rescued, beams_outline_rescued, walls_outline_rescued).
     """
     gd = _normalize_grid_data_for_affine(grid_data)
     x_coords = [g["coordinate"] for g in gd.get("x_grids", [])]
     y_coords = [g["coordinate"] for g in gd.get("y_grids", [])]
 
-    stats = {"columns_snapped": 0, "beams_aligned": 0, "walls_aligned": 0}
+    use_outline = outline and is_non_rectangular(outline)
+
+    stats = {
+        "columns_snapped": 0, "beams_aligned": 0, "walls_aligned": 0,
+        "columns_outline_rescued": 0, "beams_outline_rescued": 0,
+        "walls_outline_rescued": 0,
+    }
 
     def _nearest(val, coords):
         """Return (nearest_coord, distance) or (None, inf) if coords is empty."""
@@ -488,6 +504,10 @@ def snap_elements_to_grid(slide_data, grid_data, col_tolerance=0.8, beam_toleran
             return None, float("inf")
         best = min(coords, key=lambda c: abs(c - val))
         return best, abs(best - val)
+
+    def _sorted_by_distance(val, coords):
+        """Return coords sorted by distance from val."""
+        return sorted(coords, key=lambda c: abs(c - val))
 
     # --- Columns: snap to nearest grid intersection ---
     for col in slide_data.get("columns", []):
@@ -500,69 +520,100 @@ def snap_elements_to_grid(slide_data, grid_data, col_tolerance=0.8, beam_toleran
         gy, dy = _nearest(cy, y_coords)
 
         if dx < col_tolerance and dy < col_tolerance:
+            snap_x, snap_y = gx, gy
+
+            # Outline rescue: if snapped position is outside, try alternatives
+            if use_outline and not point_in_or_near_polygon(
+                    snap_x, snap_y, outline, outline_tolerance):
+                rescued = False
+                # Try all grid intersections within tolerance, sorted by distance
+                candidates = []
+                for xc in x_coords:
+                    for yc in y_coords:
+                        d = math.hypot(xc - cx, yc - cy)
+                        if d < col_tolerance:
+                            candidates.append((d, xc, yc))
+                candidates.sort()
+                for _, alt_x, alt_y in candidates:
+                    if point_in_or_near_polygon(alt_x, alt_y, outline, outline_tolerance):
+                        snap_x, snap_y = alt_x, alt_y
+                        rescued = True
+                        stats["columns_outline_rescued"] += 1
+                        break
+                if not rescued:
+                    # No valid candidate inside outline — keep original
+                    continue
+
             if "grid_x" in col:
-                col["grid_x"] = round(gx, 2)
+                col["grid_x"] = round(snap_x, 2)
             if "grid_y" in col:
-                col["grid_y"] = round(gy, 2)
+                col["grid_y"] = round(snap_y, 2)
             if "x1" in col:
-                col["x1"] = round(gx, 2)
+                col["x1"] = round(snap_x, 2)
             if "y1" in col:
-                col["y1"] = round(gy, 2)
+                col["y1"] = round(snap_y, 2)
             stats["columns_snapped"] += 1
 
-    # --- Beams: direction-aware axis alignment ---
-    for beam in slide_data.get("beams", []):
-        direction = beam.get("direction", "")
+    # --- Helper: snap beam/wall with outline rescue ---
+    def _snap_linear(item, element_type):
+        """Snap a beam or wall to the nearest grid line, with outline rescue."""
+        direction = item.get("direction", "")
         if not direction:
-            direction = _direction_of(beam.get("x1", 0), beam.get("y1", 0),
-                                      beam.get("x2", 0), beam.get("y2", 0))
+            direction = _direction_of(item.get("x1", 0), item.get("y1", 0),
+                                      item.get("x2", 0), item.get("y2", 0))
         if direction == "X":
-            avg_y = (beam["y1"] + beam["y2"]) / 2.0
+            avg_y = (item["y1"] + item["y2"]) / 2.0
             gy, dy = _nearest(avg_y, y_coords)
-            if dy < beam_tolerance:
-                beam["y1"] = round(gy, 2)
-                beam["y2"] = round(gy, 2)
-            else:
-                beam["y1"] = round(avg_y, 2)
-                beam["y2"] = round(avg_y, 2)
-            stats["beams_aligned"] += 1
-        elif direction == "Y":
-            avg_x = (beam["x1"] + beam["x2"]) / 2.0
-            gx, dx = _nearest(avg_x, x_coords)
-            if dx < beam_tolerance:
-                beam["x1"] = round(gx, 2)
-                beam["x2"] = round(gx, 2)
-            else:
-                beam["x1"] = round(avg_x, 2)
-                beam["x2"] = round(avg_x, 2)
-            stats["beams_aligned"] += 1
+            target_y = gy if dy < beam_tolerance else avg_y
 
-    # --- Walls: same as beams ---
-    for wall in slide_data.get("walls", []):
-        direction = wall.get("direction", "")
-        if not direction:
-            direction = _direction_of(wall.get("x1", 0), wall.get("y1", 0),
-                                      wall.get("x2", 0), wall.get("y2", 0))
-        if direction == "X":
-            avg_y = (wall["y1"] + wall["y2"]) / 2.0
-            gy, dy = _nearest(avg_y, y_coords)
-            if dy < beam_tolerance:
-                wall["y1"] = round(gy, 2)
-                wall["y2"] = round(gy, 2)
-            else:
-                wall["y1"] = round(avg_y, 2)
-                wall["y2"] = round(avg_y, 2)
-            stats["walls_aligned"] += 1
+            # Outline rescue: search all grid lines for one where midpoint is inside
+            if use_outline:
+                mid_x = (item["x1"] + item["x2"]) / 2.0
+                if not point_in_or_near_polygon(mid_x, target_y, outline, outline_tolerance):
+                    rescued = False
+                    for alt_y in _sorted_by_distance(avg_y, y_coords):
+                        if point_in_or_near_polygon(mid_x, alt_y, outline, outline_tolerance):
+                            target_y = alt_y
+                            rescued = True
+                            stats[f"{element_type}_outline_rescued"] += 1
+                            break
+                    if not rescued:
+                        # Keep average as fallback
+                        target_y = round(avg_y, 2)
+
+            item["y1"] = round(target_y, 2)
+            item["y2"] = round(target_y, 2)
+            stats[f"{element_type}_aligned"] += 1
         elif direction == "Y":
-            avg_x = (wall["x1"] + wall["x2"]) / 2.0
+            avg_x = (item["x1"] + item["x2"]) / 2.0
             gx, dx = _nearest(avg_x, x_coords)
-            if dx < beam_tolerance:
-                wall["x1"] = round(gx, 2)
-                wall["x2"] = round(gx, 2)
-            else:
-                wall["x1"] = round(avg_x, 2)
-                wall["x2"] = round(avg_x, 2)
-            stats["walls_aligned"] += 1
+            target_x = gx if dx < beam_tolerance else avg_x
+
+            # Outline rescue: search all grid lines for one where midpoint is inside
+            if use_outline:
+                mid_y = (item["y1"] + item["y2"]) / 2.0
+                if not point_in_or_near_polygon(target_x, mid_y, outline, outline_tolerance):
+                    rescued = False
+                    for alt_x in _sorted_by_distance(avg_x, x_coords):
+                        if point_in_or_near_polygon(alt_x, mid_y, outline, outline_tolerance):
+                            target_x = alt_x
+                            rescued = True
+                            stats[f"{element_type}_outline_rescued"] += 1
+                            break
+                    if not rescued:
+                        target_x = round(avg_x, 2)
+
+            item["x1"] = round(target_x, 2)
+            item["x2"] = round(target_x, 2)
+            stats[f"{element_type}_aligned"] += 1
+
+    # --- Beams ---
+    for beam in slide_data.get("beams", []):
+        _snap_linear(beam, "beams")
+
+    # --- Walls ---
+    for wall in slide_data.get("walls", []):
+        _snap_linear(wall, "walls")
 
     return stats
 
@@ -687,6 +738,11 @@ def main():
                         help="Show transform details without writing output")
     parser.add_argument("--no-grid-snap", action="store_true",
                         help="Skip post-affine grid snap for columns and beams")
+    parser.add_argument("--outline",
+                        help="Path to JSON with building_outline polygon "
+                             "(or model_config.json with building_outline field)")
+    parser.add_argument("--outline-tolerance", type=float, default=0.5,
+                        help="Tolerance for outline proximity check (default: 0.5m)")
     args = parser.parse_args()
 
     if args.mode == "grid":
@@ -753,11 +809,33 @@ def _run_grid_mode(args):
     # Apply transform
     calibrated = apply_transform_to_slide(slide_data, transform)
 
+    # Load outline if provided
+    outline = None
+    if args.outline:
+        with open(args.outline, encoding="utf-8") as f:
+            outline_data = json.load(f)
+        # Support both [[x,y],...] and {"building_outline": [...]} formats
+        if isinstance(outline_data, list):
+            outline = outline_data
+        elif isinstance(outline_data, dict):
+            outline = outline_data.get("building_outline")
+        if outline:
+            print(f"  Outline loaded: {len(outline)} vertices")
+
     # Post-affine grid snap
     if not args.no_grid_snap:
-        snap_stats = snap_elements_to_grid(calibrated, grid_data)
+        snap_stats = snap_elements_to_grid(calibrated, grid_data,
+                                           outline=outline,
+                                           outline_tolerance=args.outline_tolerance)
         print(f"  Post-affine grid snap: {snap_stats['columns_snapped']} columns, "
               f"{snap_stats['beams_aligned']} beams, {snap_stats['walls_aligned']} walls")
+        rescued = (snap_stats.get("columns_outline_rescued", 0) +
+                   snap_stats.get("beams_outline_rescued", 0) +
+                   snap_stats.get("walls_outline_rescued", 0))
+        if rescued:
+            print(f"  Outline rescues: {snap_stats['columns_outline_rescued']} columns, "
+                  f"{snap_stats['beams_outline_rescued']} beams, "
+                  f"{snap_stats['walls_outline_rescued']} walls")
 
     if args.dry_run:
         print(f"\n[DRY RUN] No output written.")

@@ -141,8 +141,8 @@ def split_wall_at_intersections(wall, beams, columns, other_walls):
         c_floors = set(col.get("floors", []))
         if not (w_floors & c_floors):
             continue
-        cx = (col["x1"] + col["x2"]) / 2.0
-        cy = (col["y1"] + col["y2"]) / 2.0
+        cx = col.get("grid_x", col.get("x1", 0))
+        cy = col.get("grid_y", col.get("y1", 0))
         t = _point_on_segment_t(cx, cy, wx1, wy1, wx2, wy2)
         if t is not None:
             cut_ts.append(t)

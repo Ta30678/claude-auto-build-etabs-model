@@ -1942,3 +1942,112 @@ class TestNewPipelineOrderRaySnap:
                                    no_cluster=True)
         assert report["clustered_endpoints"] == 0
         assert report["cluster_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Outline-Aware Angle Correction
+# ---------------------------------------------------------------------------
+
+class TestOutlineAwareAngleCorrection:
+    """Test outline-aware fallback in correct_angles()."""
+
+    L_OUTLINE = [[0, 0], [25.2, 0], [25.2, 16.8], [12.6, 16.8],
+                 [12.6, 24.0], [0, 24.0]]
+    GRID_X = [0, 8.4, 12.6, 16.8, 25.2]
+    GRID_Y = [0, 8.4, 16.8, 24.0]
+
+    @pytest.fixture
+    def grid_data(self):
+        return {
+            "x": [{"label": str(i), "coordinate": c}
+                  for i, c in enumerate(self.GRID_X)],
+            "y": [{"label": chr(65 + i), "coordinate": c}
+                  for i, c in enumerate(self.GRID_Y)],
+        }
+
+    def test_beam_average_outside_rescued_to_grid(self, grid_data):
+        """Beam in L-notch: average Y=20.4 is outside, should rescue to Y=16.8."""
+        # Beam near Y=20.4 (between 16.8 and 24.0) at X=20 — outside L outline
+        elements = {
+            "beams": [
+                {"x1": 16.8, "y1": 20.35, "x2": 25.2, "y2": 20.45,
+                 "section": "B40X60", "floors": ["3F"]},
+            ],
+            "walls": [],
+            "columns": [],
+        }
+        corrected, report = correct_angles(
+            elements, grid_data, angle_threshold_deg=2.0,
+            outline=self.L_OUTLINE, outline_tolerance=0.5)
+        # Midpoint X = 21.0 — at Y=20.4 this is outside outline (X>12.6 & Y>16.8)
+        # The average fallback Y=20.4 is outside, so it should rescue to 16.8
+        assert len(report) == 1
+        assert "outline_rescue" in report[0]["target_grid_label"]
+        assert corrected["beams"][0]["y1"] == 16.8
+        assert corrected["beams"][0]["y2"] == 16.8
+
+    def test_beam_average_inside_stays(self, grid_data):
+        """Beam inside outline: average is OK, no rescue needed."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 4.15, "x2": 8.4, "y2": 4.25,
+                 "section": "B40X60", "floors": ["3F"]},
+            ],
+            "walls": [],
+            "columns": [],
+        }
+        corrected, report = correct_angles(
+            elements, grid_data, angle_threshold_deg=2.0,
+            outline=self.L_OUTLINE, outline_tolerance=0.5)
+        assert len(report) == 1
+        assert report[0]["target_grid_label"] == "average"
+
+    def test_rectangular_outline_no_effect(self, grid_data):
+        """Rectangular outline → is_non_rectangular=False, no rescue logic."""
+        rect = [[0, 0], [25.2, 0], [25.2, 24.0], [0, 24.0]]
+        elements = {
+            "beams": [
+                {"x1": 16.8, "y1": 20.35, "x2": 25.2, "y2": 20.45,
+                 "section": "B40X60", "floors": ["3F"]},
+            ],
+            "walls": [],
+            "columns": [],
+        }
+        _, report = correct_angles(
+            elements, grid_data, angle_threshold_deg=2.0,
+            outline=rect, outline_tolerance=0.5)
+        assert len(report) == 1
+        assert report[0]["target_grid_label"] == "average"
+
+    def test_no_outline_backward_compatible(self, grid_data):
+        """outline=None → same behavior as before."""
+        elements = {
+            "beams": [
+                {"x1": 16.8, "y1": 20.35, "x2": 25.2, "y2": 20.45,
+                 "section": "B40X60", "floors": ["3F"]},
+            ],
+            "walls": [],
+            "columns": [],
+        }
+        _, report = correct_angles(
+            elements, grid_data, angle_threshold_deg=2.0,
+            outline=None)
+        assert len(report) == 1
+        assert report[0]["target_grid_label"] == "average"
+
+    def test_wall_outline_rescue(self, grid_data):
+        """Wall near L-notch boundary gets rescued to correct grid line."""
+        elements = {
+            "beams": [],
+            "walls": [
+                {"x1": 16.8, "y1": 20.35, "x2": 25.2, "y2": 20.45,
+                 "section": "W25", "floors": ["3F"]},
+            ],
+            "columns": [],
+        }
+        corrected, report = correct_angles(
+            elements, grid_data, angle_threshold_deg=2.0,
+            outline=self.L_OUTLINE, outline_tolerance=0.5)
+        assert len(report) == 1
+        assert "outline_rescue" in report[0]["target_grid_label"]
+        assert corrected["walls"][0]["y1"] == 16.8

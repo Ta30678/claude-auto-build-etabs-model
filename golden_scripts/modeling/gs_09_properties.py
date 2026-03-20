@@ -108,19 +108,19 @@ def assign_end_releases(SapModel):
     for i in range(num):
         name = names[i]
         pts = SapModel.FrameObj.GetPoints(name, "", "")
-        if pts[0] != 0:
+        if pts[-1] != 0:
             continue
 
-        for pt in [pts[1], pts[2]]:
+        for pt in [pts[0], pts[1]]:
             c = SapModel.PointObj.GetCoordCartesian(pt, 0, 0, 0)
-            coord = (round(c[1], 4), round(c[2], 4), round(c[3], 4))
+            coord = (round(c[0], 4), round(c[1], 4), round(c[2], 4))
             endpoint_counts[coord] = endpoint_counts.get(coord, 0) + 1
 
-        c_i = SapModel.PointObj.GetCoordCartesian(pts[1], 0, 0, 0)
-        c_j = SapModel.PointObj.GetCoordCartesian(pts[2], 0, 0, 0)
+        c_i = SapModel.PointObj.GetCoordCartesian(pts[0], 0, 0, 0)
+        c_j = SapModel.PointObj.GetCoordCartesian(pts[1], 0, 0, 0)
         frame_endpoints[name] = (
-            (round(c_i[1], 4), round(c_i[2], 4), round(c_i[3], 4)),
-            (round(c_j[1], 4), round(c_j[2], 4), round(c_j[3], 4))
+            (round(c_i[0], 4), round(c_i[1], 4), round(c_i[2], 4)),
+            (round(c_j[0], 4), round(c_j[1], 4), round(c_j[2], 4))
         )
 
     # Assign releases to beams (not columns)
