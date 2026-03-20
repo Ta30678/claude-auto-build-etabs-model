@@ -250,6 +250,16 @@
         "exterior_wall": {
           "type": "object",
           "properties": {
+            "outline": {
+              "type": "array",
+              "description": "上構外牆 outline polygon [[x,y],...]. 用於判定邊梁。",
+              "items": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            },
             "thickness": { "type": "number", "default": 0.15, "description": "Wall thickness in meters" },
             "unit_weight": { "type": "number", "default": 2.4 },
             "opening_factor": { "type": "number", "default": 0.6 }

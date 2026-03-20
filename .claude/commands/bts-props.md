@@ -11,7 +11,7 @@ argument-hint: "[config 路徑，預設使用 merged_config.json]"
 
 **Phase 3 範圍**：
 - **gs_09**: Frame modifiers, rigid zones (0.75), end releases
-- **gs_10**: Load patterns (DL/LL/EQ), slab loads, seismic, spectrum, foundation springs (Kv/Kw)
+- **gs_10**: Load patterns (DL/LL/EQ), slab loads, exterior wall loads, seismic, spectrum, foundation springs (Kv/Kw)
 - **gs_11**: Diaphragm assignment at slab corner points
 
 **無需 Agent Team** — 這三步全為確定性操作，所有參數來自 config 或 constants.py 預設值。
@@ -23,6 +23,7 @@ argument-hint: "[config 路徑，預設使用 merged_config.json]"
 1. **不建立 SDL**——所有附加靜載使用 DL。
 2. **Kw 自動偵測**——所有 FWB 斷面的梁自動設定 Kw line spring。
 3. **Diaphragm 只指定在版角點**——不指定到所有樓層 joint。
+4. **restraint_floor 自動偵測**——從 stories 偵測第一個 B*F，不再手動詢問。
 
 ---
 
@@ -36,9 +37,10 @@ argument-hint: "[config 路徑，預設使用 merged_config.json]"
    - `merged_config.json`（Phase 2 輸出）
    - `model_config.json`（如果 Phase 2 直接修改了 model_config）
 2. **確認 ETABS 模型已開啟** — 有 Grid、Story、柱、牆、梁、小梁、版
-3. **收集地震與基礎參數**（Phase 1 移入的必問項目）：
-
-   用 AskUserQuestion 一次詢問以下參數：
+3. **自動偵測 restraint_floor**：
+   - 從 config `stories` 偵測第一個 B*F（不含 BASE）
+   - 顯示結果供用戶確認：`Auto-detected restraint_floor: B3F`
+4. **收集地震與基礎參數**（用 AskUserQuestion 一次詢問）：
 
    | # | 參數 | 說明 | 必要性 |
    |---|------|------|--------|
@@ -46,8 +48,27 @@ argument-hint: "[config 路徑，預設使用 merged_config.json]"
    | 2 | 邊梁 Kw | 側邊彈簧係數 (ton/m³) | **必問** |
    | 3 | Base Shear C | 地震力係數 | **必問** |
    | 4 | 反應譜檔案 | SPECTRUM.TXT 路徑 | 可選（無則跳過） |
+   | 5 | EQV Scale Factor | 反應譜放大係數 | 可選（有反應譜時問） |
+   | 6 | 外牆線載 | 是否啟用 + outline | 問（見下方流程） |
 
-4. **將參數寫入 config**：更新 config 的 `loads.seismic.base_shear_c`、`foundation.kv`、`foundation.kw`、`loads.spectrum_file`（如有）
+5. **外牆線載參數收集**（如用戶啟用）：
+   - 顯示預設常數（t=0.15m, γ=2.4, opening=0.6），問是否自訂
+   - 詢問上構 outline 來源：
+     a. 手動提供座標（使用者直接給 `[[x,y],...]` polygon）
+     b. 從 config 的 `building_outline` 讀取（如果用戶確認它代表上構而非全建物）
+   - 將 outline 寫入 `config["loads"]["exterior_wall"]["outline"]`
+
+6. **將參數寫入 config**：
+   ```python
+   config.setdefault("loads", {})
+   config["loads"].setdefault("zone_defaults", DEFAULT_LOADS)
+   config["loads"]["seismic"] = {"base_shear_c": C_VALUE, ...}
+   config["loads"]["eqv_scale_factor"] = EQV_SF  # if provided
+   config.setdefault("foundation", {})
+   config["foundation"]["kv"] = KV_VALUE
+   config["foundation"]["kw"] = KW_VALUE
+   config["foundation"]["restraint_floor"] = auto_detected_floor
+   ```
 
 ### Step 2: 顯示載重預設值 + 確認
 
@@ -77,10 +98,13 @@ argument-hint: "[config 路徑，預設使用 merged_config.json]"
 
 從 config 中讀取並顯示 Step 1 寫入的參數：
 - `loads.seismic.base_shear_c` = {C_VALUE}
+- `loads.seismic.top_story` = {auto-detected or default}
 - `loads.spectrum_file` = {SPECTRUM_PATH}（如有）
+- `loads.eqv_scale_factor` = {EQV_SF}（如有）
 - `foundation.kv` = {KV_VALUE}
 - `foundation.kw` = {KW_VALUE}
-- `foundation.restraint_floor`（自動偵測的基礎樓層）
+- `foundation.restraint_floor` = {auto-detected}
+- `loads.exterior_wall.outline` = {outline}（如有）
 
 確認無誤後繼續。
 
@@ -95,7 +119,7 @@ python run_all.py --config "{CONFIG_PATH}" --steps 9,10,11
 | Step | 功能 | Config 依賴 |
 |------|------|------------|
 | 09 | Frame modifiers + rigid zone (0.75) + end releases | 無（全 hardcoded） |
-| 10 | Load patterns + slab loads + seismic + spectrum + Kv/Kw | loads, foundation |
+| 10 | Load patterns + slab loads + exterior wall loads + seismic + spectrum + Kv/Kw | loads, foundation |
 | 11 | Diaphragm（每層一組 D_{story}，指定到版角點） | 無（自動偵測版） |
 
 ### Step 5: 驗證
@@ -108,11 +132,12 @@ python run_all.py --config "{CONFIG_PATH}" --steps 9,10,11
 3. **End Releases**: M2+M3 at discontinuous beam ends
 4. **Load Patterns**: DL(SW=1), LL, EQXP/EQXN/EQYP/EQYN
 5. **Slab Loads**: DL/LL assigned per zone
-6. **Foundation**:
-   - UX/UY restraints at `restraint_floor`
+6. **Exterior Wall Loads**: DL line loads on edge beams (if outline provided)
+7. **Foundation**:
+   - UX/UY restraints at `restraint_floor` (auto-detected)
    - Kv springs on foundation points
    - Kw springs on all FWB beams
-7. **Diaphragms**: D_{story} per story, assigned to slab/FS corner points
+8. **Diaphragms**: D_{story} per story, assigned to slab/FS corner points
 
 可選：執行 `pytest -v` 跑完整驗證。
 
@@ -123,6 +148,7 @@ python run_all.py --config "{CONFIG_PATH}" --steps 9,10,11
 - Modifiers / Rigid Zone / End Releases 數量
 - Load patterns 定義
 - Slab load 分配數量
+- Exterior wall load 分配數量（如啟用）
 - Foundation spring 數量
 - Diaphragm 數量
 - **提醒**：Phase 1+2+3 建模完成，可進入分析設計（`run_all.py --steps 12`）
@@ -134,7 +160,7 @@ python run_all.py --config "{CONFIG_PATH}" --steps 9,10,11
 | Step | 腳本 | 功能 | Config 欄位 |
 |------|------|------|------------|
 | 09 | gs_09_properties.py | Modifiers + RZ + Releases | 無 |
-| 10 | gs_10_loads.py | DL/LL/EQ + Spectrum + Kv/Kw | loads.*, foundation.* |
+| 10 | gs_10_loads.py | DL/LL/EQ + Spectrum + Ext Wall + Kv/Kw | loads.*, foundation.* |
 | 11 | gs_11_diaphragms.py | Diaphragm per story | 無 |
 
 ---

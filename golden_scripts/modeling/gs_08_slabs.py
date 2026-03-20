@@ -95,6 +95,32 @@ def place_slabs(SapModel, config, elev_map, strength_lookup):
                             print(f"  WARN: Failed FS sub-slab {sec_name} at {plan_floor}")
                         fail_details.append((sec_name, plan_floor, f"FS sub-slab"))
                         failed += 1
+            elif is_raft and n_pts == 3:
+                # Triangle FS: edge midpoint subdivision → 4 sub-triangles
+                A, B, C = corners[0], corners[1], corners[2]
+                M_AB = [(A[0]+B[0])/2, (A[1]+B[1])/2]
+                M_BC = [(B[0]+C[0])/2, (B[1]+C[1])/2]
+                M_AC = [(A[0]+C[0])/2, (A[1]+C[1])/2]
+                sub_triangles = [
+                    ([A[0], M_AB[0], M_AC[0]], [A[1], M_AB[1], M_AC[1]]),
+                    ([M_AB[0], B[0], M_BC[0]], [M_AB[1], B[1], M_BC[1]]),
+                    ([M_AC[0], M_BC[0], C[0]], [M_AC[1], M_BC[1], C[1]]),
+                    ([M_AB[0], M_BC[0], M_AC[0]], [M_AB[1], M_BC[1], M_AC[1]]),
+                ]
+                for sub_x, sub_y in sub_triangles:
+                    sub_z = [z] * 3
+                    ret = SapModel.AreaObj.AddByCoord(3, sub_x, sub_y, sub_z, "", sec_name)
+                    if ret[-1] == 0:
+                        created.append(ret[0])
+                    else:
+                        if sec_name not in available_sections:
+                            base = re.sub(r'C\d+$', '', sec_name)
+                            similar = sorted([s for s in available_sections if s.startswith(base)])[:5]
+                            print(f"  ERROR: Section '{sec_name}' not in ETABS. Available: {similar}. Check sections.slab/raft or strength_map.")
+                        else:
+                            print(f"  WARN: Failed FS sub-triangle {sec_name} at {plan_floor}")
+                        fail_details.append((sec_name, plan_floor, f"FS sub-triangle"))
+                        failed += 1
             else:
                 Z = [z] * n_pts
                 name = ""

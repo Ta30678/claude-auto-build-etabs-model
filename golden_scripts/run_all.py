@@ -56,12 +56,12 @@ def _read_etabs_elevations(SapModel):
     try:
         ret = SapModel.DatabaseTables.GetTableForDisplayArray(
             "Story Definitions", [], "All", 0, [], 0, [])
-        if ret[0] != 0:
+        if ret[5] != 0:
             return None
-        fields = list(ret[4])
+        fields = list(ret[2])
         n_fields = len(fields)
-        n_records = ret[5]
-        data = list(ret[6])
+        n_records = ret[3]
+        data = list(ret[4])
         elev_map = {}
         for i in range(n_records):
             row = dict(zip(fields, data[i * n_fields:(i + 1) * n_fields]))

@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import (
     STANDARD_LOAD_PATTERNS, DEFAULT_LOADS, BASE_RESTRAINT,
     EXT_WALL_THICKNESS, EXT_WALL_UNIT_WEIGHT, EXT_WALL_OPENING_FACTOR,
+    is_substructure_story, is_superstructure_story, normalize_stories_order,
+    parse_frame_section, get_frame_dimensions,
 )
 
 
@@ -51,7 +53,10 @@ def configure_seismic(SapModel, config):
         print("  No base_shear_c in config, skipping seismic configuration.")
         return
 
-    top = seismic.get("top_story", "PRF")
+    top = seismic.get("top_story")
+    if top is None:
+        stories_ordered = normalize_stories_order(config.get("stories", []))
+        top = stories_ordered[-1]["name"] if stories_ordered else "PRF"
     bot = seismic.get("bottom_story", "1F")
     ecc = seismic.get("ecc_ratio", 0.05)
     k = seismic.get("k_exponent", 1)
@@ -76,57 +81,24 @@ def configure_seismic(SapModel, config):
 
 def assign_slab_loads(SapModel, config, elev_map):
     """Assign DL and LL uniform loads to slabs by zone."""
-    slabs = config.get("slabs", [])
     loads = config.get("loads", {})
     zone_defaults = loads.get("zone_defaults", DEFAULT_LOADS)
-
-    if not slabs:
-        print("  No slabs to assign loads to.")
-        return
-
-    # Get all area objects to find slab names
     count = 0
-    stories = config.get("stories", [])
-    story_names = [s["name"] for s in stories]
-
-    # Determine zone for each floor
-    for slab in slabs:
-        base_sec = slab["section"]
-        is_raft = base_sec.startswith("FS")
-
-        for plan_floor in slab["floors"]:
-            if is_raft:
-                zone = "FS"
-            elif _is_rooftop_story(plan_floor):
-                zone = "rooftop"
-            elif plan_floor == "1F":
-                zone = "1F_indoor"
-            elif plan_floor.startswith("B"):
-                zone = "substructure"
-            else:
-                zone = "superstructure"
-
-            zone_loads = zone_defaults.get(zone, {"DL": 0.45, "LL": 0.2})
-            dl = zone_loads.get("DL", 0)
-            ll = zone_loads.get("LL", 0)
-            # Loads will be applied after slabs are created
-            # Store for reference
-            slab.setdefault("_zone_loads", {})[plan_floor] = {"DL": dl, "LL": ll, "zone": zone}
 
     # Apply loads to area objects in ETABS
     # Need to get actual area object names from the model
     try:
         ret = SapModel.DatabaseTables.GetTableForDisplayArray(
             "Area Assignments - Summary", [], "All", 0, [], 0, [])
-        if ret[0] == 0 and ret[5] > 0:
-            fields = list(ret[4])
-            data = list(ret[6])
+        if ret[5] == 0 and ret[3] > 0:
+            fields = list(ret[2])
+            data = list(ret[4])
             nf = len(fields)
             name_idx = fields.index("UniqueName") if "UniqueName" in fields else 0
             story_idx = fields.index("Story") if "Story" in fields else -1
-            sec_idx = fields.index("Section") if "Section" in fields else -1
+            sec_idx = fields.index("SectProp") if "SectProp" in fields else (fields.index("Section") if "Section" in fields else -1)
 
-            for i in range(ret[5]):
+            for i in range(ret[3]):
                 row = data[i*nf:(i+1)*nf]
                 area_name = row[name_idx]
                 story = row[story_idx] if story_idx >= 0 else ""
@@ -193,17 +165,20 @@ def import_spectrum(SapModel, config):
         return
 
     func_name = "SPEC_FUNC"
+    eqv_sf = loads.get("eqv_scale_factor", 1.0)
     try:
         ret = SapModel.Func.FuncRS.SetUser(func_name, len(periods), periods, sa_values, 0.05)
         retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
         if retcode == 0:
             print(f"  RS function '{func_name}' created ({len(periods)} points)")
+            if eqv_sf != 1.0:
+                print(f"  RS scale factor: {eqv_sf}")
 
             # Modify existing 0SPECX and 0SPECXY
             for case_name in ["0SPECX", "0SPECXY"]:
                 try:
                     SapModel.LoadCases.ResponseSpectrum.SetLoads(
-                        case_name, 1, ["U1"], [func_name], [1.0], ["Global"], [0])
+                        case_name, 1, ["U1"], [func_name], [eqv_sf], ["Global"], [0])
                     SapModel.LoadCases.ResponseSpectrum.SetModalCase(case_name, "Modal")
                     SapModel.LoadCases.ResponseSpectrum.SetEccentricity(case_name, 0.05)
                     print(f"  RS case '{case_name}' modified")
@@ -211,6 +186,123 @@ def import_spectrum(SapModel, config):
                     print(f"  WARNING: Could not modify RS case '{case_name}': {e}")
     except Exception as e:
         print(f"  WARNING: Could not create RS function: {e}")
+
+
+def _auto_detect_restraint_floor(config):
+    """Auto-detect foundation floor (first B*F above BASE)."""
+    stories = normalize_stories_order(config.get("stories", []))
+    for s in stories:
+        name = s["name"]
+        if name != "BASE" and is_substructure_story(name):
+            return name
+    return None
+
+
+def _point_on_segment(px, py, ax, ay, bx, by, tol=0.3):
+    """Check if point (px,py) lies on segment (ax,ay)-(bx,by) within tolerance."""
+    abx, aby = bx - ax, by - ay
+    ab_len = (abx**2 + aby**2) ** 0.5
+    if ab_len < 1e-9:
+        return ((px - ax)**2 + (py - ay)**2) ** 0.5 < tol
+    t = ((px - ax) * abx + (py - ay) * aby) / (ab_len**2)
+    t = max(0.0, min(1.0, t))
+    cx, cy = ax + t * abx, ay + t * aby
+    dist = ((px - cx)**2 + (py - cy)**2) ** 0.5
+    return dist < tol
+
+
+def assign_exterior_wall_loads(SapModel, config, elev_map):
+    """Assign exterior wall line loads to edge beams on DL pattern.
+
+    w = t * gamma * (H_story - d_beam) * f_opening
+    Applied to beams whose both endpoints lie on the exterior_wall outline.
+    Floors: 1F + superstructure (not rooftop, not basement).
+    """
+    loads_cfg = config.get("loads", {})
+    ext_wall = loads_cfg.get("exterior_wall", {})
+    outline = ext_wall.get("outline")
+
+    if not outline or len(outline) < 3:
+        print("  No exterior_wall.outline in config, skipping.")
+        return
+
+    t = ext_wall.get("thickness", EXT_WALL_THICKNESS)
+    gamma = ext_wall.get("unit_weight", EXT_WALL_UNIT_WEIGHT)
+    f_open = ext_wall.get("opening_factor", EXT_WALL_OPENING_FACTOR)
+
+    # Build outline segments (closed polygon)
+    n_pts = len(outline)
+    segments = [(outline[i], outline[(i + 1) % n_pts]) for i in range(n_pts)]
+
+    # Build story_height_above from elev_map: height from this story to next
+    if not elev_map:
+        print("  No elev_map available, skipping exterior wall loads.")
+        return
+    sorted_stories = sorted(elev_map.items(), key=lambda x: x[1])
+    story_height_above = {}
+    for i in range(len(sorted_stories) - 1):
+        s_name, s_elev = sorted_stories[i]
+        _, next_elev = sorted_stories[i + 1]
+        story_height_above[s_name] = next_elev - s_elev
+
+    # Get all frames from ETABS
+    try:
+        ret = SapModel.FrameObj.GetAllFrames(
+            0, [], [], [], [], [], [], [], [], [], [], [],
+            [], [], [], [], [], [], [], [])
+    except Exception as e:
+        print(f"  WARNING: GetAllFrames failed: {e}")
+        return
+
+    if not isinstance(ret[0], int) or ret[0] <= 0:
+        print("  No frame objects found.")
+        return
+
+    num = ret[0]
+    names = ret[1]
+    props = ret[2]
+    frame_stories = ret[3]
+    x1s, y1s = ret[6], ret[7]
+    x2s, y2s = ret[9], ret[10]
+
+    count = 0
+    for i in range(num):
+        story = frame_stories[i]
+
+        # Only 1F + superstructure (not rooftop, not basement)
+        if not (story == "1F" or is_superstructure_story(story)):
+            continue
+
+        # Parse section — skip columns and non-beam sections
+        prefix, num1, num2, _ = parse_frame_section(props[i])
+        if prefix is None or prefix == "C":
+            continue
+
+        # Check both endpoints on outline
+        p1_on = any(_point_on_segment(x1s[i], y1s[i], *seg[0], *seg[1])
+                     for seg in segments)
+        p2_on = any(_point_on_segment(x2s[i], y2s[i], *seg[0], *seg[1])
+                     for seg in segments)
+        if not (p1_on and p2_on):
+            continue
+
+        # Compute wall load
+        h_story = story_height_above.get(story, 0)
+        if h_story <= 0:
+            continue
+        _, depth_cm = get_frame_dimensions(prefix, num1, num2)
+        d_beam = depth_cm / 100.0  # cm -> m
+        h_net = h_story - d_beam
+        if h_net <= 0:
+            continue
+
+        w = t * gamma * h_net * f_open
+        SapModel.FrameObj.SetLoadDistributed(
+            names[i], "DL", 1, 10, 0, 1, w, w)
+        count += 1
+
+    print(f"  Exterior wall loads: {count} edge beams"
+          f" (t={t}, gamma={gamma}, opening={f_open})")
 
 
 def assign_foundation(SapModel, config):
@@ -223,22 +315,26 @@ def assign_foundation(SapModel, config):
     kv = foundation.get("kv")
     kw = foundation.get("kw")
     restraint_floor = foundation.get("restraint_floor")
+    if not restraint_floor:
+        restraint_floor = _auto_detect_restraint_floor(config)
+        if restraint_floor:
+            print(f"  Auto-detected restraint_floor: {restraint_floor}")
 
     # Get foundation level points
     if restraint_floor or kv:
         try:
             # Get all points at the foundation level and assign restraints/springs
             ret = SapModel.DatabaseTables.GetTableForDisplayArray(
-                "Joint Coordinates", [], "All", 0, [], 0, [])
-            if ret[0] == 0 and ret[5] > 0:
-                fields = list(ret[4])
-                data = list(ret[6])
+                "Point Object Connectivity", [], "All", 0, [], 0, [])
+            if ret[5] == 0 and ret[3] > 0:
+                fields = list(ret[2])
+                data = list(ret[4])
                 nf = len(fields)
                 name_idx = fields.index("UniqueName") if "UniqueName" in fields else 0
                 story_idx = fields.index("Story") if "Story" in fields else -1
 
                 foundation_points = []
-                for i in range(ret[5]):
+                for i in range(ret[3]):
                     row = data[i*nf:(i+1)*nf]
                     pt_name = row[name_idx]
                     pt_story = row[story_idx] if story_idx >= 0 else ""
@@ -251,7 +347,8 @@ def assign_foundation(SapModel, config):
                     r_count = 0
                     for pt in foundation_points:
                         r = SapModel.PointObj.SetRestraint(pt, BASE_RESTRAINT)
-                        if r == 0:
+                        rc = r[-1] if isinstance(r, (list, tuple)) else r
+                        if rc == 0:
                             r_count += 1
                     print(f"  Base restraints (UX,UY): {r_count}/{len(foundation_points)}")
 
@@ -261,7 +358,8 @@ def assign_foundation(SapModel, config):
                         s_count = 0
                         for pt in foundation_points:
                             r = SapModel.PointObj.SetSpring(pt, springs)
-                            if r == 0:
+                            rc = r[-1] if isinstance(r, (list, tuple)) else r
+                            if rc == 0:
                                 s_count += 1
                         print(f"  Point springs (Kv={kv}): {s_count}/{len(foundation_points)}")
         except Exception as e:
@@ -310,6 +408,9 @@ def run(SapModel, config, elev_map=None):
 
     print("\n--- Slab Loads ---")
     assign_slab_loads(SapModel, config, elev_map)
+
+    print("\n--- Exterior Wall Loads ---")
+    assign_exterior_wall_loads(SapModel, config, elev_map)
 
     print("\n--- Response Spectrum ---")
     import_spectrum(SapModel, config)

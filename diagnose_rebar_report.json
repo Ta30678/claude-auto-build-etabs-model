@@ -1,0 +1,194 @@
+{
+  "environment": {
+    "model_file": "C:\\Users\\User\\Desktop\\workflow dev\\V22 AGENTIC MODEL\\ETABS REF\\A21 NEW\\MODEL\\A21.$et",
+    "connection_method": "comtypes.client.GetActiveObject",
+    "units": 12,
+    "model_locked": false,
+    "materials": [
+      "4000Psi",
+      "A416Gr270",
+      "A615Gr60",
+      "A992Fy50",
+      "C280",
+      "C315",
+      "C350",
+      "C420",
+      "C490",
+      "SD420",
+      "SD490"
+    ],
+    "SD420_exists": true,
+    "SD420_mattype": 6,
+    "SD420_mattype_raw": "[6, 0, 0]",
+    "rebar_size_8_exists": true,
+    "rebar_size_4_exists": true,
+    "frame_section_count": 158,
+    "frame_sections_sample": [
+      "W14X500",
+      "W14X455",
+      "W14X426",
+      "W14X398",
+      "W14X370",
+      "W14X342",
+      "W14X311",
+      "W14X283",
+      "W14X257",
+      "W14X233",
+      "W14X211",
+      "W14X193",
+      "W14X176",
+      "W14X159",
+      "W14X145",
+      "W14X132",
+      "W12X210",
+      "W12X190",
+      "W12X170",
+      "W12X152"
+    ]
+  },
+  "rebar_sizes": {
+    "retcode": 0,
+    "ret_raw": "[12, ('#2', '#3', '#4', '#5', '#6', '#7', '#8', '#9', '#10', '#11', '#14', '#18'), 0]",
+    "names": [
+      "#2",
+      "#3",
+      "#4",
+      "#5",
+      "#6",
+      "#7",
+      "#8",
+      "#9",
+      "#10",
+      "#11",
+      "#14",
+      "#18"
+    ]
+  },
+  "column_test": {
+    "section": "C100X100C280",
+    "parsed": {
+      "prefix": "C",
+      "w": 100,
+      "d": 100,
+      "fc": 280
+    },
+    "dimensions": {
+      "width_cm": 100,
+      "depth_cm": 100
+    },
+    "bar_calc": {
+      "num_r3": 10,
+      "num_r2": 10
+    },
+    "before": {
+      "retcode": 0,
+      "MatPropLong": "SD420",
+      "MatPropConfine": "SD420",
+      "Pattern": 1,
+      "ConfineType": 0,
+      "Cover": 0.07,
+      "NumberCBars": 0,
+      "NumberR3Bars": 10,
+      "NumberR2Bars": 10,
+      "RebarSize": "#8",
+      "TieSize": "#4",
+      "TieSpacingLongit": 0.15,
+      "Number2DirTieBars": 2,
+      "Number3DirTieBars": 2,
+      "ToBeDesigned": true,
+      "ret_raw": "['SD420', 'SD420', 1, 0, 0.07, 0, 10, 10, '#8', '#4', 0.15, 2, 2, True, 0]"
+    },
+    "set_result": {
+      "retcode": 0,
+      "ret_raw": "0"
+    },
+    "after": {
+      "retcode": 0,
+      "MatPropLong": "SD420",
+      "MatPropConfine": "SD420",
+      "Pattern": 1,
+      "ConfineType": 0,
+      "Cover": 0.07,
+      "NumberCBars": 0,
+      "NumberR3Bars": 10,
+      "NumberR2Bars": 10,
+      "RebarSize": "#8",
+      "TieSize": "#4",
+      "TieSpacingLongit": 0.15,
+      "Number2DirTieBars": 2,
+      "Number3DirTieBars": 2,
+      "ToBeDesigned": true,
+      "ret_raw": "['SD420', 'SD420', 1, 0, 0.07, 0, 10, 10, '#8', '#4', 0.15, 2, 2, True, 0]"
+    },
+    "verification": {
+      "cover_ok": true,
+      "mat_ok": true,
+      "r3_ok": true,
+      "r2_ok": true,
+      "rebar_size_ok": true,
+      "tie_size_ok": true,
+      "all_ok": true
+    }
+  },
+  "beam_test": {
+    "section": "B50X70C280",
+    "parsed": {
+      "prefix": "B",
+      "w": 50,
+      "d": 70,
+      "fc": 280
+    },
+    "is_foundation_beam": false,
+    "before": {
+      "retcode": 0,
+      "MatPropLong": "A615Gr60",
+      "MatPropConfine": "A615Gr60",
+      "CoverTop": 0.06,
+      "CoverBot": 0.06,
+      "TopLeftArea": 0.0,
+      "TopRightArea": 0.0,
+      "BotLeftArea": 0.0,
+      "BotRightArea": 0.0,
+      "ret_raw": "['A615Gr60', 'A615Gr60', 0.06, 0.06, 0.0, 0.0, 0.0, 0.0, 0]"
+    },
+    "set_result": {
+      "retcode": 0,
+      "ret_raw": "0"
+    },
+    "after": {
+      "retcode": 0,
+      "MatPropLong": "SD420",
+      "MatPropConfine": "SD420",
+      "CoverTop": 0.09,
+      "CoverBot": 0.09,
+      "TopLeftArea": 0.0,
+      "TopRightArea": 0.0,
+      "BotLeftArea": 0.0,
+      "BotRightArea": 0.0,
+      "ret_raw": "['SD420', 'SD420', 0.09, 0.09, 0.0, 0.0, 0.0, 0.0, 0]"
+    },
+    "verification": {
+      "cover_top_ok": true,
+      "cover_bot_ok": true,
+      "mat_ok": true,
+      "all_ok": true
+    }
+  },
+  "alternative_tests": {},
+  "diagnosis": [
+    "All tests passed. Rebar API calls work correctly."
+  ],
+  "constants_used": {
+    "COL_COVER": 0.07,
+    "COL_CORNER_BARS": 4,
+    "COL_TIE_SPACING": 0.15,
+    "COL_REBAR_SIZE": "#8",
+    "COL_TIE_SIZE": "#4",
+    "COL_NUM_2DIR_TIE": 2,
+    "COL_NUM_3DIR_TIE": 2,
+    "BEAM_COVER_TOP": 0.09,
+    "BEAM_COVER_BOT": 0.09,
+    "FB_COVER_TOP": 0.11,
+    "FB_COVER_BOT": 0.15
+  }
+}

@@ -14,6 +14,7 @@ sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import (
     UNITS_TON_M, CONCRETE_GRADES, CONCRETE_PROPS, REBAR_PROPS,
+    MATTYPE_CONCRETE, MATTYPE_REBAR,
 )
 
 
@@ -65,7 +66,7 @@ def define_materials(SapModel, config=None, skip_materials=False):
         props = CONCRETE_PROPS[fc]
         mat_name = f"C{fc}"
         try:
-            SapModel.PropMaterial.SetMaterial(mat_name, 2)
+            SapModel.PropMaterial.SetMaterial(mat_name, MATTYPE_CONCRETE)
         except:
             pass  # may already exist
 
@@ -78,7 +79,7 @@ def define_materials(SapModel, config=None, skip_materials=False):
 
     for rb_name, rb_props in REBAR_PROPS.items():
         try:
-            SapModel.PropMaterial.SetMaterial(rb_name, 5)
+            SapModel.PropMaterial.SetMaterial(rb_name, MATTYPE_REBAR)
         except:
             pass
 

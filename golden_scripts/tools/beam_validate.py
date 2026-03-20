@@ -664,8 +664,8 @@ def _ranges_overlap(a_min, a_max, b_min, b_max):
     return a_min <= b_max + 0.01 and b_min <= a_max + 0.01
 
 
-def snap_walls_to_beams(elements, tolerance=1.0):
-    """Snap wall fixed-axis coordinate to the nearest parallel beam.
+def snap_walls_to_beams(elements, tolerance=1.0, var_tolerance=0.5):
+    """Snap wall fixed-axis coordinate AND variable-axis endpoints to beams.
 
     In PPT 2D structural plans, walls are drawn next to beams (offset)
     because they can't overlap in 2D. In the 3D ETABS model, walls should
@@ -677,13 +677,17 @@ def snap_walls_to_beams(elements, tolerance=1.0):
          and at least one common floor
       3. Snap wall's fixed-axis to the nearest qualifying beam's fixed-axis
       4. Only snap if distance > 0.01m and <= tolerance
+      5. After fixed-axis snap, snap each variable-axis endpoint to the
+         nearest colinear beam endpoint within var_tolerance
 
     Parameters
     ----------
     elements : dict
         Parsed elements with "beams" and "walls".
     tolerance : float
-        Max snap distance in meters (default 1.0).
+        Max fixed-axis snap distance in meters (default 1.0).
+    var_tolerance : float
+        Max variable-axis endpoint snap distance in meters (default 0.5).
 
     Returns
     -------
@@ -745,7 +749,8 @@ def snap_walls_to_beams(elements, tolerance=1.0):
                 best_beam = beam
                 best_beam_fixed = b_fixed
 
-        # Apply snap if within tolerance and meaningful
+        # Apply fixed-axis snap if within tolerance and meaningful
+        fixed_snapped = False
         if best_beam is not None and best_dist > 0.01 and best_dist <= tolerance:
             before = {
                 "x1": wall["x1"], "y1": wall["y1"],
@@ -759,10 +764,12 @@ def snap_walls_to_beams(elements, tolerance=1.0):
                 wall["x1"] = best_beam_fixed
                 wall["x2"] = best_beam_fixed
 
+            fixed_snapped = True
             snap_details.append({
                 "wall_section": wall.get("section", ""),
                 "wall_floors": wall.get("floors", []),
                 "direction": w_dir,
+                "snap_type": "fixed_axis",
                 "before": before,
                 "after": {
                     "x1": wall["x1"], "y1": wall["y1"],
@@ -770,6 +777,118 @@ def snap_walls_to_beams(elements, tolerance=1.0):
                 },
                 "distance": round(best_dist, 4),
                 "target_beam_section": best_beam.get("section", ""),
+            })
+
+        # --- Variable-axis endpoint snap ---
+        # Recalculate fixed coordinate after potential snap
+        if w_dir == "X":
+            w_fixed_now = (wall["y1"] + wall["y2"]) / 2.0
+        else:
+            w_fixed_now = (wall["x1"] + wall["x2"]) / 2.0
+
+        # Collect all colinear beam endpoints (same direction, tight fixed-axis match, floor overlap)
+        COLINEAR_THRESHOLD = 0.05  # 5cm — wall and beam should already be snapped
+        colinear_endpoints = []
+        for beam in beams:
+            b_dir = _beam_direction(beam)
+            if b_dir != w_dir:
+                continue
+            b_floors = set(beam.get("floors", []))
+            if not (w_floors & b_floors):
+                continue
+            if w_dir == "X":
+                b_fixed = (beam["y1"] + beam["y2"]) / 2.0
+                if abs(b_fixed - w_fixed_now) > COLINEAR_THRESHOLD:
+                    continue
+                colinear_endpoints.append(min(beam["x1"], beam["x2"]))
+                colinear_endpoints.append(max(beam["x1"], beam["x2"]))
+            else:
+                b_fixed = (beam["x1"] + beam["x2"]) / 2.0
+                if abs(b_fixed - w_fixed_now) > COLINEAR_THRESHOLD:
+                    continue
+                colinear_endpoints.append(min(beam["y1"], beam["y2"]))
+                colinear_endpoints.append(max(beam["y1"], beam["y2"]))
+
+        if not colinear_endpoints:
+            continue
+
+        colinear_endpoints.sort()
+
+        # Current wall variable-axis endpoints
+        if w_dir == "X":
+            var_min = min(wall["x1"], wall["x2"])
+            var_max = max(wall["x1"], wall["x2"])
+        else:
+            var_min = min(wall["y1"], wall["y2"])
+            var_max = max(wall["y1"], wall["y2"])
+
+        # Snap var_min to nearest colinear beam endpoint
+        best_min_ep = None
+        best_min_dist = float("inf")
+        for ep in colinear_endpoints:
+            d = abs(ep - var_min)
+            if d < best_min_dist:
+                best_min_dist = d
+                best_min_ep = ep
+
+        # Snap var_max to nearest colinear beam endpoint
+        best_max_ep = None
+        best_max_dist = float("inf")
+        for ep in colinear_endpoints:
+            d = abs(ep - var_max)
+            if d < best_max_dist:
+                best_max_dist = d
+                best_max_ep = ep
+
+        # Apply variable-axis snaps
+        for snap_end, snap_ep, snap_dist in [
+            ("var_min", best_min_ep, best_min_dist),
+            ("var_max", best_max_ep, best_max_dist),
+        ]:
+            if snap_ep is None or snap_dist < 0.01 or snap_dist > var_tolerance:
+                continue
+
+            before_var = {
+                "x1": wall["x1"], "y1": wall["y1"],
+                "x2": wall["x2"], "y2": wall["y2"],
+            }
+
+            if w_dir == "X":
+                if snap_end == "var_min":
+                    # Snap the endpoint that has the smaller X
+                    if wall["x1"] <= wall["x2"]:
+                        wall["x1"] = snap_ep
+                    else:
+                        wall["x2"] = snap_ep
+                else:
+                    # Snap the endpoint that has the larger X
+                    if wall["x1"] >= wall["x2"]:
+                        wall["x1"] = snap_ep
+                    else:
+                        wall["x2"] = snap_ep
+            else:
+                if snap_end == "var_min":
+                    if wall["y1"] <= wall["y2"]:
+                        wall["y1"] = snap_ep
+                    else:
+                        wall["y2"] = snap_ep
+                else:
+                    if wall["y1"] >= wall["y2"]:
+                        wall["y1"] = snap_ep
+                    else:
+                        wall["y2"] = snap_ep
+
+            snap_details.append({
+                "wall_section": wall.get("section", ""),
+                "wall_floors": wall.get("floors", []),
+                "direction": w_dir,
+                "snap_type": "variable_axis_" + snap_end,
+                "before": before_var,
+                "after": {
+                    "x1": wall["x1"], "y1": wall["y1"],
+                    "x2": wall["x2"], "y2": wall["y2"],
+                },
+                "distance": round(snap_dist, 4),
             })
 
     return elements, snap_details

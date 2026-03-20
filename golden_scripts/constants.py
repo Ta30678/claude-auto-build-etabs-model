@@ -12,6 +12,11 @@ import re
 # ── Unit System ──────────────────────────────────────────────
 UNITS_TON_M = 12  # eUnits code for TON/M
 
+# ── Material Types (eMatType) ────────────────────────────────
+MATTYPE_STEEL = 1
+MATTYPE_CONCRETE = 2
+MATTYPE_REBAR = 6       # NOT 5 (5 = ColdFormed)
+
 # ── Concrete Material Properties (in TON/M units) ───────────
 CONCRETE_GRADES = [280, 315, 350, 420, 490]
 

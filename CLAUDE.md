@@ -667,7 +667,7 @@ ret = SapModel.DatabaseTables.GetTableForDisplayArray(
 ```
 eUnits: 6=kN_m, 8=kgf_m, 12=Ton_m, 14=kgf_cm
 eLoadPatternType: Dead=1, SuperDead=2, Live=3, Quake=5, Wind=6
-eMatType: Steel=1, Concrete=2, Rebar=5
+eMatType: Steel=1, Concrete=2, NoDesign=3, Aluminum=4, ColdFormed=5, Rebar=6, Tendon=7, Masonry=8
 eItemType: Objects=0, Group=1, SelectedObjects=2
 Load direction: 6=Global-Z, 10=Gravity(proj), 11=Projected Gravity
 Shell type: ShellThick=1, Membrane=2

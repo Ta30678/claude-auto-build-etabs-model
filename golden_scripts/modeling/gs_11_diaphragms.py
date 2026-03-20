@@ -24,21 +24,21 @@ def assign_diaphragms(SapModel, config):
         ret = SapModel.DatabaseTables.GetTableForDisplayArray(
             "Area Assignments - Summary", [], "All", 0, [], 0, [])
 
-        if ret[0] != 0 or ret[5] <= 0:
+        if ret[5] != 0 or ret[3] <= 0:
             print("  No area objects found.")
             return
 
-        fields = list(ret[4])
-        data = list(ret[6])
+        fields = list(ret[2])
+        data = list(ret[4])
         nf = len(fields)
 
         name_idx = fields.index("UniqueName") if "UniqueName" in fields else 0
         story_idx = fields.index("Story") if "Story" in fields else -1
-        sec_idx = fields.index("Section") if "Section" in fields else -1
+        sec_idx = fields.index("SectProp") if "SectProp" in fields else (fields.index("Section") if "Section" in fields else -1)
 
         # Group slab areas by story
         story_slabs = {}  # story -> list of area names
-        for i in range(ret[5]):
+        for i in range(ret[3]):
             row = data[i*nf:(i+1)*nf]
             area_name = row[name_idx]
             story = row[story_idx] if story_idx >= 0 else "Unknown"
@@ -60,10 +60,10 @@ def assign_diaphragms(SapModel, config):
             for area_name in slab_names:
                 # Get corner points of this slab
                 area_ret = SapModel.AreaObj.GetPoints(area_name, 0, [])
-                if area_ret[0] != 0:
+                if area_ret[2] != 0:
                     continue
 
-                corner_points = area_ret[2]
+                corner_points = area_ret[1]
                 if isinstance(corner_points, (list, tuple)):
                     for pt in corner_points:
                         if pt not in pts_assigned:

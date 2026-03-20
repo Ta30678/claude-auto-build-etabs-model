@@ -40,7 +40,7 @@ import re
 import sys
 from pathlib import Path
 
-from golden_scripts.constants import expand_floor_range, normalize_stories_order
+from golden_scripts.constants import expand_floor_range, normalize_stories_order, is_substructure_story
 from golden_scripts.tools.config_snap import segment_intersection
 
 
@@ -356,7 +356,7 @@ def point_in_polygon(px, py, polygon):
 # Step 6: Filter
 # ---------------------------------------------------------------------------
 
-def filter_slabs(polygons, config):
+def filter_slabs(polygons, config, range_floors=None):
     """Filter polygons to keep only valid slab regions.
 
     Removes:
@@ -366,12 +366,23 @@ def filter_slabs(polygons, config):
     - Faces in slab_region_matrix no-slab zones
     - Degenerate faces (area < MIN_FACE_AREA)
 
+    Args:
+        range_floors: Optional set/list of floor names for this range.
+            If ALL floors are substructure, uses substructure_outline instead
+            of building_outline for centroid filtering.
+
     Returns list of (polygon, abs_area) tuples.
     """
     if not polygons:
         return []
 
-    outline = config.get("building_outline")
+    sub_outline = config.get("substructure_outline")
+    sup_outline = config.get("building_outline")
+
+    if range_floors and sub_outline and all(is_substructure_story(f) for f in range_floors):
+        outline = sub_outline
+    else:
+        outline = sup_outline
     outline_poly = [(pt[0], pt[1]) for pt in outline] if outline else None
 
     valid = []
@@ -975,7 +986,7 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100, slab_zones=Non
             polygons = walk_slab_polygons(adj)
             stats["total_polygons_raw"] += len(polygons)
 
-            valid_faces = filter_slabs(polygons, config)
+            valid_faces = filter_slabs(polygons, config, range_floors=floor_set)
             stats["total_polygons_filtered"] += len(valid_faces)
 
             range_slabs = assign_floors_simple(
@@ -1022,7 +1033,7 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100, slab_zones=Non
             polygons = walk_slab_polygons(adj)
             stats["total_polygons_raw"] += len(polygons)
 
-            valid_faces = filter_slabs(polygons, config)
+            valid_faces = filter_slabs(polygons, config, range_floors=floor_set)
             stats["total_polygons_filtered"] += len(valid_faces)
 
             group_slabs = assign_floors_simple(

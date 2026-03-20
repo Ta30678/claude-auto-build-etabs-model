@@ -1605,6 +1605,99 @@ class TestSnapWallsToBeams:
         result, details = snap_walls_to_beams(elements, tolerance=1.0)
         assert len(details) == 0
 
+    def test_variable_axis_snap_x_wall(self):
+        """X-wall endpoints snap to colinear beam endpoints in X."""
+        elements = {
+            "beams": [
+                # Beam from x=0 to x=8.5 at y=6.0
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall slightly shorter (x=0.3 to x=8.2) and offset 0.3m in Y
+                {"x1": 0.3, "y1": 6.3, "x2": 8.2, "y2": 6.3,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0, var_tolerance=0.5)
+        wall = result["walls"][0]
+        # Fixed axis should snap
+        assert wall["y1"] == 6.0
+        assert wall["y2"] == 6.0
+        # Variable axis endpoints should snap to beam endpoints
+        assert wall["x1"] == 0.0
+        assert wall["x2"] == 8.5
+        # Should have fixed-axis snap + two variable-axis snaps
+        var_snaps = [d for d in details if d.get("snap_type", "").startswith("variable_axis")]
+        assert len(var_snaps) == 2
+
+    def test_variable_axis_snap_y_wall(self):
+        """Y-wall endpoints snap to colinear beam endpoints in Y."""
+        elements = {
+            "beams": [
+                {"x1": 3.0, "y1": 0.0, "x2": 3.0, "y2": 12.0,
+                 "section": "B55X90", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall offset 0.2m in X, shorter in Y (0.4 to 11.6)
+                {"x1": 3.2, "y1": 0.4, "x2": 3.2, "y2": 11.6,
+                 "section": "W20", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0, var_tolerance=0.5)
+        wall = result["walls"][0]
+        assert wall["x1"] == 3.0
+        assert wall["x2"] == 3.0
+        assert wall["y1"] == 0.0
+        assert wall["y2"] == 12.0
+
+    def test_variable_axis_no_snap_beyond_tolerance(self):
+        """Wall endpoints > var_tolerance from beam endpoints → no variable snap."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 6.0, "x2": 8.5, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall from x=1.0 to x=7.0 — endpoints 1.0m and 1.5m from beam ends
+                {"x1": 1.0, "y1": 6.3, "x2": 7.0, "y2": 6.3,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0, var_tolerance=0.5)
+        wall = result["walls"][0]
+        # Fixed axis should snap
+        assert wall["y1"] == 6.0
+        # Variable axis should NOT snap (both > 0.5m)
+        assert wall["x1"] == 1.0
+        assert wall["x2"] == 7.0
+
+    def test_variable_axis_snap_to_multi_beam_endpoints(self):
+        """Wall snaps to endpoints from multiple colinear beams."""
+        elements = {
+            "beams": [
+                # Beam A from x=0 to x=5 at y=6.0
+                {"x1": 0.0, "y1": 6.0, "x2": 5.0, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                # Beam B from x=5 to x=10 at y=6.0
+                {"x1": 5.0, "y1": 6.0, "x2": 10.0, "y2": 6.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall slightly shorter, offset 0.2m in Y
+                {"x1": 0.3, "y1": 6.2, "x2": 9.8, "y2": 6.2,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+            "columns": [],
+        }
+        result, details = snap_walls_to_beams(elements, tolerance=1.0, var_tolerance=0.5)
+        wall = result["walls"][0]
+        assert wall["x1"] == 0.0
+        assert wall["x2"] == 10.0
+
     def test_wall_beam_snap_in_full_pipeline(self):
         """Wall-beam snap integrates into validate_beams report."""
         grid_data = {

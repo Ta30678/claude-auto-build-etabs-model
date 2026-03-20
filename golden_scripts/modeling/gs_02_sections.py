@@ -18,6 +18,7 @@ import time
 _dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
+from gs_01_init import _reacquire_SapModel
 from constants import (
     CONCRETE_GRADES,
     SHELL_MEMBRANE, SHELL_THICK,
@@ -428,6 +429,11 @@ def run(SapModel, config):
     # Assign rebar to all frame sections
     print("\n--- Assigning rebar ---")
     print(f"  [DIAG] About to assign rebar to {len(frame_unique)} sections")
+    # Re-acquire COM proxy — prevents corruption from heavy section creation
+    SapModel = _reacquire_SapModel()
+    SapModel.SetPresentUnits(12)  # Restore Ton_m units
+    SapModel.SetModelIsLocked(False)
+    print("  [DIAG] Re-acquired COM reference before rebar assignment")
     assign_all_rebar(SapModel, frame_unique, existing_materials, save_path=save_path)
 
     # Checkpoint save after rebar assignment
