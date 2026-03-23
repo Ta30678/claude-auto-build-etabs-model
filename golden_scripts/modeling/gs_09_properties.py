@@ -16,6 +16,7 @@ sys.path.insert(0, _dir)                      # modeling/ (sibling imports)
 sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import (
     BEAM_MODIFIERS, COL_MODIFIERS,
+    SLAB_WALL_MODIFIERS, RAFT_MODIFIERS,
     RIGID_ZONE_FACTOR,
     RELEASE_M2M3, NO_RELEASE, ZERO_SPRINGS,
 )
@@ -60,6 +61,49 @@ def assign_frame_modifiers(SapModel):
 
     print(f"  Frame modifiers: {beam_count} beams, {col_count} columns")
     return beam_count, col_count
+
+
+def assign_area_modifiers(SapModel):
+    """Assign stiffness modifiers to ALL area objects.
+
+    FS (raft): RAFT_MODIFIERS
+    S/W (slab/wall): SLAB_WALL_MODIFIERS
+    """
+    ret = SapModel.DatabaseTables.GetTableForDisplayArray(
+        "Area Assignments - Summary", [], "All", 0, [], 0, [])
+    if ret[5] != 0 or ret[3] <= 0:
+        print("  No area objects found.")
+        return 0, 0
+
+    fields = list(ret[2])
+    data = list(ret[4])
+    nf = len(fields)
+    name_idx = fields.index("UniqueName")
+    sec_idx = (fields.index("SectProp")
+               if "SectProp" in fields
+               else fields.index("Section"))
+
+    raft_count, other_count = 0, 0
+    for i in range(ret[3]):
+        row = data[i * nf:(i + 1) * nf]
+        obj_name = row[name_idx]
+        sec_name = row[sec_idx]
+
+        if sec_name.startswith("FS"):
+            mods = RAFT_MODIFIERS
+            r = SapModel.AreaObj.SetModifiers(obj_name, mods)
+            rc = r[-1] if isinstance(r, (list, tuple)) else r
+            if rc == 0:
+                raft_count += 1
+        else:
+            mods = SLAB_WALL_MODIFIERS
+            r = SapModel.AreaObj.SetModifiers(obj_name, mods)
+            rc = r[-1] if isinstance(r, (list, tuple)) else r
+            if rc == 0:
+                other_count += 1
+
+    print(f"  Area modifiers: {raft_count} raft (FS), {other_count} slab/wall")
+    return raft_count, other_count
 
 
 def assign_rigid_zones(SapModel):
@@ -167,6 +211,9 @@ def run(SapModel, config):
 
     print("\n--- Frame Modifiers ---")
     assign_frame_modifiers(SapModel)
+
+    print("\n--- Area Modifiers ---")
+    assign_area_modifiers(SapModel)
 
     print("\n--- Rigid Zones ---")
     assign_rigid_zones(SapModel)

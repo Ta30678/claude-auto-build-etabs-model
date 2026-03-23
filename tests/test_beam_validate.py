@@ -2051,3 +2051,252 @@ class TestOutlineAwareAngleCorrection:
         assert len(report) == 1
         assert "outline_rescue" in report[0]["target_grid_label"]
         assert corrected["walls"][0]["y1"] == 16.8
+
+
+# ---------------------------------------------------------------------------
+# Grid Fallback Snap Tests
+# ---------------------------------------------------------------------------
+
+class TestGridFallbackSnap:
+    """Tests for the grid intersection / grid line fallback snap mechanism."""
+
+    @pytest.fixture
+    def simple_grid_data(self):
+        return {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 8.50}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 6.00}],
+        }
+
+    def test_no_grid_snap_flag(self, simple_grid_data):
+        """With no_grid_snap=True, beams that only match grid targets
+        remain unsnapped (warning)."""
+        elements = {
+            "columns": [],
+            "walls": [],
+            "beams": [
+                {"x1": 0.0, "y1": 0.0,
+                 "x2": 8.52, "y2": 0.02,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_beams(
+            elements, simple_grid_data, tolerance=1.5, no_grid_snap=True)
+        beam = validated["beams"][0]
+        # Start (0,0) is exact — no snap needed. End (8.52, 0.02) has no
+        # structural target, and grid snap is disabled → unsnapped.
+        assert report["grid_intersection_snapped_endpoints"] == 0
+        assert report["grid_line_snapped_endpoints"] == 0
+        assert report["warning_endpoints"] >= 1
+
+    def test_structural_preferred_over_grid(self, simple_grid_data):
+        """Beam near both a column and grid intersection snaps to column
+        in the main round, not delayed to fallback."""
+        elements = {
+            "columns": [
+                {"grid_x": 0.0, "grid_y": 0.0, "floors": ["1F"]},
+                {"grid_x": 8.50, "grid_y": 0.0, "floors": ["1F"]},
+            ],
+            "walls": [],
+            "beams": [
+                {"x1": 0.02, "y1": 0.01,
+                 "x2": 8.48, "y2": 0.02,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_beams(
+            elements, simple_grid_data, tolerance=1.5)
+        beam = validated["beams"][0]
+        # Both endpoints snap to columns in main round
+        assert beam["x1"] == 0.0
+        assert beam["y1"] == 0.0
+        assert beam["x2"] == 8.50
+        assert beam["y2"] == 0.0
+        # No fallback needed
+        assert report["grid_intersection_snapped_endpoints"] == 0
+
+    def test_grid_intersection_fallback(self, simple_grid_data):
+        """Beam with no structural targets snaps to grid intersection
+        in Fallback A."""
+        elements = {
+            "columns": [],
+            "walls": [],
+            "beams": [
+                {"x1": 0.0, "y1": 0.0,
+                 "x2": 8.52, "y2": 0.02,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_beams(
+            elements, simple_grid_data, tolerance=1.5)
+        beam = validated["beams"][0]
+        # End should snap to grid intersection (8.50, 0.0)
+        assert beam["x2"] == 8.50
+        assert beam["y2"] == 0.0
+        assert report["grid_intersection_snapped_endpoints"] >= 1
+
+    def test_grid_line_fallback(self):
+        """Beam endpoint on a grid line but NOT at an intersection
+        catches by Fallback B (grid lines).
+
+        X-direction beam near vertical X grid line at X=10.
+        End (10.02, 3.0) is on grid line X=10 but Y=3 is not a grid
+        intersection → Fallback A misses, Fallback B catches."""
+        grid_data = {
+            "x": [{"label": "A", "coordinate": 0.0},
+                   {"label": "B", "coordinate": 10.0}],
+            "y": [{"label": "1", "coordinate": 0.0},
+                   {"label": "2", "coordinate": 10.0}],
+        }
+        elements = {
+            "columns": [],
+            "walls": [],
+            "beams": [
+                {"x1": 0.0, "y1": 3.0,
+                 "x2": 10.02, "y2": 3.0,
+                 "section": "B40X60", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_beams(
+            elements, grid_data, tolerance=1.5)
+        beam = validated["beams"][0]
+        # End should snap to grid line X=10 at y=3.0
+        assert beam["x2"] == 10.0
+        assert report["grid_line_snapped_endpoints"] >= 1
+
+    def test_report_has_fallback_fields(self, simple_grid_data):
+        """Report always includes grid fallback fields."""
+        elements = {
+            "columns": [], "walls": [],
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 5.0, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+        }
+        _, report = validate_beams(elements, simple_grid_data, tolerance=1.5)
+        assert "grid_intersection_snapped_endpoints" in report
+        assert "grid_line_snapped_endpoints" in report
+
+
+class TestIterativeSplit:
+    """Tests for iterative beam/wall splitting (multi-pass convergence).
+
+    Long beams (e.g. 44m FWB perimeter) may have perpendicular crossings
+    near their endpoints (t<=0.02, filtered in pass 1). After column splits
+    shorten the beams, pass 2 finds those crossings at interior t-values.
+    """
+
+    def test_long_beam_near_endpoint_crossing(self):
+        """Crossing near endpoint of long beam: t=0.011 on 44m (filtered),
+        but t=0.059 on 8.5m sub-beam after column split (passes)."""
+        elements = {
+            "beams": [
+                # Long FWB: 0 to 44m along X
+                {"x1": 0.0, "y1": 0.0, "x2": 44.0, "y2": 0.0,
+                 "section": "FWB60X230", "floors": ["B3F"]},
+                # Perpendicular FWB crossing at x=0.5
+                {"x1": 0.5, "y1": -5.0, "x2": 0.5, "y2": 5.0,
+                 "section": "FWB60X230", "floors": ["B3F"]},
+            ],
+            "columns": [
+                # Column at x=8.5 — splits the long FWB in pass 1
+                {"grid_x": 8.5, "grid_y": 0.0, "floors": ["B3F"]},
+            ],
+            "walls": [],
+        }
+        grid_data = {"x": [], "y": []}
+        # Pass 1: column splits FWB at x=8.5.
+        #         Crossing at x=0.5 has t=0.5/44=0.011 → filtered (< 0.02)
+        # Pass 2: sub-beam [0,0]-[8.5,0] rechecked, t=0.5/8.5=0.059 → split
+        validated, report = validate_beams(
+            elements, grid_data, tolerance=1.5, split_tolerance=0.15,
+            no_angle_correct=True, no_cluster=True, no_grid_snap=True)
+
+        fwb_h = [b for b in validated["beams"]
+                 if b["section"] == "FWB60X230"
+                 and abs(b["y1"] - b["y2"]) < 0.01]
+        # Expect 3 horizontal segments: [0,0.5], [0.5,8.5], [8.5,44]
+        assert len(fwb_h) == 3
+        x_vals = sorted(set(
+            [round(b["x1"], 2) for b in fwb_h]
+            + [round(b["x2"], 2) for b in fwb_h]))
+        assert any(abs(x - 0.5) < 0.05 for x in x_vals), \
+            f"Expected split at x≈0.5, got endpoints: {x_vals}"
+        assert report.get("split_iterations", 1) >= 2
+
+    def test_single_pass_sufficient(self):
+        """When all splits are found in pass 1, only needs 1 productive pass
+        plus 1 verification pass (split_iterations=2)."""
+        elements = {
+            "beams": [
+                {"x1": 0.0, "y1": 0.0, "x2": 17.0, "y2": 0.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "columns": [
+                {"grid_x": 8.5, "grid_y": 0.0, "floors": ["1F"]},
+            ],
+            "walls": [],
+        }
+        grid_data = {"x": [], "y": []}
+        validated, report = validate_beams(
+            elements, grid_data, tolerance=1.5, split_tolerance=0.15,
+            no_angle_correct=True, no_cluster=True, no_grid_snap=True)
+        assert len(validated["beams"]) == 2
+        # 1 productive + 1 verification = 2 iterations
+        assert report["split_iterations"] == 2
+        assert report["split_beams"] == 1
+
+    def test_fwb_perimeter_with_offset_corners(self):
+        """4 FWBs forming a rectangle with corners offset past grid.
+        Pass 1 splits by columns; pass 2 splits at FWB-FWB crossings."""
+        # Rectangle perimeter with corners extending 0.6m past grid
+        # Grid corners at (0,0), (30,0), (30,20), (0,20)
+        # FWBs extend to (-0.6, -0.6) etc.
+        elements = {
+            "beams": [
+                # Bottom: extends 0.6m past grid on each side
+                {"x1": -0.6, "y1": 0.0, "x2": 30.6, "y2": 0.0,
+                 "section": "FWB60X230", "floors": ["B3F"]},
+                # Top
+                {"x1": -0.6, "y1": 20.0, "x2": 30.6, "y2": 20.0,
+                 "section": "FWB60X230", "floors": ["B3F"]},
+                # Left: extends 0.6m past grid on each side
+                {"x1": 0.0, "y1": -0.6, "x2": 0.0, "y2": 20.6,
+                 "section": "FWB60X230", "floors": ["B3F"]},
+                # Right
+                {"x1": 30.0, "y1": -0.6, "x2": 30.0, "y2": 20.6,
+                 "section": "FWB60X230", "floors": ["B3F"]},
+            ],
+            "columns": [
+                # Intermediate columns along bottom/top at x=10, x=20
+                {"grid_x": 10.0, "grid_y": 0.0, "floors": ["B3F"]},
+                {"grid_x": 20.0, "grid_y": 0.0, "floors": ["B3F"]},
+                {"grid_x": 10.0, "grid_y": 20.0, "floors": ["B3F"]},
+                {"grid_x": 20.0, "grid_y": 20.0, "floors": ["B3F"]},
+                # Intermediate columns along left/right at y=10
+                {"grid_x": 0.0, "grid_y": 10.0, "floors": ["B3F"]},
+                {"grid_x": 30.0, "grid_y": 10.0, "floors": ["B3F"]},
+            ],
+            "walls": [],
+        }
+        grid_data = {"x": [], "y": []}
+        validated, report = validate_beams(
+            elements, grid_data, tolerance=1.5, split_tolerance=0.15,
+            no_angle_correct=True, no_cluster=True, no_grid_snap=True)
+
+        fwb = [b for b in validated["beams"]
+               if b["section"] == "FWB60X230"]
+        # Bottom (31.2m): cols at x=10,20 → 3 segs. FWB crossings at x=0,30
+        #   → sub-beam [-0.6,0]-[10,0] split at x=0 → 2 segs
+        #   → sub-beam [20,0]-[30.6,0] split at x=30 → 2 segs
+        #   = 1 + 1 + 2 + 1 + 1 = 5 (but 0.6m tail segs kept since > 0.3m)
+        # Top: same → 5
+        # Left (21.2m): col at y=10 → 2 segs. FWB crossings at y=0,20
+        #   → sub-beam [-0.6,0]-[10,0] split at y=0 → 2 segs
+        #   → sub-beam [10,0]-[20.6,0] split at y=20 → 2 segs
+        #   = 1 + 1 + 1 + 1 = 4
+        # Right: same → 4
+        # Total: 5 + 5 + 4 + 4 = 18
+        assert len(fwb) == 18, f"Expected 18 FWB segments, got {len(fwb)}"
+        assert report.get("split_iterations", 1) >= 2

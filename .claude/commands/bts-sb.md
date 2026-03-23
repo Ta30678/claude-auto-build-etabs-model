@@ -179,9 +179,19 @@ python -m golden_scripts.tools.elements_merge \
    - 如果只有 S* 沒有 FS*，`RAFT_THICKNESS` 預設 100
    - 如果只有 FS* 沒有 S*，`SLAB_THICKNESS` 預設 15
    - 印出偵測結果：`Auto-detected: SLAB_THICKNESS=15cm (from 12 S15 zones), RAFT_THICKNESS=100cm (from 4 FS100 zones)`
+   - **印出 section 分佈**：`Slab zone distribution: S15=8, S20=12, FS100=4`
+   - **⚠️ 若圖例有多種 slab section 但 zones 全為同一 section → 印警告並建議檢查 per-slide PNG 中的 slab zone 著色是否正確**
 
 2. 如果 `slab_zones` 不存在或為空：
    - 詢問用戶 `slab_thickness` 和 `raft_thickness`
+
+#### Step B2.5: 驗證 Slab Zone 視覺化
+
+SB-READER 輸出的 per-slide `calibrated.png` 現在包含 slab zone 填色（底層半透明色塊）。
+Team Lead 應檢查：
+- 每張 per-slide PNG 中 slab zone 的顏色是否與 PPT 圖例一致
+- 不同板厚區域是否有不同顏色（而非全部同色）
+- slab_debug/ 中的 `slabs.png` 也使用 PPT 圖例配色
 
 #### Step C: SB Patch
 

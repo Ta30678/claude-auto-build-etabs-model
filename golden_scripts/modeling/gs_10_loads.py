@@ -352,18 +352,43 @@ def assign_foundation(SapModel, config):
                             r_count += 1
                     print(f"  Base restraints (UX,UY): {r_count}/{len(foundation_points)}")
 
-                    # Assign vertical springs
-                    if kv:
-                        springs = [0, 0, kv, 0, 0, 0]
-                        s_count = 0
-                        for pt in foundation_points:
-                            r = SapModel.PointObj.SetSpring(pt, springs)
-                            rc = r[-1] if isinstance(r, (list, tuple)) else r
-                            if rc == 0:
-                                s_count += 1
-                        print(f"  Point springs (Kv={kv}): {s_count}/{len(foundation_points)}")
         except Exception as e:
             print(f"  WARNING: Foundation assignment failed: {e}")
+
+    # Area springs (Kv) on FS foundation slabs
+    if kv:
+        try:
+            spring_prop = "FS_Kv"
+            SapModel.PropAreaSpring.SetAreaSpringProp(
+                spring_prop, 0, 0, kv, 0)
+
+            ret = SapModel.DatabaseTables.GetTableForDisplayArray(
+                "Area Assignments - Summary", [], "All", 0, [], 0, [])
+            if ret[5] == 0 and ret[3] > 0:
+                fields = list(ret[2])
+                data = list(ret[4])
+                nf = len(fields)
+                name_idx = fields.index("UniqueName")
+                sec_idx = (fields.index("SectProp")
+                           if "SectProp" in fields
+                           else fields.index("Section"))
+                fs_names = []
+                for i in range(ret[3]):
+                    row = data[i * nf:(i + 1) * nf]
+                    if row[sec_idx].startswith("FS"):
+                        fs_names.append(row[name_idx])
+
+                s_count = 0
+                for name in fs_names:
+                    r = SapModel.AreaObj.SetSpringAssignment(name, spring_prop)
+                    rc = r[-1] if isinstance(r, (list, tuple)) else r
+                    if rc == 0:
+                        s_count += 1
+                print(f"  FS area springs (Kv={kv}): {s_count}/{len(fs_names)}")
+            else:
+                print("  No area objects found for FS spring assignment.")
+        except Exception as e:
+            print(f"  WARNING: FS area spring assignment failed: {e}")
 
     # Edge beam line springs — auto-detect FWB (基礎壁梁) beams
     if kw:

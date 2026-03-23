@@ -468,3 +468,123 @@ class TestZoneFloorFiltering:
         entry_3f = [e for e in entries if "3F" in e["floors"]][0]
         assert entry_2f["section"] == "S15"  # default
         assert entry_3f["section"] == "S20"  # zone match
+
+
+# ---------------------------------------------------------------------------
+# Step 6: sb_validate slab zone pass-through + validation
+# ---------------------------------------------------------------------------
+
+class TestSlabZoneValidation:
+    """Slab zone validation logic in sb_validate."""
+
+    def test_slab_zone_passthrough(self):
+        """slab_zones should survive sb_validate unchanged."""
+        from golden_scripts.tools.sb_validate import _validate_slab_zones
+
+        sb_data = {
+            "small_beams": [],
+            "slab_zones": [
+                {"section": "S15", "corners": [[0, 0], [5, 0], [5, 5], [0, 5]],
+                 "color_hex": "88CC88", "floors": ["2F"]},
+                {"section": "S20", "corners": [[5, 0], [10, 0], [10, 5], [5, 5]],
+                 "color_hex": "FFFF66", "floors": ["2F"]},
+            ],
+        }
+        report = _validate_slab_zones(sb_data)
+        assert report["total_zones"] == 2
+        assert report["sections"] == {"S15": 1, "S20": 1}
+        assert len(report["warnings"]) == 0
+
+    def test_single_section_warning(self):
+        """Warn when all zones have the same section."""
+        from golden_scripts.tools.sb_validate import _validate_slab_zones
+
+        sb_data = {
+            "slab_zones": [
+                {"section": "S20", "corners": [[0, 0], [5, 0], [5, 5], [0, 5]],
+                 "floors": ["2F"]},
+                {"section": "S20", "corners": [[5, 0], [10, 0], [10, 5], [5, 5]],
+                 "floors": ["2F"]},
+                {"section": "S20", "corners": [[0, 5], [5, 5], [5, 10], [0, 10]],
+                 "floors": ["2F"]},
+            ],
+        }
+        report = _validate_slab_zones(sb_data)
+        assert report["total_zones"] == 3
+        assert len(report["warnings"]) == 1
+        assert "same section" in report["warnings"][0]
+
+    def test_empty_zones_no_warning(self):
+        """No warnings for empty slab_zones."""
+        from golden_scripts.tools.sb_validate import _validate_slab_zones
+
+        report = _validate_slab_zones({"small_beams": []})
+        assert report["total_zones"] == 0
+        assert len(report["warnings"]) == 0
+
+    def test_single_zone_no_warning(self):
+        """Single zone should not warn (might legitimately have one thickness)."""
+        from golden_scripts.tools.sb_validate import _validate_slab_zones
+
+        sb_data = {
+            "slab_zones": [
+                {"section": "S20", "corners": [[0, 0], [5, 0], [5, 5], [0, 5]],
+                 "floors": ["2F"]},
+            ],
+        }
+        report = _validate_slab_zones(sb_data)
+        assert report["total_zones"] == 1
+        assert len(report["warnings"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# Step 7: plot_elements slab zone rendering
+# ---------------------------------------------------------------------------
+
+class TestPlotElementsSlabZones:
+    """plot_elements.py should render slab zones when present."""
+
+    def test_draw_slab_zones_no_crash(self):
+        """_draw_slab_zones runs without error on valid data."""
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from golden_scripts.tools.plot_elements import _draw_slab_zones
+
+        fig, ax = plt.subplots()
+        zones = [
+            {"section": "S15", "corners": [[0, 0], [5, 0], [5, 5], [0, 5]],
+             "color_hex": "88CC88", "floors": ["2F"]},
+            {"section": "S20", "corners": [[5, 0], [10, 0], [10, 5], [5, 5]],
+             "color_hex": "FFFF66", "floors": ["2F"]},
+        ]
+        _draw_slab_zones(ax, zones, {}, show_labels=True)
+        plt.close(fig)
+
+    def test_draw_slab_zones_empty(self):
+        """_draw_slab_zones with empty list should not crash."""
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from golden_scripts.tools.plot_elements import _draw_slab_zones
+
+        fig, ax = plt.subplots()
+        _draw_slab_zones(ax, [], {}, show_labels=True)
+        plt.close(fig)
+
+    def test_draw_slab_zones_short_color_hex(self):
+        """_draw_slab_zones handles short/missing color_hex gracefully."""
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from golden_scripts.tools.plot_elements import _draw_slab_zones
+
+        fig, ax = plt.subplots()
+        zones = [
+            {"section": "S15", "corners": [[0, 0], [5, 0], [5, 5], [0, 5]],
+             "color_hex": "AB", "floors": ["2F"]},  # too short
+            {"section": "S20", "corners": [[5, 0], [10, 0], [10, 5], [5, 5]],
+             "floors": ["2F"]},  # missing color_hex
+        ]
+        _draw_slab_zones(ax, zones, {}, show_labels=True)
+        plt.close(fig)

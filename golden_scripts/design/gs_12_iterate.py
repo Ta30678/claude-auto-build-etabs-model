@@ -13,6 +13,7 @@ Two phases:
 import sys
 import os
 import re
+import json as _json
 from collections import Counter
 
 _dir = os.path.dirname(os.path.abspath(__file__))
@@ -263,7 +264,7 @@ def assign_sway_types(SapModel, frames_data, super_stories, sub_stories):
         if ret == 0:
             count += 1
 
-    print(f"  Sway types assigned: {count} frames")
+    print(f"  Sway types assigned: {count} frames", flush=True)
 
 
 def setup_combos(SapModel, enable_list, disable_list):
@@ -281,16 +282,16 @@ def setup_combos(SapModel, enable_list, disable_list):
 def run_analysis_and_design(SapModel, design_code=DESIGN_CODE):
     """Save, run analysis, set design code, run design."""
     SapModel.File.Save()
-    print("    Running analysis...")
+    print("    Running analysis...", flush=True)
     ret = SapModel.Analyze.RunAnalysis()
     if ret != 0:
-        print(f"    WARNING: RunAnalysis returned {ret}")
+        print(f"    WARNING: RunAnalysis returned {ret}", flush=True)
 
     SapModel.DesignConcrete.SetCode(design_code)
-    print("    Running concrete design...")
+    print("    Running concrete design...", flush=True)
     ret = SapModel.DesignConcrete.StartDesign()
     if ret != 0:
-        print(f"    WARNING: StartDesign returned {ret}")
+        print(f"    WARNING: StartDesign returned {ret}", flush=True)
 
 
 def _classify_frames(frames_data, super_stories, skip_prefixes):
@@ -338,6 +339,7 @@ def _classify_frames(frames_data, super_stories, skip_prefixes):
 def extract_column_results(SapModel, columns):
     """Get design results for columns and compute rebar ratios."""
     results = []
+    errors = []
     for col in columns:
         try:
             ret = SapModel.DesignConcrete.GetSummaryResultsColumn(
@@ -348,14 +350,23 @@ def extract_column_results(SapModel, columns):
                 max_pmm = max(pmm_areas) if pmm_areas else 0.0
                 ratio = compute_column_ratio(max_pmm, col["w_cm"], col["d_cm"])
                 results.append({**col, "pmm_area": max_pmm, "ratio": ratio})
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"  ERROR: {col['frame']} ({col['prop']} @ {col['story']}): {e}")
+    if errors:
+        print(f"    Column result errors: {len(errors)}/{len(columns)}", flush=True)
+        for msg in errors[:20]:
+            print(msg, flush=True)
+        if len(errors) > 20:
+            print(f"    ... and {len(errors) - 20} more errors", flush=True)
+    if len(results) == 0 and len(columns) > 0:
+        print(f"    WARNING: 0 column results extracted from {len(columns)} columns", flush=True)
     return results
 
 
 def extract_beam_results(SapModel, beams):
     """Get design results for beams and compute rebar ratios."""
     results = []
+    errors = []
     for beam in beams:
         try:
             ret = SapModel.DesignConcrete.GetSummaryResultsBeam(
@@ -370,8 +381,16 @@ def extract_beam_results(SapModel, beams):
                 max_area = max(max_top, max_bot)
                 ratio = compute_beam_ratio(max_area, beam["w_cm"], beam["d_cm"])
                 results.append({**beam, "max_area": max_area, "ratio": ratio})
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"  ERROR: {beam['frame']} ({beam['prop']} @ {beam['story']}): {e}")
+    if errors:
+        print(f"    Beam result errors: {len(errors)}/{len(beams)}", flush=True)
+        for msg in errors[:20]:
+            print(msg, flush=True)
+        if len(errors) > 20:
+            print(f"    ... and {len(errors) - 20} more errors", flush=True)
+    if len(results) == 0 and len(beams) > 0:
+        print(f"    WARNING: 0 beam results extracted from {len(beams)} beams", flush=True)
     return results
 
 
@@ -474,8 +493,85 @@ def _build_beam_groups(beam_results):
     return groups
 
 
+def _save_iteration_report(iter_dir, iteration, col_results, beam_results,
+                           ratio_col_changes, constraint_col_changes, beam_changes):
+    """Save ratio_report.json and summary.txt for one iteration."""
+    os.makedirs(iter_dir, exist_ok=True)
+
+    col_ratios = [c["ratio"] for c in col_results] if col_results else []
+    beam_ratios = [b["ratio"] for b in beam_results] if beam_results else []
+
+    report = {
+        "iteration": iteration,
+        "columns": [
+            {"frame": c["frame"], "prop": c["prop"], "story": c["story"],
+             "ratio": round(c["ratio"], 6), "pmm_area": round(c.get("pmm_area", 0), 6),
+             "w_cm": c["w_cm"], "d_cm": c["d_cm"]}
+            for c in col_results
+        ],
+        "beams": [
+            {"frame": b["frame"], "prop": b["prop"], "story": b["story"],
+             "ratio": round(b["ratio"], 6), "max_area": round(b.get("max_area", 0), 6),
+             "w_cm": b["w_cm"], "d_cm": b["d_cm"]}
+            for b in beam_results
+        ],
+        "changes": {
+            "columns_ratio": len(ratio_col_changes),
+            "columns_constraint": len(constraint_col_changes),
+            "beams": len(beam_changes),
+        },
+        "stats": {
+            "col_count": len(col_results),
+            "col_min": round(min(col_ratios), 6) if col_ratios else None,
+            "col_max": round(max(col_ratios), 6) if col_ratios else None,
+            "col_avg": round(sum(col_ratios) / len(col_ratios), 6) if col_ratios else None,
+            "beam_count": len(beam_results),
+            "beam_min": round(min(beam_ratios), 6) if beam_ratios else None,
+            "beam_max": round(max(beam_ratios), 6) if beam_ratios else None,
+            "beam_avg": round(sum(beam_ratios) / len(beam_ratios), 6) if beam_ratios else None,
+        },
+    }
+
+    with open(os.path.join(iter_dir, "ratio_report.json"), "w", encoding="utf-8") as f:
+        _json.dump(report, f, indent=2, ensure_ascii=False)
+
+    # summary.txt
+    lines = [
+        f"Iteration {iteration}",
+        f"Columns: {len(col_results)} results",
+    ]
+    if col_ratios:
+        lines.append(f"  Ratio: min={min(col_ratios):.4f}  max={max(col_ratios):.4f}  "
+                     f"avg={sum(col_ratios)/len(col_ratios):.4f}")
+    lines.append(f"Beams: {len(beam_results)} results")
+    if beam_ratios:
+        lines.append(f"  Ratio: min={min(beam_ratios):.4f}  max={max(beam_ratios):.4f}  "
+                     f"avg={sum(beam_ratios)/len(beam_ratios):.4f}")
+    lines.append(f"Changes: {len(ratio_col_changes)} col(ratio) + "
+                 f"{len(constraint_col_changes)} col(constraint) + "
+                 f"{len(beam_changes)} beam")
+
+    with open(os.path.join(iter_dir, "summary.txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+    return report
+
+
+def _save_final_summary(output_dir, converged, total_iterations, last_report):
+    """Save final_summary.json after iteration loop completes."""
+    summary = {
+        "converged": converged,
+        "total_iterations": total_iterations,
+        "final_stats": last_report.get("stats", {}) if last_report else {},
+    }
+    with open(os.path.join(output_dir, "final_summary.json"), "w", encoding="utf-8") as f:
+        _json.dump(summary, f, indent=2, ensure_ascii=False)
+
+
 def _iterate_superstructure(SapModel, config, strength_lookup,
-                            super_stories, all_story_names, iter_cfg):
+                            super_stories, sub_stories,
+                            all_story_names, story_elevations,
+                            iter_cfg, output_dir=None, grid_lines=None):
     """Run the superstructure iteration loop. Returns final column sizes by position."""
     max_iter = iter_cfg["max_iterations"]
     col_down = iter_cfg["col_rebar_downsize"]
@@ -492,9 +588,12 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
     osc_history = {}
 
     final_col_sizes = {}  # {(x, y): {story: (w, d)}}
+    last_report = None
+    converged = False
+    total_iterations = 0
 
     for iteration in range(1, max_iter + 1):
-        print(f"\n  --- Iteration {iteration}/{max_iter} ---")
+        print(f"\n  --- Iteration {iteration}/{max_iter} ---", flush=True)
 
         run_analysis_and_design(SapModel, design_code)
 
@@ -504,12 +603,12 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
         col_results = extract_column_results(SapModel, columns)
         beam_results = extract_beam_results(SapModel, beams)
 
-        print(f"    Columns with results: {len(col_results)}")
-        print(f"    Beams with results:   {len(beam_results)}")
+        print(f"    Columns with results: {len(col_results)}", flush=True)
+        print(f"    Beams with results:   {len(beam_results)}", flush=True)
 
         # ── Column resizing ──
         col_positions = _build_column_positions(col_results)
-        col_changes = []
+        ratio_changed_frames = set()
 
         for pos_key, col_list in col_positions.items():
             for col in col_list:
@@ -517,6 +616,7 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
                     col["ratio"], col["w"], col["d"],
                     step=col_step, down_thresh=col_down, up_thresh=col_up)
                 if proposal:
+                    ratio_changed_frames.add(col["frame"])
                     col["w"], col["d"] = proposal[0], proposal[1]
                     direction = proposal[2]
                     # Oscillation check
@@ -537,20 +637,25 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
         # Enforce column constraints
         enforce_column_constraints(col_positions, strength_lookup, all_story_names)
 
-        # Collect column changes
+        # Collect column changes (separate ratio vs constraint)
+        ratio_col_changes = []
+        constraint_col_changes = []
         for pos_key, col_list in col_positions.items():
             for col in col_list:
                 old_prefix, old_w, old_d, old_fc = parse_frame_section(
                     next((c["prop"] for c in col_results
                           if c["frame"] == col["frame"]), ""))
                 if old_w and (col["w"] != old_w or col["d"] != old_d):
-                    new_sec = ensure_section_exists(
-                        SapModel, "C", col["w"], col["d"], col["fc"])
-                    col_changes.append({
+                    change = {
                         "frame": col["frame"],
-                        "new_section": new_sec,
+                        "new_section": ensure_section_exists(
+                            SapModel, "C", col["w"], col["d"], col["fc"]),
                         "prefix": "C",
-                    })
+                    }
+                    if col["frame"] in ratio_changed_frames:
+                        ratio_col_changes.append(change)
+                    else:
+                        constraint_col_changes.append(change)
             # Track final sizes
             if col_list:
                 final_col_sizes[pos_key] = {
@@ -589,28 +694,88 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
                         "prefix": grp["prefix"],
                     })
 
-        # ── Apply changes ──
-        total_changes = len(col_changes) + len(beam_changes)
-        if total_changes == 0:
-            print(f"    CONVERGED - no changes needed")
+        # ── Convergence check ──
+        ratio_changes = len(ratio_col_changes) + len(beam_changes)
+        constraint_changes = len(constraint_col_changes)
+
+        # Save iteration report + plots
+        total_iterations = iteration
+        if output_dir:
+            iter_dir = os.path.join(output_dir, f"iteration_{iteration}")
+            last_report = _save_iteration_report(
+                iter_dir, iteration, col_results, beam_results,
+                ratio_col_changes, constraint_col_changes, beam_changes)
+            print(f"    Report saved: {iter_dir}/ratio_report.json", flush=True)
+            # Generate plots if grid data available
+            if grid_lines:
+                try:
+                    from design.rc_plotter import generate_iteration_plots
+                    plot_info = generate_iteration_plots(
+                        col_results, beam_results, frames_data,
+                        grid_lines, strength_lookup,
+                        super_stories, sub_stories, all_story_names,
+                        story_elevations, iter_dir,
+                        col_thresholds=(col_down, col_up),
+                        beam_thresholds=(beam_down, beam_up))
+                    last_report["key_floors"] = plot_info["key_floors"]
+                    last_report["top_elevations"] = plot_info["top_elevations"]
+                    # Re-save with plot info
+                    with open(os.path.join(iter_dir, "ratio_report.json"), "w",
+                              encoding="utf-8") as f:
+                        _json.dump(last_report, f, indent=2, ensure_ascii=False)
+                    n_plans = len(plot_info["key_floors"])
+                    n_elevs = (len(plot_info["top_elevations"].get("x", [])) +
+                               len(plot_info["top_elevations"].get("y", [])))
+                    print(f"    Plots: {n_plans} plans + {n_elevs} elevations", flush=True)
+                except Exception as e:
+                    print(f"    WARNING: Plot generation failed: {e}", flush=True)
+
+        if ratio_changes + constraint_changes == 0:
+            print(f"    CONVERGED - no changes needed", flush=True)
+            converged = True
             break
 
-        n_col = apply_frame_changes(SapModel, col_changes)
+        if ratio_changes == 0 and constraint_changes > 0:
+            print(f"    Constraint-only: {constraint_changes} columns (final pass)", flush=True)
+            apply_frame_changes(SapModel, constraint_col_changes)
+            run_analysis_and_design(SapModel, design_code)
+            # Update final sizes after constraint pass
+            frames_data = get_all_frames_data(SapModel)
+            columns2, _ = _classify_frames(frames_data, super_stories, skip)
+            col_results2 = extract_column_results(SapModel, columns2)
+            col_positions2 = _build_column_positions(col_results2)
+            for pk, cl in col_positions2.items():
+                final_col_sizes[pk] = {c["story"]: (c["w"], c["d"]) for c in cl}
+            converged = True
+            break
+
+        # ── Apply changes ──
+        all_col_changes = ratio_col_changes + constraint_col_changes
+        n_col = apply_frame_changes(SapModel, all_col_changes)
         n_beam = apply_frame_changes(SapModel, beam_changes)
-        print(f"    Applied: {n_col} column + {n_beam} beam changes")
+        print(f"    Applied: {n_col} column ({len(ratio_col_changes)} ratio + "
+              f"{len(constraint_col_changes)} constraint) + {n_beam} beam changes", flush=True)
 
         # Summary stats
         if col_results:
             col_ratios = [c["ratio"] for c in col_results]
             print(f"    Column ratios: min={min(col_ratios):.4f} "
-                  f"max={max(col_ratios):.4f} avg={sum(col_ratios)/len(col_ratios):.4f}")
+                  f"max={max(col_ratios):.4f} avg={sum(col_ratios)/len(col_ratios):.4f}",
+                  flush=True)
         if beam_results:
             beam_ratios = [b["ratio"] for b in beam_results]
             print(f"    Beam ratios:   min={min(beam_ratios):.4f} "
-                  f"max={max(beam_ratios):.4f} avg={sum(beam_ratios)/len(beam_ratios):.4f}")
+                  f"max={max(beam_ratios):.4f} avg={sum(beam_ratios)/len(beam_ratios):.4f}",
+                  flush=True)
 
     else:
-        print(f"\n  WARNING: Max iterations ({max_iter}) reached without convergence")
+        print(f"\n  WARNING: Max iterations ({max_iter}) reached without convergence",
+              flush=True)
+
+    # Save final summary
+    if output_dir:
+        _save_final_summary(output_dir, converged, total_iterations, last_report)
+        print(f"  Final summary saved: {output_dir}/final_summary.json", flush=True)
 
     return final_col_sizes
 
@@ -662,9 +827,9 @@ def _enforce_sub_column_sizes(SapModel, config, super_col_sizes,
 
     if changes:
         n = apply_frame_changes(SapModel, changes)
-        print(f"  Substructure columns upsized: {n}")
+        print(f"  Substructure columns upsized: {n}", flush=True)
     else:
-        print(f"  Substructure columns: all OK (>= superstructure)")
+        print(f"  Substructure columns: all OK (>= superstructure)", flush=True)
 
 
 # ======================================================================
@@ -729,32 +894,59 @@ def build_config_from_etabs(SapModel):
         "iteration": {},  # use all defaults from constants
     }
 
-    print(f"  Auto-extracted config from ETABS model:")
-    print(f"    Stories: {num_stories} ({all_story_names[0]} ~ {all_story_names[-1]})")
-    print(f"    Base elevation: {base_elev}m")
-    print(f"    Strength zones: {len(strength_map)} stories with fc data")
+    print(f"  Auto-extracted config from ETABS model:", flush=True)
+    print(f"    Stories: {num_stories} ({all_story_names[0]} ~ {all_story_names[-1]})", flush=True)
+    print(f"    Base elevation: {base_elev}m", flush=True)
+    print(f"    Strength zones: {len(strength_map)} stories with fc data", flush=True)
 
     return config
+
+
+def _read_super_col_sizes_from_etabs(SapModel, super_stories):
+    """Read current superstructure column sizes from ETABS.
+
+    Used by phase="sub" when running independently without prior phase="super".
+    Returns {(x, y): {story: (w_cm, d_cm)}}.
+    """
+    frames_data = get_all_frames_data(SapModel)
+    super_set = set(super_stories)
+    positions = {}
+    for i in range(frames_data["count"]):
+        story = frames_data["stories"][i]
+        if story not in super_set:
+            continue
+        prop = frames_data["props"][i]
+        prefix, w_cm, d_cm, fc = parse_frame_section(prop)
+        if prefix != "C" or not _is_vertical(i, frames_data):
+            continue
+        x = round(frames_data["pt1x"][i], 2)
+        y = round(frames_data["pt1y"][i], 2)
+        positions.setdefault((x, y), {})[story] = (w_cm, d_cm)
+    return positions
 
 
 # ======================================================================
 # Main Entry Point
 # ======================================================================
 
-def run(SapModel, config=None):
+def run(SapModel, config=None, phase="both", output_dir=None):
     """Execute step 12: analysis-design iteration loop.
 
-    If config is None, automatically extracts all needed parameters
-    from the current ETABS model (one-time read).
+    Args:
+        SapModel: ETABS COM object.
+        config: model_config.json dict, or None to auto-extract from ETABS.
+        phase: "both" (default), "super" (USS only), or "sub" (BUSS only).
+        output_dir: directory for iteration outputs (default: "rc_iterations").
     """
-    print("=" * 60)
-    print("STEP 12: Analysis-Design Iteration")
-    print("=" * 60)
+    print("=" * 60, flush=True)
+    print("STEP 12: Analysis-Design Iteration", flush=True)
+    print(f"  Phase: {phase}", flush=True)
+    print("=" * 60, flush=True)
 
     SapModel.SetPresentUnits(UNITS_TON_M)
 
     if config is None:
-        print("\n  No config provided — reading from ETABS model...")
+        print("\n  No config provided — reading from ETABS model...", flush=True)
         config = build_config_from_etabs(SapModel)
 
     # Build iteration config with defaults
@@ -775,8 +967,8 @@ def run(SapModel, config=None):
     # Classify floors
     super_stories, sub_stories, story_elevations, all_story_names = \
         classify_floors(config)
-    print(f"  Superstructure floors: {super_stories}")
-    print(f"  Substructure floors:   {sub_stories}")
+    print(f"  Superstructure floors: {super_stories}", flush=True)
+    print(f"  Substructure floors:   {sub_stories}", flush=True)
 
     # Build strength lookup
     strength_lookup = build_strength_lookup(
@@ -784,51 +976,93 @@ def run(SapModel, config=None):
 
     # Get frames and assign sway types
     frames_data = get_all_frames_data(SapModel)
-    print(f"  Total frames in model: {frames_data['count']}")
+    print(f"  Total frames in model: {frames_data['count']}", flush=True)
 
-    print("\n  Assigning sway types...")
+    print("\n  Assigning sway types...", flush=True)
     assign_sway_types(SapModel, frames_data, super_stories, sub_stories)
 
+    # Output directory
+    if output_dir is None:
+        output_dir = "rc_iterations"
+
+    # Grid lines for plotting
+    grid_lines = config.get("grids")
+    if not grid_lines:
+        try:
+            sys.path.insert(0, os.path.join(_dir, "..", "tools"))
+            from read_grid import read_grid_from_etabs
+            grid_lines = read_grid_from_etabs(SapModel)
+            SapModel.SetPresentUnits(UNITS_TON_M)  # restore after read_grid
+            print(f"  Grid lines read from ETABS: "
+                  f"{len(grid_lines.get('x', []))} X + {len(grid_lines.get('y', []))} Y",
+                  flush=True)
+        except Exception as e:
+            print(f"  WARNING: Could not read grid lines: {e}", flush=True)
+            grid_lines = None
+
     # ── Phase 1: Superstructure Iteration (USS combos) ──
-    print("\n" + "=" * 60)
-    print("  PHASE 1: Superstructure Iteration")
-    print("=" * 60)
+    super_col_sizes = {}
+    if phase in ("both", "super"):
+        print("\n" + "=" * 60, flush=True)
+        print("  PHASE 1: Superstructure Iteration", flush=True)
+        print("=" * 60, flush=True)
 
-    enabled, disabled = setup_combos(SapModel, SUPER_COMBOS, SUB_COMBOS)
-    print(f"  Combos: {enabled} USS enabled, {disabled} BUSS disabled")
+        enabled, disabled = setup_combos(SapModel, SUPER_COMBOS, SUB_COMBOS)
+        print(f"  Combos: {enabled} USS enabled, {disabled} BUSS disabled", flush=True)
 
-    super_col_sizes = _iterate_superstructure(
-        SapModel, config, strength_lookup,
-        super_stories, all_story_names, iter_cfg)
+        super_col_sizes = _iterate_superstructure(
+            SapModel, config, strength_lookup,
+            super_stories, sub_stories,
+            all_story_names, story_elevations,
+            iter_cfg, output_dir=output_dir,
+            grid_lines=grid_lines)
 
     # ── Phase 2: Substructure Check (BUSS combos) ──
-    print("\n" + "=" * 60)
-    print("  PHASE 2: Substructure Check")
-    print("=" * 60)
+    if phase in ("both", "sub"):
+        print("\n" + "=" * 60, flush=True)
+        print("  PHASE 2: Substructure Check", flush=True)
+        print("=" * 60, flush=True)
 
-    enabled, disabled = setup_combos(SapModel, SUB_COMBOS, SUPER_COMBOS)
-    print(f"  Combos: {enabled} BUSS enabled, {disabled} USS disabled")
+        enabled, disabled = setup_combos(SapModel, SUB_COMBOS, SUPER_COMBOS)
+        print(f"  Combos: {enabled} BUSS enabled, {disabled} USS disabled", flush=True)
 
-    _enforce_sub_column_sizes(
-        SapModel, config, super_col_sizes,
-        sub_stories, all_story_names, strength_lookup)
+        # If running sub independently, read super column sizes from ETABS
+        if not super_col_sizes:
+            print("  Reading superstructure column sizes from ETABS...", flush=True)
+            super_col_sizes = _read_super_col_sizes_from_etabs(SapModel, super_stories)
+            print(f"  Found {len(super_col_sizes)} column positions", flush=True)
 
-    # Final design run for substructure
-    print("\n  Final substructure design run...")
-    run_analysis_and_design(SapModel, iter_cfg["design_code"])
+        _enforce_sub_column_sizes(
+            SapModel, config, super_col_sizes,
+            sub_stories, all_story_names, strength_lookup)
+
+        # Final design run for substructure
+        print("\n  Final substructure design run...", flush=True)
+        run_analysis_and_design(SapModel, iter_cfg["design_code"])
 
     SapModel.View.RefreshView(0, False)
-    print("\nStep 12 complete.\n")
+    print("\nStep 12 complete.\n", flush=True)
 
 
 if __name__ == "__main__":
     import json
+    import argparse
     from modeling.gs_01_init import connect_etabs
+
+    parser = argparse.ArgumentParser(description="RC Iteration Analysis-Design")
+    parser.add_argument("--config", type=str, default=None,
+                        help="Path to model_config.json (optional)")
+    parser.add_argument("--phase", choices=["super", "sub", "both"], default="both",
+                        help="Phase to run: super, sub, or both (default: both)")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Output directory for iteration results")
+    args = parser.parse_args()
+
     SapModel = connect_etabs(None)
 
     config = None
-    if len(sys.argv) > 1:
-        with open(sys.argv[1]) as f:
+    if args.config:
+        with open(args.config) as f:
             config = json.load(f)
 
-    run(SapModel, config)
+    run(SapModel, config=config, phase=args.phase, output_dir=args.output_dir)

@@ -250,6 +250,28 @@ def _draw_walls(ax, walls, color_map, show_labels=True):
                     color="black", zorder=5)
 
 
+def _draw_slab_zones(ax, slab_zones, color_map, show_labels=True):
+    """Draw slab zone polygons as filled regions (bottom layer)."""
+    for zone in slab_zones:
+        corners = zone.get("corners", [])
+        if len(corners) < 3:
+            continue
+        color_hex = zone.get("color_hex", "888888")
+        if len(color_hex) < 6:
+            color_hex = "888888"
+        color = f"#{color_hex[-6:].upper()}"
+        xs = [c[0] for c in corners] + [corners[0][0]]
+        ys = [c[1] for c in corners] + [corners[0][1]]
+        ax.fill(xs, ys, alpha=0.15, color=color, zorder=0)
+        ax.plot(xs, ys, "-", linewidth=0.5, color=color, alpha=0.4, zorder=0)
+        if show_labels:
+            section = zone.get("section", "")
+            cx = sum(c[0] for c in corners) / len(corners)
+            cy = sum(c[1] for c in corners) / len(corners)
+            ax.text(cx, cy, section, ha="center", va="center",
+                    fontsize=5, alpha=0.6, zorder=1)
+
+
 # ---------------------------------------------------------------------------
 # Legend panel
 # ---------------------------------------------------------------------------
@@ -280,6 +302,10 @@ def _draw_legend(ax, legend, stats, color_map):
             elif et == "wall":
                 h = mpatches.Patch(facecolor=color, edgecolor="black",
                                    linewidth=0.5, alpha=0.6, label=f"{label_text} (wall)")
+            elif et == "slab":
+                h = mpatches.Patch(facecolor=color, edgecolor=color,
+                                   alpha=0.3, linewidth=0.5,
+                                   label=f"{label_text} (slab)")
             else:
                 h = mpatches.Patch(facecolor=color, label=f"{label_text} ({et})")
             handles.append(h)
@@ -342,6 +368,10 @@ def plot_elements(elements_path, output, grid_data_path=None,
         for elem in data.get(cat, []):
             all_x.extend([elem.get("x1", 0), elem.get("x2", 0)])
             all_y.extend([elem.get("y1", 0), elem.get("y2", 0)])
+    for zone in data.get("slab_zones", []):
+        for c in zone.get("corners", []):
+            all_x.append(c[0])
+            all_y.append(c[1])
 
     if not all_x or not all_y:
         print(f"  WARNING: No elements to plot in {elements_path}")
@@ -368,7 +398,8 @@ def plot_elements(elements_path, output, grid_data_path=None,
         x_min, x_max = min(all_x), max(all_x)
         y_min, y_max = min(all_y), max(all_y)
 
-    # Draw elements (order: walls bottom, beams, small beams, columns on top)
+    # Draw elements (order: slab zones bottom, walls, beams, small beams, columns top)
+    _draw_slab_zones(ax, data.get("slab_zones", []), color_map, show_labels)
     _draw_walls(ax, data.get("walls", []), color_map, show_labels)
     _draw_beams(ax, data.get("beams", []), color_map, show_labels)
     _draw_small_beams(ax, data.get("small_beams", []), color_map, show_labels)

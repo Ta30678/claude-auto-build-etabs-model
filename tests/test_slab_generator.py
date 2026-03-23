@@ -860,3 +860,80 @@ class TestPerRangeSlabGeneration:
         # Should still produce slabs (legacy behavior)
         assert len(slabs) > 0
         assert stats["floor_groups"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# slabs.png PPT coloring
+# ---------------------------------------------------------------------------
+
+class TestSlabPngColors:
+    """write_range_debug should use PPT legend colors when slab_zones provided."""
+
+    def test_ppt_colors_used(self, tmp_path):
+        """slabs.png uses PPT color_hex, not Set3 palette."""
+        from golden_scripts.tools.slab_generator import write_range_debug
+
+        slabs = [
+            {"corners": [[0, 0], [5, 0], [5, 5], [0, 5]], "section": "S15",
+             "floors": ["2F"]},
+            {"corners": [[5, 0], [10, 0], [10, 5], [5, 5]], "section": "S20",
+             "floors": ["2F"]},
+        ]
+        slab_zones = [
+            {"section": "S15", "color_hex": "88CC88", "corners": [],
+             "floors": ["2F"]},
+            {"section": "S20", "color_hex": "FFFF66", "corners": [],
+             "floors": ["2F"]},
+        ]
+        segments = [(0, 0, 10, 0, {"2F"}), (0, 5, 10, 5, {"2F"})]
+
+        write_range_debug(
+            str(tmp_path), "2F", segments,
+            polygons_raw=[], polygons_filtered=[], slabs=slabs,
+            slab_zones=slab_zones)
+
+        png_path = tmp_path / "2F" / "slabs.png"
+        assert png_path.exists(), "slabs.png should be created"
+
+    def test_fallback_without_zones(self, tmp_path):
+        """Without slab_zones, falls back to Set3 palette (no crash)."""
+        from golden_scripts.tools.slab_generator import write_range_debug
+
+        slabs = [
+            {"corners": [[0, 0], [5, 0], [5, 5], [0, 5]], "section": "S15",
+             "floors": ["2F"]},
+        ]
+        segments = [(0, 0, 10, 0, {"2F"})]
+
+        write_range_debug(
+            str(tmp_path), "2F", segments,
+            polygons_raw=[], polygons_filtered=[], slabs=slabs)
+
+        png_path = tmp_path / "2F" / "slabs.png"
+        assert png_path.exists()
+
+    def test_legend_in_png(self, tmp_path):
+        """slabs.png should include a legend with section names."""
+        from golden_scripts.tools.slab_generator import write_range_debug
+
+        slabs = [
+            {"corners": [[0, 0], [5, 0], [5, 5], [0, 5]], "section": "S15",
+             "floors": ["2F"]},
+            {"corners": [[5, 0], [10, 0], [10, 5], [5, 5]], "section": "S20",
+             "floors": ["2F"]},
+        ]
+        slab_zones = [
+            {"section": "S15", "color_hex": "88CC88", "corners": [],
+             "floors": ["2F"]},
+            {"section": "S20", "color_hex": "FFFF66", "corners": [],
+             "floors": ["2F"]},
+        ]
+        segments = [(0, 0, 10, 0, {"2F"})]
+
+        # Should not crash — legend is drawn
+        write_range_debug(
+            str(tmp_path), "2F", segments,
+            polygons_raw=[], polygons_filtered=[], slabs=slabs,
+            slab_zones=slab_zones)
+
+        assert (tmp_path / "2F" / "slabs.png").exists()

@@ -2504,7 +2504,12 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
                 tolerance=rect_tolerance)
             if _sz:
                 all_slab_zones.extend(_sz)
-                print(f"  Slab zones: {len(_sz)}")
+                _sc = {}
+                for _z in _sz:
+                    _s = _z.get("section", "?")
+                    _sc[_s] = _sc.get(_s, 0) + 1
+                _summary = ", ".join(f"{s}={c}" for s, c in sorted(_sc.items()))
+                print(f"  Slab zones: {len(_sz)} ({_summary})")
 
         # Per-slide JSON output (when --slides-info-dir is specified)
         if slides_info_dir:
@@ -2541,7 +2546,28 @@ def process(prs, page_floors, phase, crop=False, crop_dir=None,
                     tolerance=rect_tolerance)
                 if slab_zones:
                     slide_output["slab_zones"] = slab_zones
-                    print(f"  Slab zones: {len(slab_zones)}")
+                    _sc = {}
+                    for _z in slab_zones:
+                        _s = _z.get("section", "?")
+                        _sc[_s] = _sc.get(_s, 0) + 1
+                    _summary = ", ".join(f"{s}={c}" for s, c in sorted(_sc.items()))
+                    print(f"  Slab zones: {len(slab_zones)} ({_summary})")
+                    # Warn if legend has more slab sections than detected
+                    _legend_slab_secs = set()
+                    for _entries in legend.values():
+                        for _e in _entries:
+                            if _e.element_type == "slab" and _e.section:
+                                _legend_slab_secs.add(_e.section)
+                    if len(_legend_slab_secs) > 1 and len(_sc) < len(_legend_slab_secs):
+                        _msg = (f"Legend has {len(_legend_slab_secs)} slab sections "
+                                f"({sorted(_legend_slab_secs)}) but only "
+                                f"{sorted(_sc.keys())} matched in zones")
+                        warnings.append(_msg)
+                        print(f"  WARNING: {_msg}")
+                    slide_meta["slab_zone_stats"] = {
+                        "total": len(slab_zones),
+                        "by_section": _sc,
+                    }
             # Phase 2 per-slide files use sb_ prefix to avoid collision with Phase 1
             if phase == "phase2":
                 slide_json_path = Path(slides_info_dir) / floor_label / "pptx_to_elements" / f"sb_{floor_label}.json"

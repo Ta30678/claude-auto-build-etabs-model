@@ -22,11 +22,10 @@ from gs_01_init import _reacquire_SapModel
 from constants import (
     CONCRETE_GRADES,
     SHELL_MEMBRANE, SHELL_THICK,
-    SLAB_WALL_MODIFIERS, RAFT_MODIFIERS,
     BEAM_COVER_TOP, BEAM_COVER_BOT, FB_COVER_TOP, FB_COVER_BOT,
     COL_COVER, COL_CORNER_BARS, COL_TIE_SPACING,
     COL_REBAR_SIZE, COL_TIE_SIZE, COL_NUM_2DIR_TIE, COL_NUM_3DIR_TIE,
-    parse_frame_section, parse_area_section, is_foundation_beam,
+    parse_frame_section, is_foundation_beam,
     get_frame_dimensions, calc_column_bar_distribution,
 )
 
@@ -319,23 +318,6 @@ def assign_all_rebar(SapModel, frame_sections, existing_materials=None,
     return beam_count, col_count
 
 
-def assign_area_modifiers(SapModel, area_sections, existing_materials=None):
-    """Set stiffness modifiers on area section properties."""
-    count = 0
-    for name, mat, t_m, shell_type in area_sections:
-        if existing_materials is not None and mat not in existing_materials:
-            continue
-        prefix, _, _ = parse_area_section(name)
-        if not prefix:
-            continue
-        mods = RAFT_MODIFIERS if prefix == "FS" else SLAB_WALL_MODIFIERS
-        ret = SapModel.PropArea.SetModifiers(name, mods)
-        retcode = ret[0] if isinstance(ret, (list, tuple)) else ret
-        if retcode == 0:
-            count += 1
-    print(f"  Area modifiers assigned: {count}")
-    return count
-
 
 def run(SapModel, config):
     """Execute step 02: batch section generation."""
@@ -440,10 +422,6 @@ def run(SapModel, config):
     if save_path:
         SapModel.File.Save(os.path.normpath(save_path))
         print("  [Checkpoint] Saved after rebar assignment")
-
-    # Assign area modifiers
-    print("\n--- Assigning area modifiers ---")
-    assign_area_modifiers(SapModel, area_unique, existing_materials)
 
     # Summary
     print(f"\n  Created: {n_frame} frame, {n_area} area | Skipped: {len(bad_names)} (bad name)")

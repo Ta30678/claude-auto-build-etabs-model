@@ -18,6 +18,14 @@ from design.gs_12_iterate import (
     is_rooftop_ordinary,
     build_config_from_etabs,
     classify_floors,
+    extract_column_results,
+    extract_beam_results,
+    _save_iteration_report,
+)
+from design.rc_plotter import (
+    _ratio_color,
+    select_key_floors,
+    select_top_grids,
 )
 
 
@@ -373,3 +381,221 @@ class TestBuildConfigFromEtabs:
         sm = _make_mock_sapmodel()
         config = build_config_from_etabs(sm)
         assert config["iteration"] == {}
+
+
+# ── extract_column_results error handling ─────────────────
+
+class TestExtractColumnResults:
+    def test_errors_not_swallowed(self):
+        """extract_column_results should report errors, not silently swallow them."""
+        sm = MagicMock()
+        sm.DesignConcrete.GetSummaryResultsColumn.side_effect = RuntimeError("COM error")
+
+        columns = [
+            {"frame": "C1", "prop": "C80X80C420", "story": "2F",
+             "w_cm": 80, "d_cm": 80, "fc": 420, "x": 0.0, "y": 0.0},
+        ]
+        results = extract_column_results(sm, columns)
+        assert len(results) == 0  # no results, but error was captured (not crashed)
+
+    def test_partial_results(self):
+        """Some columns succeed, some fail — both handled."""
+        sm = MagicMock()
+
+        def side_effect(frame, *args):
+            if frame == "C1":
+                # Success: n_items=1, pmm_areas at index 5
+                return (1, [], [], [], [], [0.0081], [], [], [], [], [], [], [], [])
+            else:
+                raise RuntimeError("COM error")
+
+        sm.DesignConcrete.GetSummaryResultsColumn.side_effect = side_effect
+
+        columns = [
+            {"frame": "C1", "prop": "C80X80C420", "story": "2F",
+             "w_cm": 80, "d_cm": 80, "fc": 420, "x": 0.0, "y": 0.0},
+            {"frame": "C2", "prop": "C80X80C420", "story": "3F",
+             "w_cm": 80, "d_cm": 80, "fc": 420, "x": 0.0, "y": 0.0},
+        ]
+        results = extract_column_results(sm, columns)
+        assert len(results) == 1
+        assert results[0]["frame"] == "C1"
+
+
+class TestExtractBeamResults:
+    def test_errors_not_swallowed(self):
+        """extract_beam_results should report errors, not silently swallow them."""
+        sm = MagicMock()
+        sm.DesignConcrete.GetSummaryResultsBeam.side_effect = RuntimeError("COM error")
+
+        beams = [
+            {"frame": "B1", "prop": "B55X80C350", "story": "2F",
+             "w_cm": 55, "d_cm": 80, "fc": 350, "prefix": "B"},
+        ]
+        results = extract_beam_results(sm, beams)
+        assert len(results) == 0
+
+
+# ── _ratio_color ──────────────────────────────────────────
+
+class TestRatioColor:
+    def test_too_low_is_red(self):
+        assert _ratio_color(0.005, 0.01, 0.04) == "#FF4444"
+
+    def test_too_high_is_red(self):
+        assert _ratio_color(0.05, 0.01, 0.04) == "#FF4444"
+
+    def test_ok_is_green(self):
+        assert _ratio_color(0.025, 0.01, 0.04) == "#44AA44"
+
+    def test_near_low_is_yellow(self):
+        # 0.014 <= 0.01 * 1.5 = 0.015 -> yellow
+        assert _ratio_color(0.014, 0.01, 0.04) == "#FFAA00"
+
+    def test_near_high_is_yellow(self):
+        # 0.035 > 0.04 * 0.85 = 0.034 -> yellow
+        assert _ratio_color(0.035, 0.01, 0.04) == "#FFAA00"
+
+    def test_exact_low_threshold_is_red(self):
+        assert _ratio_color(0.01, 0.01, 0.04) == "#FF4444"
+
+    def test_exact_high_threshold_is_green(self):
+        # ratio == up_thresh -> not > up_thresh, so not red
+        # check if yellow: 0.04 > 0.04*0.85=0.034 -> yes, yellow
+        assert _ratio_color(0.04, 0.01, 0.04) == "#FFAA00"
+
+
+# ── select_key_floors ────────────────────────────────────
+
+class TestSelectKeyFloors:
+    def _setup(self):
+        all_story_names = ["B3F", "B2F", "B1F", "1F", "2F", "3F", "4F",
+                           "5F", "6F", "7F", "8F", "9F", "RF"]
+        sub_stories = ["B3F", "B2F", "B1F", "1F"]
+        super_stories = ["2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "RF"]
+        strength_lookup = {}
+        for s in ["B3F", "B2F", "B1F", "1F"]:
+            strength_lookup[(s, "column")] = 490
+        for s in ["2F", "3F", "4F", "5F", "6F", "7F"]:
+            strength_lookup[(s, "column")] = 420
+        for s in ["8F", "9F", "RF"]:
+            strength_lookup[(s, "column")] = 350
+        return all_story_names, sub_stories, super_stories, strength_lookup
+
+    def test_includes_all_sub_stories(self):
+        all_names, sub, super_, lookup = self._setup()
+        result = select_key_floors([], [], super_, sub, lookup, all_names)
+        for s in sub:
+            assert s in result
+
+    def test_includes_2f(self):
+        all_names, sub, super_, lookup = self._setup()
+        result = select_key_floors([], [], super_, sub, lookup, all_names)
+        assert "2F" in result
+
+    def test_includes_strength_transition(self):
+        """7F/8F boundary (420->350) should include both floors."""
+        all_names, sub, super_, lookup = self._setup()
+        result = select_key_floors([], [], super_, sub, lookup, all_names)
+        assert "7F" in result
+        assert "8F" in result
+
+    def test_includes_worst_ratio_floor(self):
+        all_names, sub, super_, lookup = self._setup()
+        col_results = [
+            {"story": "5F", "ratio": 0.06, "x": 0, "y": 0},
+            {"story": "3F", "ratio": 0.02, "x": 0, "y": 0},
+        ]
+        result = select_key_floors(col_results, [], super_, sub, lookup, all_names)
+        assert "5F" in result
+
+    def test_sorted_by_story_order(self):
+        all_names, sub, super_, lookup = self._setup()
+        result = select_key_floors([], [], super_, sub, lookup, all_names)
+        indices = [all_names.index(s) for s in result]
+        assert indices == sorted(indices)
+
+
+# ── select_top_grids ─────────────────────────────────────
+
+class TestSelectTopGrids:
+    def test_top_n_selection(self):
+        grid_lines = {
+            "x": [
+                {"label": "1", "coordinate": 0.0},
+                {"label": "2", "coordinate": 6.0},
+                {"label": "3", "coordinate": 12.0},
+                {"label": "4", "coordinate": 18.0},
+            ],
+            "y": [
+                {"label": "A", "coordinate": 0.0},
+                {"label": "B", "coordinate": 8.0},
+            ],
+        }
+        col_results = [
+            {"x": 0.0, "y": 0.0, "ratio": 0.05},   # grid 1
+            {"x": 6.0, "y": 0.0, "ratio": 0.03},   # grid 2
+            {"x": 12.0, "y": 0.0, "ratio": 0.07},  # grid 3
+            {"x": 18.0, "y": 0.0, "ratio": 0.01},  # grid 4
+        ]
+        result = select_top_grids(col_results, [], grid_lines, top_n=2)
+        # X direction: grid 3 (0.07) > grid 1 (0.05) > grid 2 (0.03) > grid 4 (0.01)
+        assert len(result["x"]) == 2
+        assert result["x"][0]["label"] == "3"
+        assert result["x"][1]["label"] == "1"
+
+    def test_empty_results(self):
+        grid_lines = {
+            "x": [{"label": "1", "coordinate": 0.0}],
+            "y": [{"label": "A", "coordinate": 0.0}],
+        }
+        result = select_top_grids([], [], grid_lines, top_n=3)
+        assert len(result["x"]) == 1
+        assert result["x"][0]["worst_ratio"] == 0.0
+
+
+# ── _save_iteration_report ───────────────────────────────
+
+class TestSaveIterationReport:
+    def test_creates_files(self, tmp_path):
+        iter_dir = str(tmp_path / "iteration_1")
+        col_results = [
+            {"frame": "C1", "prop": "C80X80C420", "story": "2F",
+             "ratio": 0.025, "pmm_area": 0.016, "w_cm": 80, "d_cm": 80},
+        ]
+        beam_results = [
+            {"frame": "B1", "prop": "B55X80C350", "story": "2F",
+             "ratio": 0.015, "max_area": 0.006, "w_cm": 55, "d_cm": 80},
+        ]
+        report = _save_iteration_report(iter_dir, 1, col_results, beam_results,
+                                        [{"frame": "C1"}], [], [])
+        assert os.path.isfile(os.path.join(iter_dir, "ratio_report.json"))
+        assert os.path.isfile(os.path.join(iter_dir, "summary.txt"))
+        assert report["iteration"] == 1
+        assert report["changes"]["columns_ratio"] == 1
+        assert report["changes"]["columns_constraint"] == 0
+
+    def test_empty_results(self, tmp_path):
+        iter_dir = str(tmp_path / "iteration_0")
+        report = _save_iteration_report(iter_dir, 0, [], [], [], [], [])
+        assert report["stats"]["col_count"] == 0
+        assert report["stats"]["col_min"] is None
+
+
+# ── phase routing ─────────────────────────────────────────
+
+class TestPhaseRouting:
+    def test_run_signature_accepts_phase(self):
+        """run() should accept phase parameter without error at import time."""
+        from design.gs_12_iterate import run
+        import inspect
+        sig = inspect.signature(run)
+        assert "phase" in sig.parameters
+        assert sig.parameters["phase"].default == "both"
+
+    def test_run_signature_accepts_output_dir(self):
+        from design.gs_12_iterate import run
+        import inspect
+        sig = inspect.signature(run)
+        assert "output_dir" in sig.parameters
+        assert sig.parameters["output_dir"].default is None

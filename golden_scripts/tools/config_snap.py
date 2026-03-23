@@ -488,6 +488,55 @@ def build_targets(config):
     return targets
 
 
+def build_grid_line_targets(grid_data, tolerance=1.0):
+    """Build grid LINE segment targets for fallback snap.
+
+    Converts each grid line into a finite segment spanning the full
+    grid extent (with margin), so ray snap can find intersections.
+
+    Parameters
+    ----------
+    grid_data : dict
+        Normalized grid data with "x" and "y" lists.
+    tolerance : float
+        Snap tolerance — margin is max(tolerance, 1.0).
+
+    Returns
+    -------
+    list[SnapTarget]
+        Grid line segment targets with floors=[] (no floor filtering).
+    """
+    x_grids = grid_data.get("x", [])
+    y_grids = grid_data.get("y", [])
+
+    if not x_grids or not y_grids:
+        return []
+
+    x_coords = [g["coordinate"] for g in x_grids]
+    y_coords = [g["coordinate"] for g in y_grids]
+    x_min, x_max = min(x_coords), max(x_coords)
+    y_min, y_max = min(y_coords), max(y_coords)
+    margin = max(tolerance, 1.0)
+
+    targets = []
+    # X grid lines: vertical segments spanning full Y extent
+    for xg in x_grids:
+        targets.append(SnapTarget(
+            "segment",
+            xg["coordinate"], y_min - margin,
+            xg["coordinate"], y_max + margin,
+            floors=[]))
+    # Y grid lines: horizontal segments spanning full X extent
+    for yg in y_grids:
+        targets.append(SnapTarget(
+            "segment",
+            x_min - margin, yg["coordinate"],
+            x_max + margin, yg["coordinate"],
+            floors=[]))
+
+    return targets
+
+
 def snap_point(px, py, floors, targets, tolerance):
     """Find the nearest target within tolerance that overlaps floors.
 

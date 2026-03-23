@@ -58,6 +58,7 @@ from golden_scripts.tools.config_snap import (
     snap_by_ray as snap_sb_by_ray,
     ray_ray_intersection,
     cluster_free_endpoints,
+    build_grid_line_targets,
 )
 from golden_scripts.tools.beam_validate import (
     _normalize_grid_data_for_bv,
@@ -132,54 +133,6 @@ def build_sb_targets(config, grid_data):
 
     return grid_targets, element_targets
 
-
-def build_grid_line_targets(grid_data, tolerance=1.0):
-    """Build grid LINE segment targets for Round 4 fallback snap.
-
-    Converts each grid line into a finite segment spanning the full
-    grid extent (with margin), so ray snap can find intersections.
-
-    Parameters
-    ----------
-    grid_data : dict
-        Normalized grid data with "x" and "y" lists.
-    tolerance : float
-        Snap tolerance — margin is max(tolerance, 1.0).
-
-    Returns
-    -------
-    list[SnapTarget]
-        Grid line segment targets with floors=[] (no floor filtering).
-    """
-    x_grids = grid_data.get("x", [])
-    y_grids = grid_data.get("y", [])
-
-    if not x_grids or not y_grids:
-        return []
-
-    x_coords = [g["coordinate"] for g in x_grids]
-    y_coords = [g["coordinate"] for g in y_grids]
-    x_min, x_max = min(x_coords), max(x_coords)
-    y_min, y_max = min(y_coords), max(y_coords)
-    margin = max(tolerance, 1.0)
-
-    targets = []
-    # X grid lines: vertical segments spanning full Y extent
-    for xg in x_grids:
-        targets.append(SnapTarget(
-            "segment",
-            xg["coordinate"], y_min - margin,
-            xg["coordinate"], y_max + margin,
-            floors=[]))
-    # Y grid lines: horizontal segments spanning full X extent
-    for yg in y_grids:
-        targets.append(SnapTarget(
-            "segment",
-            x_min - margin, yg["coordinate"],
-            x_max + margin, yg["coordinate"],
-            floors=[]))
-
-    return targets
 
 
 # ---------------------------------------------------------------------------
@@ -894,6 +847,32 @@ def validate_small_beams(sb_data, config, grid_data, tolerance=1.0,
     return sb_data, report
 
 
+def _validate_slab_zones(sb_data):
+    """Validate slab zone data and return summary report.
+
+    Checks section distribution and emits warnings for suspicious patterns.
+    """
+    zones = sb_data.get("slab_zones", [])
+    report = {
+        "total_zones": len(zones),
+        "sections": {},
+        "warnings": [],
+    }
+    if not zones:
+        return report
+
+    for z in zones:
+        sec = z.get("section", "?")
+        report["sections"][sec] = report["sections"].get(sec, 0) + 1
+
+    if len(report["sections"]) == 1 and len(zones) > 1:
+        report["warnings"].append(
+            f"All {len(zones)} zones have same section: "
+            f"{list(report['sections'].keys())[0]}")
+
+    return report
+
+
 # ---------------------------------------------------------------------------
 # 6. CLI entry point
 # ---------------------------------------------------------------------------
@@ -970,8 +949,11 @@ def main():
     x_grids = len(grid_data.get("x", []))
     y_grids = len(grid_data.get("y", []))
 
+    n_slab_zones = len(sb_data.get("slab_zones", []))
     print(f"SB elements loaded: {args.sb_elements}")
     print(f"  small_beams: {n_sbs}")
+    if n_slab_zones:
+        print(f"  slab_zones: {n_slab_zones}")
     print(f"Config loaded: {args.config}")
     print(f"  columns: {n_cols}, beams: {n_beams}, walls: {n_walls}")
     print(f"Grid data loaded: {args.grid_data}")
@@ -1046,6 +1028,17 @@ def main():
                   f"{w['message']} "
                   f"(coord={w['coord']}, nearest={w.get('nearest_target', '')}, "
                   f"d={w.get('nearest_distance', '')}m)")
+
+    # Slab zone validation (pass-through data)
+    slab_zone_report = _validate_slab_zones(validated)
+    report["slab_zones"] = slab_zone_report
+    if slab_zone_report["total_zones"] > 0:
+        sec_str = ", ".join(f"{s}={c}" for s, c
+                            in sorted(slab_zone_report["sections"].items()))
+        print(f"  Slab zones: {slab_zone_report['total_zones']} ({sec_str})")
+    if slab_zone_report["warnings"]:
+        for w in slab_zone_report["warnings"]:
+            print(f"  WARNING (slab zones): {w}")
 
     if args.dry_run:
         print(f"\n[DRY RUN] No output written.")

@@ -62,6 +62,7 @@ from golden_scripts.tools.config_snap import (
     snap_by_ray,
     ray_ray_intersection,
     cluster_free_endpoints,
+    build_grid_line_targets,
 )
 from golden_scripts.tools.geometry import point_in_or_near_polygon, is_non_rectangular
 
@@ -982,12 +983,15 @@ def validate_beams(elements, grid_data, tolerance=1.5,
                    split_tolerance=0.15, no_split=False,
                    angle_threshold_deg=2.0, no_angle_correct=False,
                    cluster_tolerance=0.50, no_cluster=False,
-                   outline=None, outline_tolerance=0.5):
+                   outline=None, outline_tolerance=0.5,
+                   no_grid_snap=False):
     """Validate and auto-snap major beam endpoints.
 
     Pipeline order:
       Step 0: Angle correction (2° default, runs FIRST for accurate ray direction)
-      Step 1: 3-round ray snap with post-round clustering
+      Step 1: Structural-only convergence (columns + walls + snapped beams)
+      Step 1b: Fallback A — grid intersections (single round + clustering)
+      Step 1c: Fallback B — grid lines (single round + clustering)
       Step 2: Split beams at columns + walls + other beams
       Step 3: Split walls at columns + beams + other walls
       Step 4: Wall-to-beam re-snap (1.0m default, aligns walls under beams)
@@ -1017,6 +1021,8 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         Building outline polygon [[x,y],...] for outline-aware corrections.
     outline_tolerance : float
         Tolerance for outline proximity check (default 0.5m).
+    no_grid_snap : bool
+        If True, skip grid intersection and grid line fallback snap.
 
     Returns
     -------
@@ -1058,6 +1064,8 @@ def validate_beams(elements, grid_data, tolerance=1.5,
             "clustered_endpoints": 0,
             "cluster_count": 0,
             "snap_rounds": 0,
+            "grid_intersection_snapped_endpoints": 0,
+            "grid_line_snapped_endpoints": 0,
         }
         return elements, report
 
@@ -1071,11 +1079,11 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         beams = elements.get("beams", [])
         n = len(beams)
 
-    # --- Step 1: 3-round ray snap with post-round clustering ---
+    # --- Step 1: Structural-only convergence with post-round clustering ---
 
-    # Build targets
+    # Build targets — grid intersections separated for fallback
     grid_targets, element_targets = build_beam_targets(elements, grid_data)
-    base_targets = grid_targets + element_targets
+    base_targets = element_targets  # structural only (columns + walls)
 
     # Track snap state per endpoint: False = unsnapped
     snapped_state = [[False, False] for _ in range(n)]
@@ -1179,7 +1187,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
             all_cluster_corrections.extend(cc)
             _add_fully_snapped_beams()
 
-    # Convergence loop: snap until no new snaps or MAX_ROUNDS
+    # Convergence loop: structural-only snap until no new snaps or MAX_ROUNDS
     MAX_ROUNDS = 10
     snap_rounds = 0
     while snap_rounds < MAX_ROUNDS:
@@ -1190,8 +1198,27 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         if new_snaps == 0:
             break
 
+    # --- Step 1b: Fallback A — grid intersections (single round + cluster) ---
+    grid_intersection_snapped = 0
+    if not no_grid_snap:
+        fb_a_targets = base_targets + beam_snap_targets + grid_targets
+        grid_intersection_snapped = _snap_round_ray(fb_a_targets)
+        if grid_intersection_snapped > 0:
+            _post_round_cluster()
+
+    # --- Step 1c: Fallback B — grid lines (single round + cluster) ---
+    grid_line_snapped = 0
+    if not no_grid_snap:
+        grid_line_tgts = build_grid_line_targets(grid_data, tolerance)
+        fb_b_targets = base_targets + beam_snap_targets + grid_line_tgts
+        grid_line_snapped = _snap_round_ray(fb_b_targets)
+        if grid_line_snapped > 0:
+            _post_round_cluster()
+
     # --- Collect warnings for unsnapped endpoints ---
-    all_targets = base_targets + beam_snap_targets
+    all_targets = base_targets + beam_snap_targets + grid_targets
+    if not no_grid_snap:
+        all_targets = all_targets + build_grid_line_targets(grid_data, tolerance)
     for i in range(n):
         beam = beams[i]
         for ep in range(2):
@@ -1239,17 +1266,17 @@ def validate_beams(elements, grid_data, tolerance=1.5,
                 "message": "Zero-length beam after snap — both endpoints at same location",
             })
 
-    # --- Step 2: Beam splitting (beams at columns + walls + other beams) ---
+    # --- Step 2+3: Iterative beam + wall splitting ---
+    # Long beams (e.g. 44m FWB perimeter) may have crossings near endpoints
+    # (t<=0.02) that are missed in pass 1. After column splits shorten the
+    # beams, pass 2 finds those crossings at interior t-values.
+    MAX_SPLIT_ITERATIONS = 3
     split_report = {
         "split_beams": 0,
         "new_beams_from_split": 0,
         "total_beams_after_split": len(elements.get("beams", [])),
         "split_details": [],
     }
-    if not no_split:
-        elements, split_report = split_all_beams(elements, grid_data, split_tolerance)
-
-    # --- Step 3: Wall splitting (walls at columns + beams + other walls) ---
     wall_split_report = {
         "wall_split_walls": 0,
         "wall_new_from_split": 0,
@@ -1257,7 +1284,25 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         "wall_split_details": [],
     }
     if not no_split:
-        elements, wall_split_report = split_all_walls(elements, grid_data, split_tolerance)
+        for split_iter in range(MAX_SPLIT_ITERATIONS):
+            elements, iter_beam_rpt = split_all_beams(
+                elements, grid_data, split_tolerance)
+            split_report["split_beams"] += iter_beam_rpt["split_beams"]
+            split_report["new_beams_from_split"] += iter_beam_rpt["new_beams_from_split"]
+            split_report["total_beams_after_split"] = iter_beam_rpt["total_beams_after_split"]
+            split_report["split_details"].extend(iter_beam_rpt["split_details"])
+
+            elements, iter_wall_rpt = split_all_walls(
+                elements, grid_data, split_tolerance)
+            wall_split_report["wall_split_walls"] += iter_wall_rpt["wall_split_walls"]
+            wall_split_report["wall_new_from_split"] += iter_wall_rpt["wall_new_from_split"]
+            wall_split_report["wall_total_after_split"] = iter_wall_rpt["wall_total_after_split"]
+            wall_split_report["wall_split_details"].extend(iter_wall_rpt["wall_split_details"])
+
+            if (iter_beam_rpt["split_beams"]
+                    + iter_wall_rpt["wall_split_walls"]) == 0:
+                break
+        split_report["split_iterations"] = split_iter + 1
 
     # --- Step 4: Wall-to-beam re-snap ---
     elements, wall_beam_snap_details = snap_walls_to_beams(elements, tolerance=1.0)
@@ -1288,6 +1333,8 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         "wall_beam_snaps": len(wall_beam_snap_details),
         "wall_beam_snap_details": wall_beam_snap_details,
         "snap_rounds": snap_rounds,
+        "grid_intersection_snapped_endpoints": grid_intersection_snapped,
+        "grid_line_snapped_endpoints": grid_line_snapped,
     }
 
     return elements, report
@@ -1321,6 +1368,8 @@ def main():
                         "half-snapped beams (default: 0.50m)")
     parser.add_argument("--no-cluster", action="store_true",
                         help="Skip endpoint clustering step")
+    parser.add_argument("--no-grid-snap", action="store_true",
+                        help="Skip grid intersection and grid line fallback snap")
     parser.add_argument("--outline",
                         help="Path to JSON with building_outline polygon "
                              "(or model_config.json with building_outline field)")
@@ -1369,6 +1418,10 @@ def main():
         print(f"  split tolerance: {args.split_tolerance}m")
     if not args.no_cluster:
         print(f"  cluster tolerance: {args.cluster_tolerance}m")
+    if args.no_grid_snap:
+        print(f"  grid-snap fallback: disabled")
+    else:
+        print(f"  grid-snap fallback: enabled (grid intersections + grid lines)")
 
     if n_beams == 0:
         print("\nNo beams to validate.")
@@ -1390,6 +1443,7 @@ def main():
         no_cluster=args.no_cluster,
         outline=outline,
         outline_tolerance=args.outline_tolerance,
+        no_grid_snap=args.no_grid_snap,
     )
 
     # Print summary
@@ -1401,6 +1455,14 @@ def main():
     if report["snapped_endpoints"] > 0:
         print(f"  Max snap distance: {report['max_snap_distance']:.4f}m")
         print(f"  Avg snap distance: {report['avg_snap_distance']:.4f}m")
+
+    # Grid fallback summary
+    if report.get("grid_intersection_snapped_endpoints", 0) > 0:
+        print(f"  Grid-intersection snapped: "
+              f"{report['grid_intersection_snapped_endpoints']}")
+    if report.get("grid_line_snapped_endpoints", 0) > 0:
+        print(f"  Grid-line snapped: "
+              f"{report['grid_line_snapped_endpoints']}")
 
     # Cluster summary
     if report.get("cluster_count", 0) > 0:
@@ -1423,6 +1485,8 @@ def main():
         print(f"  Split walls: {report['wall_split_walls']} → "
               f"{report['wall_new_from_split']} new sub-walls "
               f"(total after split: {report['wall_total_after_split']})")
+    if report.get("split_iterations", 1) > 1:
+        print(f"  Split iterations: {report['split_iterations']}")
 
     # Wall-beam snap summary
     if report.get("wall_beam_snaps", 0) > 0:

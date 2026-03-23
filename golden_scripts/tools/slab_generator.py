@@ -529,7 +529,7 @@ def filter_segments_by_range(segments, floor_set):
 
 
 def write_range_debug(debug_dir, range_label, segments, polygons_raw,
-                      polygons_filtered, slabs):
+                      polygons_filtered, slabs, slab_zones=None):
     """Write per-range debug output files.
 
     Output:
@@ -539,6 +539,11 @@ def write_range_debug(debug_dir, range_label, segments, polygons_raw,
         ├── polygons_filtered.json
         ├── slabs.json
         └── slabs.png  (if matplotlib available)
+
+    Args:
+        slab_zones: Optional list of slab zone dicts with "section" and
+            "color_hex" fields. When provided, slabs.png uses PPT legend
+            colors instead of the default palette.
     """
     range_dir = Path(debug_dir) / range_label
     range_dir.mkdir(parents=True, exist_ok=True)
@@ -589,19 +594,47 @@ def write_range_debug(debug_dir, range_label, segments, polygons_raw,
         for x1, y1, x2, y2, _ in segments:
             ax.plot([x1, x2], [y1, y2], "k-", linewidth=0.5, alpha=0.3)
 
+        # Build section → RGB from slab_zones PPT legend colors
+        section_colors = {}
+        if slab_zones:
+            for zone in slab_zones:
+                sec = zone.get("section", "")
+                hex_c = zone.get("color_hex", "")
+                if sec and hex_c and len(hex_c) >= 6 and sec not in section_colors:
+                    section_colors[sec] = (int(hex_c[0:2], 16) / 255,
+                                           int(hex_c[2:4], 16) / 255,
+                                           int(hex_c[4:6], 16) / 255)
+        fallback_colors = plt.cm.Set3.colors
+
         # Draw slab polygons with fill
-        colors = plt.cm.Set3.colors
         for idx, slab in enumerate(slabs):
             corners = slab["corners"]
             xs = [c[0] for c in corners] + [corners[0][0]]
             ys = [c[1] for c in corners] + [corners[0][1]]
-            color = colors[idx % len(colors)]
+            section = slab.get("section", "")
+            color = section_colors.get(section,
+                                       fallback_colors[idx % len(fallback_colors)])
             ax.fill(xs, ys, alpha=0.3, color=color)
             ax.plot(xs, ys, "-", linewidth=0.8, color=color)
             cx = sum(c[0] for c in corners) / len(corners)
             cy = sum(c[1] for c in corners) / len(corners)
-            ax.text(cx, cy, slab.get("section", ""),
-                    ha="center", va="center", fontsize=6)
+            ax.text(cx, cy, section, ha="center", va="center", fontsize=6)
+
+        # Legend: section → color
+        import matplotlib.patches as mpatches
+        legend_handles = []
+        seen_sections = set()
+        for slab in slabs:
+            sec = slab.get("section", "")
+            if sec and sec not in seen_sections:
+                seen_sections.add(sec)
+                c = section_colors.get(sec, fallback_colors[0])
+                legend_handles.append(
+                    mpatches.Patch(facecolor=c, alpha=0.3, edgecolor=c,
+                                   label=sec))
+        if legend_handles:
+            ax.legend(handles=legend_handles, loc="upper left", fontsize=7,
+                      framealpha=0.9)
 
         ax.grid(True, alpha=0.2)
         fig.tight_layout()
@@ -984,7 +1017,8 @@ def generate_slabs(config, slab_thickness=15, raft_thickness=100, slab_zones=Non
 
             if debug_dir:
                 write_range_debug(debug_dir, range_label, range_segs,
-                                  polygons, valid_faces, range_slabs)
+                                  polygons, valid_faces, range_slabs,
+                                  slab_zones=slab_zones)
 
             all_slabs.extend(range_slabs)
 
