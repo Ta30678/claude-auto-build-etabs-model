@@ -42,8 +42,5 @@ scripts/structural-mcp-servers/
 *.pdf
 *.pptx
 
-# rc_iteration
- rc_iteration/
- *.png
-
- 
+# rc_iterations
+rc_iterations/
