@@ -1,0 +1,14 @@
+{
+  "converged": false,
+  "total_iterations": 5,
+  "final_stats": {
+    "col_count": 222,
+    "col_min": 0.01,
+    "col_max": 0.048821,
+    "col_avg": 0.011852,
+    "beam_count": 965,
+    "beam_min": 0.00092,
+    "beam_max": 0.028794,
+    "beam_avg": 0.009016
+  }
+}

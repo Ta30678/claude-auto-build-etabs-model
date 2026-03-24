@@ -40,4 +40,8 @@ scripts/structural-mcp-servers/
 # 雜項
 *.pdf
 *.pptx
-for 九典/   
+
+# rc_iteration
+ rc_iteration/
+ 
+ 

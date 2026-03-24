@@ -1,0 +1,6 @@
+Iteration 3
+Columns: 222 results
+  Ratio: min=0.0100  max=0.0488  avg=0.0119
+Beams: 965 results
+  Ratio: min=0.0009  max=0.0288  avg=0.0090
+Changes: 139 col(ratio) + 0 col(constraint) + 891 beam

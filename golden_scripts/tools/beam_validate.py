@@ -14,6 +14,7 @@ Pipeline order:
   Step 2: Split beams at columns + walls + other beams
   Step 3: Split walls at columns + beams + other walls
   Step 4: Wall-to-beam re-snap (1.0m default, aligns walls under parallel beams)
+  Step 5: Wall filtering (trim to host beam range + orphan delete)
 
 Usage:
     python -m golden_scripts.tools.beam_validate \
@@ -976,6 +977,191 @@ def _follow_wall_resnap(elements, snap_details):
 
 
 # ---------------------------------------------------------------------------
+# 6c. Wall filtering (trim to host beam + orphan delete)
+# ---------------------------------------------------------------------------
+
+def filter_walls(elements, colinear_threshold=0.05):
+    """Trim wall endpoints to host beam range and delete orphan walls.
+
+    After snap_walls_to_beams() aligns walls to their host beams' fixed-axis,
+    this function:
+      R1) Clamps each wall's variable-axis range to the union of its host
+          beams' variable-axis ranges (trim overshooting ends).
+      R2) Deletes beam-dependent walls with no variable-axis overlap
+          (orphans from splitting). Independent walls (no same-direction
+          beams on the same axis) are kept.
+      R3) Deletes walls shorter than 0.3m after trimming.
+
+    Host beam criteria: same direction, floor overlap, fixed-axis within
+    colinear_threshold (post-snap), variable-axis overlap.
+
+    Parameters
+    ----------
+    elements : dict
+        Elements with "beams" and "walls".
+    colinear_threshold : float
+        Max fixed-axis distance to consider a beam as host (default 0.05m).
+
+    Returns
+    -------
+    tuple[dict, dict]
+        (filtered_elements, filter_report)
+    """
+    MIN_LENGTH = 0.3
+    walls = elements.get("walls", [])
+    beams = elements.get("beams", [])
+
+    if not walls:
+        return elements, {
+            "wall_filter_trimmed": 0,
+            "wall_filter_orphans_deleted": 0,
+            "wall_filter_short_deleted": 0,
+            "wall_filter_details": [],
+        }
+
+    kept_walls = []
+    details = []
+    trimmed_count = 0
+    orphan_count = 0
+    short_count = 0
+
+    for wall in walls:
+        w_dir = _wall_direction(wall)
+        w_floors = set(wall.get("floors", []))
+
+        if w_dir == "X":
+            w_fixed = (wall["y1"] + wall["y2"]) / 2.0
+            w_var_min = min(wall["x1"], wall["x2"])
+            w_var_max = max(wall["x1"], wall["x2"])
+        else:
+            w_fixed = (wall["x1"] + wall["x2"]) / 2.0
+            w_var_min = min(wall["y1"], wall["y2"])
+            w_var_max = max(wall["y1"], wall["y2"])
+
+        # Find all colinear host beams — union of variable-axis ranges
+        host_var_min = float("inf")
+        host_var_max = float("-inf")
+        host_beams_found = []
+        has_axis_beams = False  # any same-dir/floor/axis beam (ignoring var overlap)
+
+        for beam in beams:
+            b_dir = _beam_direction(beam)
+            if b_dir != w_dir:
+                continue
+            b_floors = set(beam.get("floors", []))
+            if not (w_floors & b_floors):
+                continue
+            if w_dir == "X":
+                b_fixed = (beam["y1"] + beam["y2"]) / 2.0
+                b_var_min = min(beam["x1"], beam["x2"])
+                b_var_max = max(beam["x1"], beam["x2"])
+            else:
+                b_fixed = (beam["x1"] + beam["x2"]) / 2.0
+                b_var_min = min(beam["y1"], beam["y2"])
+                b_var_max = max(beam["y1"], beam["y2"])
+
+            if abs(b_fixed - w_fixed) > colinear_threshold:
+                continue
+            has_axis_beams = True  # beam on same axis (may or may not overlap)
+            if not _ranges_overlap(w_var_min, w_var_max, b_var_min, b_var_max):
+                continue
+
+            host_beams_found.append(beam)
+            host_var_min = min(host_var_min, b_var_min)
+            host_var_max = max(host_var_max, b_var_max)
+
+        before = {"x1": wall["x1"], "y1": wall["y1"],
+                  "x2": wall["x2"], "y2": wall["y2"]}
+
+        # R2: Orphan check — only delete if beam-dependent (has_axis_beams)
+        #     Independent walls (no same-dir beams on this axis) are kept.
+        if not host_beams_found:
+            if not has_axis_beams:
+                # Independent wall (e.g. shear wall) — no parallel beams on axis
+                kept_walls.append(wall)
+                continue
+            orphan_count += 1
+            details.append({
+                "action": "deleted_orphan",
+                "wall_section": wall.get("section", ""),
+                "wall_floors": wall.get("floors", []),
+                "direction": w_dir,
+                "before": before,
+                "after": None,
+                "host_beams": None,
+                "host_range": None,
+            })
+            continue
+
+        # R1: Trim variable-axis to host union range
+        new_var_min = max(w_var_min, host_var_min)
+        new_var_max = min(w_var_max, host_var_max)
+
+        trimmed = (abs(new_var_min - w_var_min) > 0.005
+                   or abs(new_var_max - w_var_max) > 0.005)
+
+        if trimmed:
+            if w_dir == "X":
+                if wall["x1"] <= wall["x2"]:
+                    wall["x1"] = round(new_var_min, 2)
+                    wall["x2"] = round(new_var_max, 2)
+                else:
+                    wall["x1"] = round(new_var_max, 2)
+                    wall["x2"] = round(new_var_min, 2)
+            else:
+                if wall["y1"] <= wall["y2"]:
+                    wall["y1"] = round(new_var_min, 2)
+                    wall["y2"] = round(new_var_max, 2)
+                else:
+                    wall["y1"] = round(new_var_max, 2)
+                    wall["y2"] = round(new_var_min, 2)
+
+        # R3: Check minimum length after trim
+        length = math.hypot(wall["x2"] - wall["x1"], wall["y2"] - wall["y1"])
+        if length < MIN_LENGTH:
+            short_count += 1
+            details.append({
+                "action": "deleted_short",
+                "wall_section": wall.get("section", ""),
+                "wall_floors": wall.get("floors", []),
+                "direction": w_dir,
+                "before": before,
+                "after": {"x1": wall["x1"], "y1": wall["y1"],
+                          "x2": wall["x2"], "y2": wall["y2"]},
+                "host_beams": [b.get("section", "") for b in host_beams_found],
+                "host_range": [round(host_var_min, 2), round(host_var_max, 2)],
+                "length": round(length, 4),
+            })
+            continue
+
+        if trimmed:
+            trimmed_count += 1
+            details.append({
+                "action": "trimmed",
+                "wall_section": wall.get("section", ""),
+                "wall_floors": wall.get("floors", []),
+                "direction": w_dir,
+                "before": before,
+                "after": {"x1": wall["x1"], "y1": wall["y1"],
+                          "x2": wall["x2"], "y2": wall["y2"]},
+                "host_beams": [b.get("section", "") for b in host_beams_found],
+                "host_range": [round(host_var_min, 2), round(host_var_max, 2)],
+            })
+
+        kept_walls.append(wall)
+
+    elements["walls"] = kept_walls
+
+    report = {
+        "wall_filter_trimmed": trimmed_count,
+        "wall_filter_orphans_deleted": orphan_count,
+        "wall_filter_short_deleted": short_count,
+        "wall_filter_details": details,
+    }
+    return elements, report
+
+
+# ---------------------------------------------------------------------------
 # 7. Main validation
 # ---------------------------------------------------------------------------
 
@@ -984,7 +1170,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
                    angle_threshold_deg=2.0, no_angle_correct=False,
                    cluster_tolerance=0.50, no_cluster=False,
                    outline=None, outline_tolerance=0.5,
-                   no_grid_snap=False):
+                   no_grid_snap=False, no_wall_filter=False):
     """Validate and auto-snap major beam endpoints.
 
     Pipeline order:
@@ -995,6 +1181,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
       Step 2: Split beams at columns + walls + other beams
       Step 3: Split walls at columns + beams + other walls
       Step 4: Wall-to-beam re-snap (1.0m default, aligns walls under beams)
+      Step 5: Wall filtering (trim to host beam range + orphan delete)
 
     Parameters
     ----------
@@ -1023,6 +1210,8 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         Tolerance for outline proximity check (default 0.5m).
     no_grid_snap : bool
         If True, skip grid intersection and grid line fallback snap.
+    no_wall_filter : bool
+        If True, skip wall filtering (trim + orphan delete) step.
 
     Returns
     -------
@@ -1061,6 +1250,10 @@ def validate_beams(elements, grid_data, tolerance=1.5,
             "wall_split_details": [],
             "wall_beam_snaps": 0,
             "wall_beam_snap_details": [],
+            "wall_filter_trimmed": 0,
+            "wall_filter_orphans_deleted": 0,
+            "wall_filter_short_deleted": 0,
+            "wall_filter_details": [],
             "clustered_endpoints": 0,
             "cluster_count": 0,
             "snap_rounds": 0,
@@ -1311,6 +1504,16 @@ def validate_beams(elements, grid_data, tolerance=1.5,
     if wall_beam_snap_details:
         _follow_wall_resnap(elements, wall_beam_snap_details)
 
+    # --- Step 5: Wall filtering (trim to host beam + orphan delete) ---
+    wall_filter_report = {
+        "wall_filter_trimmed": 0,
+        "wall_filter_orphans_deleted": 0,
+        "wall_filter_short_deleted": 0,
+        "wall_filter_details": [],
+    }
+    if not no_wall_filter and not no_split:
+        elements, wall_filter_report = filter_walls(elements)
+
     # --- Build report ---
     snap_distances = [c["snap_distance"] for c in corrections]
     clustered_eps = sum(c["member_count"] for c in all_cluster_corrections)
@@ -1332,6 +1535,7 @@ def validate_beams(elements, grid_data, tolerance=1.5,
         **wall_split_report,
         "wall_beam_snaps": len(wall_beam_snap_details),
         "wall_beam_snap_details": wall_beam_snap_details,
+        **wall_filter_report,
         "snap_rounds": snap_rounds,
         "grid_intersection_snapped_endpoints": grid_intersection_snapped,
         "grid_line_snapped_endpoints": grid_line_snapped,
@@ -1370,6 +1574,8 @@ def main():
                         help="Skip endpoint clustering step")
     parser.add_argument("--no-grid-snap", action="store_true",
                         help="Skip grid intersection and grid line fallback snap")
+    parser.add_argument("--no-wall-filter", action="store_true",
+                        help="Skip wall filtering (trim to host beam + orphan delete)")
     parser.add_argument("--outline",
                         help="Path to JSON with building_outline polygon "
                              "(or model_config.json with building_outline field)")
@@ -1444,6 +1650,7 @@ def main():
         outline=outline,
         outline_tolerance=args.outline_tolerance,
         no_grid_snap=args.no_grid_snap,
+        no_wall_filter=args.no_wall_filter,
     )
 
     # Print summary
@@ -1495,6 +1702,14 @@ def main():
             print(f"    {d['wall_section']} ({d['direction']}): "
                   f"Δ={d['distance']}m → {d.get('target_beam_section', d.get('snap_type', ''))}")
 
+    # Wall filter summary
+    wf_trimmed = report.get("wall_filter_trimmed", 0)
+    wf_orphans = report.get("wall_filter_orphans_deleted", 0)
+    wf_short = report.get("wall_filter_short_deleted", 0)
+    if wf_trimmed + wf_orphans + wf_short > 0:
+        print(f"  Wall filter: {wf_trimmed} trimmed, "
+              f"{wf_orphans} orphans deleted, {wf_short} short deleted")
+
     if report["warnings"]:
         print(f"\nWARNINGS ({len(report['warnings'])}):")
         for w in report["warnings"]:
@@ -1536,6 +1751,19 @@ def main():
             for d in report["wall_beam_snap_details"]:
                 print(f"  {d['wall_section']} ({d['direction']}): "
                       f"Δ={d['distance']}m → {d.get('target_beam_section', d.get('snap_type', ''))}")
+        if report.get("wall_filter_details"):
+            print(f"\nWall filter preview ({len(report['wall_filter_details'])}):")
+            for d in report["wall_filter_details"]:
+                action = d["action"]
+                sect = d["wall_section"]
+                if action == "trimmed":
+                    print(f"  {sect} ({d['direction']}): trimmed to "
+                          f"host range {d['host_range']}")
+                elif action == "deleted_orphan":
+                    print(f"  {sect} ({d['direction']}): deleted (orphan, no host beam)")
+                elif action == "deleted_short":
+                    print(f"  {sect} ({d['direction']}): deleted "
+                          f"(< 0.3m after trim, L={d.get('length', '?')}m)")
     else:
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(validated, f, ensure_ascii=False, indent=2)

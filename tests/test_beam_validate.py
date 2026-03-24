@@ -20,6 +20,7 @@ from golden_scripts.tools.beam_validate import (
     split_all_beams,
     split_all_walls,
     snap_walls_to_beams,
+    filter_walls,
 )
 from golden_scripts.tools.config_snap import (
     snap_by_ray,
@@ -2300,3 +2301,278 @@ class TestIterativeSplit:
         # Total: 5 + 5 + 4 + 4 = 18
         assert len(fwb) == 18, f"Expected 18 FWB segments, got {len(fwb)}"
         assert report.get("split_iterations", 1) >= 2
+
+
+# ---------------------------------------------------------------------------
+# Wall filtering (filter_walls)
+# ---------------------------------------------------------------------------
+
+class TestFilterWalls:
+    """Tests for filter_walls() — trim to host beam range + orphan delete."""
+
+    def test_trim_wall_extending_past_beam(self):
+        """X-wall extending beyond beam range on both sides → trimmed."""
+        elements = {
+            "columns": [],
+            "beams": [
+                {"x1": 0, "y1": 5.0, "x2": 8.5, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                {"x1": -0.5, "y1": 5.0, "x2": 9.0, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        walls = result["walls"]
+        assert len(walls) == 1
+        assert walls[0]["x1"] == 0
+        assert walls[0]["x2"] == 8.5
+        assert report["wall_filter_trimmed"] == 1
+        assert report["wall_filter_orphans_deleted"] == 0
+
+    def test_trim_wall_one_side_only(self):
+        """Wall extends past beam on one end only → only that end trimmed."""
+        elements = {
+            "columns": [],
+            "beams": [
+                {"x1": 0, "y1": 3.0, "x2": 10, "y2": 3.0,
+                 "section": "B50X80", "floors": ["2F"]},
+            ],
+            "walls": [
+                {"x1": 3.0, "y1": 3.0, "x2": 12.0, "y2": 3.0,
+                 "section": "W25", "floors": ["2F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        walls = result["walls"]
+        assert len(walls) == 1
+        # x1 stays at 3.0 (within beam range), x2 trimmed to 10.0
+        assert walls[0]["x1"] == 3.0
+        assert walls[0]["x2"] == 10.0
+        assert report["wall_filter_trimmed"] == 1
+
+    def test_trim_wall_multi_host_beams(self):
+        """Wall spanning two sequential colinear beams → union range, no trim."""
+        elements = {
+            "columns": [],
+            "beams": [
+                {"x1": 0, "y1": 5.0, "x2": 8.5, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                {"x1": 8.5, "y1": 5.0, "x2": 17.0, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                {"x1": 0, "y1": 5.0, "x2": 17.0, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        walls = result["walls"]
+        assert len(walls) == 1
+        assert walls[0]["x1"] == 0
+        assert walls[0]["x2"] == 17.0
+        assert report["wall_filter_trimmed"] == 0
+
+    def test_delete_orphan_no_host(self):
+        """Wall on same axis as beam but no variable-axis overlap → orphan."""
+        elements = {
+            "columns": [],
+            "beams": [
+                # Beam at y=5, x=0..5
+                {"x1": 0, "y1": 5.0, "x2": 5, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall at y=5, x=20..30 — same axis but no overlap
+                {"x1": 20, "y1": 5.0, "x2": 30, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        assert len(result["walls"]) == 0
+        assert report["wall_filter_orphans_deleted"] == 1
+
+    def test_independent_wall_kept(self):
+        """Wall with no same-direction beams on its axis → independent, kept."""
+        elements = {
+            "columns": [],
+            "beams": [
+                # Only horizontal beam at y=0, no vertical beams
+                {"x1": 0, "y1": 0, "x2": 10, "y2": 0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Vertical wall — no vertical beams exist → independent
+                {"x1": 4.0, "y1": 0, "x2": 4.0, "y2": 6.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        assert len(result["walls"]) == 1
+        assert report["wall_filter_orphans_deleted"] == 0
+
+    def test_delete_orphan_after_split(self):
+        """Simulates a wall segment landing in a gap between beams."""
+        elements = {
+            "columns": [],
+            "beams": [
+                {"x1": 0, "y1": 5.0, "x2": 5, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+                {"x1": 15, "y1": 5.0, "x2": 20, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall in the gap between x=5 and x=15 — no overlapping beam
+                {"x1": 6, "y1": 5.0, "x2": 14, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+                # Wall within first beam range — kept
+                {"x1": 1, "y1": 5.0, "x2": 4, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        assert len(result["walls"]) == 1
+        assert result["walls"][0]["x1"] == 1
+        assert report["wall_filter_orphans_deleted"] == 1
+
+    def test_delete_short_after_trim(self):
+        """Wall trimmed to less than 0.3m → deleted."""
+        elements = {
+            "columns": [],
+            "beams": [
+                {"x1": 0, "y1": 5.0, "x2": 10, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall from 9.85 to 10.5 → trimmed to 9.85..10.0 = 0.15m < 0.3
+                {"x1": 9.85, "y1": 5.0, "x2": 10.5, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        assert len(result["walls"]) == 0
+        assert report["wall_filter_short_deleted"] == 1
+
+    def test_wall_within_beam_range(self):
+        """Wall entirely within beam range → no change."""
+        elements = {
+            "columns": [],
+            "beams": [
+                {"x1": 0, "y1": 5.0, "x2": 10, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                {"x1": 2, "y1": 5.0, "x2": 8, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        assert len(result["walls"]) == 1
+        assert result["walls"][0]["x1"] == 2
+        assert result["walls"][0]["x2"] == 8
+        assert report["wall_filter_trimmed"] == 0
+        assert report["wall_filter_orphans_deleted"] == 0
+
+    def test_no_floor_overlap_is_independent(self):
+        """Wall on same axis as beam but no floor overlap → independent, kept."""
+        elements = {
+            "columns": [],
+            "beams": [
+                {"x1": 0, "y1": 5.0, "x2": 10, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Same axis, different floor — no floor overlap means
+                # has_axis_beams stays False → independent → kept
+                {"x1": 0, "y1": 5.0, "x2": 10, "y2": 5.0,
+                 "section": "W25", "floors": ["3F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        assert len(result["walls"]) == 1
+        assert report["wall_filter_orphans_deleted"] == 0
+
+    def test_y_direction_wall(self):
+        """Y-direction wall extending past beam → trimmed correctly."""
+        elements = {
+            "columns": [],
+            "beams": [
+                {"x1": 5.0, "y1": 0, "x2": 5.0, "y2": 10,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                {"x1": 5.0, "y1": -1.0, "x2": 5.0, "y2": 12.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        result, report = filter_walls(elements)
+        walls = result["walls"]
+        assert len(walls) == 1
+        assert walls[0]["y1"] == 0
+        assert walls[0]["y2"] == 10.0
+        assert report["wall_filter_trimmed"] == 1
+
+    def test_pipeline_integration(self):
+        """Full validate_beams() pipeline includes wall filtering."""
+        grid_data = {
+            "x": [{"label": "1", "coordinate": 0},
+                  {"label": "2", "coordinate": 10}],
+            "y": [{"label": "A", "coordinate": 0},
+                  {"label": "B", "coordinate": 5}],
+        }
+        elements = {
+            "columns": [
+                {"x": 0, "y": 5, "section": "C80X80", "floors": ["1F"]},
+                {"x": 10, "y": 5, "section": "C80X80", "floors": ["1F"]},
+            ],
+            "beams": [
+                {"x1": 0, "y1": 5, "x2": 10, "y2": 5,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Wall extends 1m past beam on both sides
+                {"x1": -1.0, "y1": 5.0, "x2": 11.0, "y2": 5.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        validated, report = validate_beams(
+            elements, grid_data, tolerance=1.5,
+            no_angle_correct=True, no_cluster=True, no_grid_snap=True)
+        assert "wall_filter_trimmed" in report
+        assert "wall_filter_orphans_deleted" in report
+        assert "wall_filter_short_deleted" in report
+        # Wall should be trimmed to beam range [0, 10]
+        walls = validated["walls"]
+        assert len(walls) == 1
+        assert walls[0]["x1"] == pytest.approx(0, abs=0.1)
+        assert walls[0]["x2"] == pytest.approx(10, abs=0.1)
+
+    def test_no_wall_filter_flag(self):
+        """no_wall_filter=True → walls unchanged."""
+        elements = {
+            "columns": [],
+            "beams": [
+                {"x1": 0, "y1": 5.0, "x2": 10, "y2": 5.0,
+                 "section": "B50X80", "floors": ["1F"]},
+            ],
+            "walls": [
+                # Orphan wall — would be deleted normally
+                {"x1": 0, "y1": 20.0, "x2": 10, "y2": 20.0,
+                 "section": "W25", "floors": ["1F"]},
+            ],
+        }
+        grid_data = {
+            "x": [{"label": "1", "coordinate": 0},
+                  {"label": "2", "coordinate": 10}],
+            "y": [{"label": "A", "coordinate": 5},
+                  {"label": "B", "coordinate": 20}],
+        }
+        validated, report = validate_beams(
+            elements, grid_data, tolerance=1.5,
+            no_angle_correct=True, no_cluster=True, no_grid_snap=True,
+            no_wall_filter=True)
+        # Wall should still be there
+        assert len(validated["walls"]) == 1
+        assert report["wall_filter_trimmed"] == 0
+        assert report["wall_filter_orphans_deleted"] == 0
