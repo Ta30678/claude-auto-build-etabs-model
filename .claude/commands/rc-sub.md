@@ -3,12 +3,11 @@
 Runs Phase 2 only: substructure column check with BUSS combos.
 Reads current superstructure column sizes from ETABS as baseline.
 
-## Pre-flight Checks
+## Important
 
-1. ETABS 22 running with model open
-2. Superstructure iteration already completed (columns sized)
-3. BUSS load combinations exist (BUSS01~BUSS67)
-4. Model is saved
+Do NOT ask the user to confirm parameters, thresholds, or settings before running.
+All iteration parameters use defaults from constants.py (or from config if provided).
+Just execute the script directly.
 
 ## Execution
 

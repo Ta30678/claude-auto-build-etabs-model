@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(_dir))      # golden_scripts/ (constants)
 from constants import (
     STANDARD_LOAD_PATTERNS, DEFAULT_LOADS, BASE_RESTRAINT,
     EXT_WALL_THICKNESS, EXT_WALL_UNIT_WEIGHT, EXT_WALL_OPENING_FACTOR,
-    is_substructure_story, is_superstructure_story, normalize_stories_order,
+    is_substructure_story, normalize_stories_order,
     parse_frame_section, get_frame_dimensions,
 )
 
@@ -41,42 +41,6 @@ def define_load_patterns(SapModel, config):
         else:
             print(f"  {name} already exists or returned {retcode}")
     return count
-
-
-def configure_seismic(SapModel, config):
-    """Configure seismic load patterns using User Coefficient method."""
-    loads = config.get("loads", {})
-    seismic = loads.get("seismic", {})
-
-    c_value = seismic.get("base_shear_c")
-    if c_value is None:
-        print("  No base_shear_c in config, skipping seismic configuration.")
-        return
-
-    top = seismic.get("top_story")
-    if top is None:
-        stories_ordered = normalize_stories_order(config.get("stories", []))
-        top = stories_ordered[-1]["name"] if stories_ordered else "PRF"
-    bot = seismic.get("bottom_story", "1F")
-    ecc = seismic.get("ecc_ratio", 0.05)
-    k = seismic.get("k_exponent", 1)
-
-    eq_configs = [
-        ("EQXP", 1, 1),
-        ("EQXN", 1, -1),
-        ("EQYP", 2, 1),
-        ("EQYN", 2, -1),
-    ]
-
-    for name, direction, sign in eq_configs:
-        try:
-            SapModel.LoadPatterns.AutoSeismic.SetUserCoefficient(
-                name, direction, ecc, sign * c_value, k, top, bot)
-            print(f"  {name}: dir={direction}, C={sign*c_value}, ecc={ecc}, K={k}")
-        except Exception as e:
-            print(f"  WARNING: Auto-seismic config failed for {name}: {e}")
-            print(f"    → Please configure seismic parameters manually in ETABS"
-                  f" (Define > Load Patterns > Modify Lateral Load > User Coefficient)")
 
 
 def assign_slab_loads(SapModel, config, elev_map):
@@ -216,11 +180,14 @@ def assign_exterior_wall_loads(SapModel, config, elev_map):
 
     w = t * gamma * (H_story - d_beam) * f_opening
     Applied to beams whose both endpoints lie on the exterior_wall outline.
-    Floors: 1F + superstructure (not rooftop, not basement).
+    Outline fallback: config["building_outline"] if loads.exterior_wall.outline absent.
+    Floors: all above-ground (1F + superstructure + rooftop); rooftop filtered by outline check.
     """
     loads_cfg = config.get("loads", {})
     ext_wall = loads_cfg.get("exterior_wall", {})
     outline = ext_wall.get("outline")
+    if not outline:
+        outline = config.get("building_outline")
 
     if not outline or len(outline) < 3:
         print("  No exterior_wall.outline in config, skipping.")
@@ -269,8 +236,8 @@ def assign_exterior_wall_loads(SapModel, config, elev_map):
     for i in range(num):
         story = frame_stories[i]
 
-        # Only 1F + superstructure (not rooftop, not basement)
-        if not (story == "1F" or is_superstructure_story(story)):
+        # Skip only basement levels (B*F and BASE); rooftop handled by outline check
+        if story == "BASE" or re.match(r'^B\d+F$', story):
             continue
 
         # Parse section — skip columns and non-beam sections
@@ -427,9 +394,6 @@ def run(SapModel, config, elev_map=None):
 
     print("\n--- Load Patterns ---")
     define_load_patterns(SapModel, config)
-
-    print("\n--- Seismic Configuration ---")
-    configure_seismic(SapModel, config)
 
     print("\n--- Slab Loads ---")
     assign_slab_loads(SapModel, config, elev_map)

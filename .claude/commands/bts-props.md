@@ -40,30 +40,24 @@ argument-hint: "[config 路徑，預設使用 merged_config.json]"
 3. **自動偵測 restraint_floor**：
    - 從 config `stories` 偵測第一個 B*F（不含 BASE）
    - 顯示結果供用戶確認：`Auto-detected restraint_floor: B3F`
-4. **收集地震與基礎參數**（用 AskUserQuestion 一次詢問）：
+4. **收集基礎參數**（用 AskUserQuestion 一次詢問）：
 
    | # | 參數 | 說明 | 必要性 |
    |---|------|------|--------|
    | 1 | 基礎 Kv | 垂直彈簧係數 (ton/m³) | **必問** |
    | 2 | 邊梁 Kw | 側邊彈簧係數 (ton/m³) | **必問** |
-   | 3 | Base Shear C | 地震力係數 | **必問** |
-   | 4 | 反應譜檔案 | SPECTRUM.TXT 路徑 | 可選（無則跳過） |
-   | 5 | EQV Scale Factor | 反應譜放大係數 | 可選（有反應譜時問） |
-   | 6 | 外牆線載 | 是否啟用 + outline | 問（見下方流程） |
+   | 3 | 反應譜檔案 | SPECTRUM.TXT 路徑 | 可選（無則跳過） |
 
-5. **外牆線載參數收集**（如用戶啟用）：
-   - 顯示預設常數（t=0.15m, γ=2.4, opening=0.6），問是否自訂
-   - 詢問上構 outline 來源：
-     a. 手動提供座標（使用者直接給 `[[x,y],...]` polygon）
-     b. 從 config 的 `building_outline` 讀取（如果用戶確認它代表上構而非全建物）
-   - 將 outline 寫入 `config["loads"]["exterior_wall"]["outline"]`
+5. **外牆線載（自動）**：
+   - 直接從 config 的 `building_outline` 讀取 outline
+   - 使用 constants.py 預設值（t=0.15m, γ=2.4, opening=0.6）
+   - 若 `building_outline` 不存在，gs_10 會自動跳過並顯示警告
 
 6. **將參數寫入 config**：
    ```python
    config.setdefault("loads", {})
    config["loads"].setdefault("zone_defaults", DEFAULT_LOADS)
-   config["loads"]["seismic"] = {"base_shear_c": C_VALUE, ...}
-   config["loads"]["eqv_scale_factor"] = EQV_SF  # if provided
+   config["loads"]["spectrum_file"] = SPECTRUM_PATH  # if provided
    config.setdefault("foundation", {})
    config["foundation"]["kv"] = KV_VALUE
    config["foundation"]["kw"] = KW_VALUE
@@ -94,17 +88,14 @@ argument-hint: "[config 路徑，預設使用 merged_config.json]"
 
 如果用戶要自訂，更新 config 的 `loads.zone_defaults` 後再繼續。
 
-### Step 3: 確認地震與基礎參數
+### Step 3: 確認基礎參數
 
 從 config 中讀取並顯示 Step 1 寫入的參數：
-- `loads.seismic.base_shear_c` = {C_VALUE}
-- `loads.seismic.top_story` = {auto-detected or default}
-- `loads.spectrum_file` = {SPECTRUM_PATH}（如有）
-- `loads.eqv_scale_factor` = {EQV_SF}（如有）
 - `foundation.kv` = {KV_VALUE}
 - `foundation.kw` = {KW_VALUE}
 - `foundation.restraint_floor` = {auto-detected}
-- `loads.exterior_wall.outline` = {outline}（如有）
+- `loads.spectrum_file` = {SPECTRUM_PATH}（如有）
+- `exterior_wall`: auto（從 `building_outline` 讀取，t=0.15, γ=2.4, opening=0.6）
 
 確認無誤後繼續。
 
@@ -130,9 +121,9 @@ python run_all.py --config "{CONFIG_PATH}" --steps 9,10,11
    - Columns: `[1, 1, 1, 0.0001, 0.7, 0.7, 0.95, 0.95]`
 2. **Rigid Zones**: factor=0.75 on all frames
 3. **End Releases**: M2+M3 at discontinuous beam ends
-4. **Load Patterns**: DL(SW=1), LL, EQXP/EQXN/EQYP/EQYN
+4. **Load Patterns**: DL(SW=1), LL, EQXP/EQXN/EQYP/EQYN（係數由用戶在 ETABS 手動設定）
 5. **Slab Loads**: DL/LL assigned per zone
-6. **Exterior Wall Loads**: DL line loads on edge beams (if outline provided)
+6. **Exterior Wall Loads**: DL line loads on edge beams（自動從 `building_outline` 判定）
 7. **Foundation**:
    - UX/UY restraints at `restraint_floor` (auto-detected)
    - Kv springs on foundation points

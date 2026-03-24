@@ -9,7 +9,6 @@
 
 # ETABS reference models
 ETABS REF/
-*.json
 
 # Large MCP server development archives
 scripts/structural-mcp-servers/servers/etabs_mcp/Etabs_Models/

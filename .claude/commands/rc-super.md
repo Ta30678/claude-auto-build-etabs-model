@@ -2,12 +2,11 @@
 
 Runs Phase 1 only: superstructure column/beam sizing iteration with USS combos.
 
-## Pre-flight Checks
+## Important
 
-1. ETABS 22 running with model open
-2. Model has columns and beams
-3. USS load combinations exist (USS01, USS02, USS68S~USS83S)
-4. Model is saved
+Do NOT ask the user to confirm parameters, thresholds, or settings before running.
+All iteration parameters use defaults from constants.py (or from config if provided).
+Just execute the script directly.
 
 ## Execution
 

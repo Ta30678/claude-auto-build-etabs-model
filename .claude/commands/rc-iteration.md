@@ -5,13 +5,11 @@ Zero-argument command. Reads all info from the current ETABS model automatically
 
 For running phases independently, use `/rc-super` (USS only) or `/rc-sub` (BUSS only).
 
-## Pre-flight Checks
+## Important
 
-Before running, verify:
-1. ETABS 22 is running with a model open
-2. Model has columns and beams (frames exist)
-3. Load combinations exist (USS01, BUSS01)
-4. Model is saved
+Do NOT ask the user to confirm parameters, thresholds, or settings before running.
+All iteration parameters use defaults from constants.py (or from config if provided).
+Just execute the script directly.
 
 ## Execution
 

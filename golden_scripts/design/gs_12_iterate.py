@@ -54,6 +54,38 @@ def compute_beam_ratio(max_rebar_area_m2, w_cm, d_cm, cover_m=BEAM_COVER_TOP):
     return max_rebar_area_m2 / (w_m * d_eff) if (w_m * d_eff) > 0 else 0
 
 
+def _extract_beam_6pos(locations, top_areas, bot_areas, w_cm, d_cm):
+    """Extract rebar percentage at 6 positions (top/bot × left/center/right).
+
+    Picks 3 stations from Location[]: min (left/I-end), closest to midspan
+    (center), max (right/J-end).  Returns dict with pct_top_left, etc.
+    """
+    n = len(locations)
+    if n == 0:
+        return {f"pct_{fb}_{pos}": 0.0
+                for fb in ("top", "bot") for pos in ("left", "center", "right")}
+
+    w_m = w_cm / 100.0
+    d_eff_top = d_cm / 100.0 - BEAM_COVER_TOP
+    d_eff_bot = d_cm / 100.0 - BEAM_COVER_BOT
+    bd_top = w_m * d_eff_top if w_m * d_eff_top > 0 else 1.0
+    bd_bot = w_m * d_eff_bot if w_m * d_eff_bot > 0 else 1.0
+
+    # Index for left (min location), right (max location), center (closest to midpoint)
+    idx_left = min(range(n), key=lambda i: locations[i])
+    idx_right = max(range(n), key=lambda i: locations[i])
+    mid_loc = (locations[idx_left] + locations[idx_right]) / 2.0
+    idx_center = min(range(n), key=lambda i: abs(locations[i] - mid_loc))
+
+    result = {}
+    for pos, idx in [("left", idx_left), ("center", idx_center), ("right", idx_right)]:
+        ta = top_areas[idx] if idx < len(top_areas) else 0.0
+        ba = bot_areas[idx] if idx < len(bot_areas) else 0.0
+        result[f"pct_top_{pos}"] = ta / bd_top * 100.0
+        result[f"pct_bot_{pos}"] = ba / bd_bot * 100.0
+    return result
+
+
 def propose_column_resize(ratio, w_cm, d_cm, step=COL_RESIZE_STEP,
                            down_thresh=COL_REBAR_DOWNSIZE,
                            up_thresh=COL_REBAR_MAX,
@@ -279,15 +311,14 @@ def setup_combos(SapModel, enable_list, disable_list):
     return enabled, disabled
 
 
-def run_analysis_and_design(SapModel, design_code=DESIGN_CODE):
-    """Save, run analysis, set design code, run design."""
+def run_analysis_and_design(SapModel):
+    """Save, run analysis, run design. Model remains locked for result extraction."""
     SapModel.File.Save()
     print("    Running analysis...", flush=True)
     ret = SapModel.Analyze.RunAnalysis()
     if ret != 0:
         print(f"    WARNING: RunAnalysis returned {ret}", flush=True)
 
-    SapModel.DesignConcrete.SetCode(design_code)
     print("    Running concrete design...", flush=True)
     ret = SapModel.DesignConcrete.StartDesign()
     if ret != 0:
@@ -349,7 +380,9 @@ def extract_column_results(SapModel, columns):
                 pmm_areas = ret[5]
                 max_pmm = max(pmm_areas) if pmm_areas else 0.0
                 ratio = compute_column_ratio(max_pmm, col["w_cm"], col["d_cm"])
-                results.append({**col, "pmm_area": max_pmm, "ratio": ratio})
+                pct = ratio * 100.0
+                results.append({**col, "pmm_area": max_pmm, "ratio": ratio,
+                                "pct": pct})
         except Exception as e:
             errors.append(f"  ERROR: {col['frame']} ({col['prop']} @ {col['story']}): {e}")
     if errors:
@@ -374,13 +407,18 @@ def extract_beam_results(SapModel, beams):
                 [], [], [], [], [], [])
             n_items = ret[0]
             if isinstance(n_items, int) and n_items > 0:
-                top_areas = ret[4]
-                bot_areas = ret[6]
+                locations = list(ret[2])
+                top_areas = list(ret[4])
+                bot_areas = list(ret[6])
                 max_top = max(top_areas) if top_areas else 0.0
                 max_bot = max(bot_areas) if bot_areas else 0.0
                 max_area = max(max_top, max_bot)
                 ratio = compute_beam_ratio(max_area, beam["w_cm"], beam["d_cm"])
-                results.append({**beam, "max_area": max_area, "ratio": ratio})
+                pct_6 = _extract_beam_6pos(
+                    locations, top_areas, bot_areas,
+                    beam["w_cm"], beam["d_cm"])
+                results.append({**beam, "max_area": max_area, "ratio": ratio,
+                                **pct_6})
         except Exception as e:
             errors.append(f"  ERROR: {beam['frame']} ({beam['prop']} @ {beam['story']}): {e}")
     if errors:
@@ -408,24 +446,30 @@ def ensure_section_exists(SapModel, prefix, num1, num2, fc):
     depth_m = depth_cm / 100.0
     width_m = width_cm / 100.0
 
-    SapModel.PropFrame.SetRectangle(name, mat, depth_m, width_m)
+    ret = SapModel.PropFrame.SetRectangle(name, mat, depth_m, width_m)
+    if ret != 0:
+        print(f"    WARNING: SetRectangle({name}) returned {ret}", flush=True)
 
     if prefix == "C":
         num_r3, num_r2 = calc_column_bar_distribution(width_cm, depth_cm)
-        SapModel.PropFrame.SetRebarColumn(
+        ret = SapModel.PropFrame.SetRebarColumn(
             name, "SD420", "SD420",
             1, 1, COL_COVER, COL_CORNER_BARS,
             num_r3, num_r2,
             COL_REBAR_SIZE, COL_TIE_SIZE, COL_TIE_SPACING,
             COL_NUM_2DIR_TIE, COL_NUM_3DIR_TIE, True)
+        if ret != 0:
+            print(f"    WARNING: SetRebarColumn({name}) returned {ret}", flush=True)
     else:
         is_fb = is_foundation_beam(prefix)
         cover_top = FB_COVER_TOP if is_fb else BEAM_COVER_TOP
         cover_bot = FB_COVER_BOT if is_fb else BEAM_COVER_BOT
-        SapModel.PropFrame.SetRebarBeam(
+        ret = SapModel.PropFrame.SetRebarBeam(
             name, "SD420", "SD420",
             cover_top, cover_bot,
             0, 0, 0, 0)
+        if ret != 0:
+            print(f"    WARNING: SetRebarBeam({name}) returned {ret}", flush=True)
 
     return name
 
@@ -440,6 +484,8 @@ def apply_frame_changes(SapModel, changes):
     for ch in changes:
         ret = SapModel.FrameObj.SetSection(ch["frame"], ch["new_section"])
         if ret != 0:
+            print(f"    WARNING: SetSection({ch['frame']}, {ch['new_section']}) "
+                  f"returned {ret}", flush=True)
             continue
         mods = COL_MODIFIERS if ch["prefix"] == "C" else BEAM_MODIFIERS
         SapModel.FrameObj.SetModifiers(ch["frame"], mods)
@@ -582,7 +628,6 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
     beam_step = iter_cfg["beam_resize_step"]
     beam_wd = iter_cfg["beam_max_width_ratio"]
     skip = iter_cfg["skip_prefixes"]
-    design_code = iter_cfg["design_code"]
 
     # Oscillation tracking: {frame_name: {"last_dir": str, "toggles": int}}
     osc_history = {}
@@ -595,7 +640,7 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
     for iteration in range(1, max_iter + 1):
         print(f"\n  --- Iteration {iteration}/{max_iter} ---", flush=True)
 
-        run_analysis_and_design(SapModel, design_code)
+        run_analysis_and_design(SapModel)
 
         frames_data = get_all_frames_data(SapModel)
         columns, beams = _classify_frames(frames_data, super_stories, skip)
@@ -638,24 +683,17 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
         enforce_column_constraints(col_positions, strength_lookup, all_story_names)
 
         # Collect column changes (separate ratio vs constraint)
-        ratio_col_changes = []
-        constraint_col_changes = []
+        # Defer section creation — collect pending (frame, w, d, fc, is_ratio)
+        pending_col = []
         for pos_key, col_list in col_positions.items():
             for col in col_list:
                 old_prefix, old_w, old_d, old_fc = parse_frame_section(
                     next((c["prop"] for c in col_results
                           if c["frame"] == col["frame"]), ""))
                 if old_w and (col["w"] != old_w or col["d"] != old_d):
-                    change = {
-                        "frame": col["frame"],
-                        "new_section": ensure_section_exists(
-                            SapModel, "C", col["w"], col["d"], col["fc"]),
-                        "prefix": "C",
-                    }
-                    if col["frame"] in ratio_changed_frames:
-                        ratio_col_changes.append(change)
-                    else:
-                        constraint_col_changes.append(change)
+                    is_ratio = col["frame"] in ratio_changed_frames
+                    pending_col.append((col["frame"], "C",
+                                        col["w"], col["d"], col["fc"], is_ratio))
             # Track final sizes
             if col_list:
                 final_col_sizes[pos_key] = {
@@ -664,7 +702,7 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
 
         # ── Beam resizing ──
         beam_groups = _build_beam_groups(beam_results)
-        beam_changes = []
+        pending_beam = []
 
         for (sec_name, story), grp in beam_groups.items():
             proposal = propose_beam_resize(
@@ -685,26 +723,25 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
                     "toggles": hist["toggles"] if hist else 0,
                 }
 
-                new_sec = ensure_section_exists(
-                    SapModel, grp["prefix"], new_w, new_d, grp["fc"])
                 for frame in grp["frames"]:
-                    beam_changes.append({
-                        "frame": frame,
-                        "new_section": new_sec,
-                        "prefix": grp["prefix"],
-                    })
+                    pending_beam.append((frame, grp["prefix"],
+                                         new_w, new_d, grp["fc"]))
 
         # ── Convergence check ──
-        ratio_changes = len(ratio_col_changes) + len(beam_changes)
-        constraint_changes = len(constraint_col_changes)
+        ratio_changes = len([p for p in pending_col if p[5]]) + len(pending_beam)
+        constraint_changes = len([p for p in pending_col if not p[5]])
 
-        # Save iteration report + plots
+        # Build placeholder change lists for report (counts only)
+        ratio_col_changes = [p for p in pending_col if p[5]]
+        constraint_col_changes = [p for p in pending_col if not p[5]]
+
+        # Save iteration report + plots (model still locked, results valid)
         total_iterations = iteration
         if output_dir:
             iter_dir = os.path.join(output_dir, f"iteration_{iteration}")
             last_report = _save_iteration_report(
                 iter_dir, iteration, col_results, beam_results,
-                ratio_col_changes, constraint_col_changes, beam_changes)
+                ratio_col_changes, constraint_col_changes, pending_beam)
             print(f"    Report saved: {iter_dir}/ratio_report.json", flush=True)
             # Generate plots if grid data available
             if grid_lines:
@@ -735,10 +772,23 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
             converged = True
             break
 
+        # ── Unlock + batch create sections + apply ──
+        SapModel.SetModelIsLocked(False)
+
+        # Create sections and build change dicts
+        col_changes = []
+        for (frame, prefix, w, d, fc, is_ratio) in pending_col:
+            sec = ensure_section_exists(SapModel, prefix, w, d, fc)
+            col_changes.append({"frame": frame, "new_section": sec, "prefix": prefix})
+        beam_changes = []
+        for (frame, prefix, w, d, fc) in pending_beam:
+            sec = ensure_section_exists(SapModel, prefix, w, d, fc)
+            beam_changes.append({"frame": frame, "new_section": sec, "prefix": prefix})
+
         if ratio_changes == 0 and constraint_changes > 0:
             print(f"    Constraint-only: {constraint_changes} columns (final pass)", flush=True)
-            apply_frame_changes(SapModel, constraint_col_changes)
-            run_analysis_and_design(SapModel, design_code)
+            apply_frame_changes(SapModel, col_changes)
+            run_analysis_and_design(SapModel)
             # Update final sizes after constraint pass
             frames_data = get_all_frames_data(SapModel)
             columns2, _ = _classify_frames(frames_data, super_stories, skip)
@@ -750,8 +800,7 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
             break
 
         # ── Apply changes ──
-        all_col_changes = ratio_col_changes + constraint_col_changes
-        n_col = apply_frame_changes(SapModel, all_col_changes)
+        n_col = apply_frame_changes(SapModel, col_changes)
         n_beam = apply_frame_changes(SapModel, beam_changes)
         print(f"    Applied: {n_col} column ({len(ratio_col_changes)} ratio + "
               f"{len(constraint_col_changes)} constraint) + {n_beam} beam changes", flush=True)
@@ -785,7 +834,7 @@ def _enforce_sub_column_sizes(SapModel, config, super_col_sizes,
     """Ensure substructure columns are >= the lowest superstructure column at same position."""
     frames_data = get_all_frames_data(SapModel)
     sub_set = set(sub_stories)
-    changes = []
+    pending = []  # (frame_name, w, d, fc)
 
     for i in range(frames_data["count"]):
         story = frames_data["stories"][i]
@@ -818,14 +867,14 @@ def _enforce_sub_column_sizes(SapModel, config, super_col_sizes,
             new_w = max(w_cm, req_w)
             new_d = max(d_cm, req_d)
             fc_sub = strength_lookup.get((story, "column"), fc)
-            new_sec = ensure_section_exists(SapModel, "C", new_w, new_d, fc_sub)
-            changes.append({
-                "frame": frames_data["names"][i],
-                "new_section": new_sec,
-                "prefix": "C",
-            })
+            pending.append((frames_data["names"][i], new_w, new_d, fc_sub))
 
-    if changes:
+    if pending:
+        SapModel.SetModelIsLocked(False)
+        changes = []
+        for (frame, w, d, fc) in pending:
+            sec = ensure_section_exists(SapModel, "C", w, d, fc)
+            changes.append({"frame": frame, "new_section": sec, "prefix": "C"})
         n = apply_frame_changes(SapModel, changes)
         print(f"  Substructure columns upsized: {n}", flush=True)
     else:
@@ -944,6 +993,7 @@ def run(SapModel, config=None, phase="both", output_dir=None):
     print("=" * 60, flush=True)
 
     SapModel.SetPresentUnits(UNITS_TON_M)
+    SapModel.SetModelIsLocked(False)  # Ensure unlocked at entry
 
     if config is None:
         print("\n  No config provided — reading from ETABS model...", flush=True)
@@ -963,6 +1013,10 @@ def run(SapModel, config=None, phase="both", output_dir=None):
         "design_code": ic.get("design_code", DESIGN_CODE),
         "skip_prefixes": ic.get("skip_prefixes", ITER_SKIP_PREFIXES),
     }
+
+    # Set design code once (not per iteration)
+    SapModel.DesignConcrete.SetCode(iter_cfg["design_code"])
+    print(f"  Design code: {iter_cfg['design_code']}", flush=True)
 
     # Classify floors
     super_stories, sub_stories, story_elevations, all_story_names = \
@@ -1038,7 +1092,7 @@ def run(SapModel, config=None, phase="both", output_dir=None):
 
         # Final design run for substructure
         print("\n  Final substructure design run...", flush=True)
-        run_analysis_and_design(SapModel, iter_cfg["design_code"])
+        run_analysis_and_design(SapModel)
 
     SapModel.View.RefreshView(0, False)
     print("\nStep 12 complete.\n", flush=True)

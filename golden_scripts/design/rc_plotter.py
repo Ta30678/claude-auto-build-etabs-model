@@ -191,7 +191,7 @@ def plot_plan_ratios(col_results, beam_results, frames_data,
         ax.text(x_min - 0.5, g["coordinate"], g["label"],
                 ha="right", va="center", fontsize=7, color="#888888")
 
-    # Draw beams
+    # Draw beams — 6-position rebar percentage labels
     for b in story_beams:
         coords = beam_coords.get(b["frame"])
         if not coords:
@@ -199,22 +199,31 @@ def plot_plan_ratios(col_results, beam_results, frames_data,
         color = _ratio_color(b["ratio"], beam_thresholds[0], beam_thresholds[1])
         ax.plot([coords["x1"], coords["x2"]], [coords["y1"], coords["y2"]],
                 color=color, linewidth=2, zorder=1)
-        mx = (coords["x1"] + coords["x2"]) / 2
-        my = (coords["y1"] + coords["y2"]) / 2
-        ax.text(mx, my, f"{b['ratio']:.3f}", fontsize=5, ha="center", va="bottom",
-                color=color, zorder=3)
+        # Label at 3 positions (25%, 50%, 75% along beam)
+        x1, y1 = coords["x1"], coords["y1"]
+        x2, y2 = coords["x2"], coords["y2"]
+        for frac, pos in [(0.25, "left"), (0.50, "center"), (0.75, "right")]:
+            px = x1 + (x2 - x1) * frac
+            py = y1 + (y2 - y1) * frac
+            tp = b.get(f"pct_top_{pos}", 0)
+            bp = b.get(f"pct_bot_{pos}", 0)
+            ax.text(px, py + 0.15, f"{tp:.1f}", fontsize=4, ha="center",
+                    va="bottom", color=color, zorder=3)
+            ax.text(px, py - 0.15, f"{bp:.1f}", fontsize=4, ha="center",
+                    va="top", color=color, alpha=0.7, zorder=3)
 
-    # Draw columns
+    # Draw columns — rebar percentage
     for c in story_cols:
         color = _ratio_color(c["ratio"], col_thresholds[0], col_thresholds[1])
         ax.plot(c["x"], c["y"], "s", color=color, markersize=8, zorder=2)
-        ax.text(c["x"], c["y"] + 0.3, f"{c['ratio']:.3f}", fontsize=6,
+        pct = c.get("pct", c["ratio"] * 100)
+        ax.text(c["x"], c["y"] + 0.3, f"{pct:.1f}%", fontsize=6,
                 ha="center", va="bottom", color=color, fontweight="bold", zorder=3)
 
     ax.set_xlim(x_min, x_max + 1)
     ax.set_ylim(y_min, y_max + 1)
     ax.set_aspect("equal")
-    ax.set_title(f"Plan View — {story_name} (Rebar Ratios)", fontsize=12)
+    ax.set_title(f"Plan View — {story_name} (Rebar %)", fontsize=12)
     ax.set_xlabel("X (m)")
     ax.set_ylabel("Y (m)")
 
@@ -313,7 +322,7 @@ def plot_elevation_ratios(col_results, beam_results, frames_data,
         ax.axhline(elev, color="#DDDDDD", linewidth=0.5, linestyle="--", zorder=0)
         ax.text(-0.5, elev, s, ha="right", va="center", fontsize=7, color="#888888")
 
-    # Draw columns (vertical lines)
+    # Draw columns (vertical lines) — rebar percentage
     for c in grid_cols:
         elev = story_elevations.get(c["story"], 0)
         pos = c["y"] if grid_direction == "x" else c["x"]
@@ -323,10 +332,11 @@ def plot_elevation_ratios(col_results, beam_results, frames_data,
                        if story_elevations[s] > elev]
         top = min(above_elevs) if above_elevs else elev + 3
         ax.plot([pos, pos], [elev, top], color=color, linewidth=3, zorder=1)
-        ax.text(pos + 0.15, (elev + top) / 2, f"{c['ratio']:.3f}",
+        pct = c.get("pct", c["ratio"] * 100)
+        ax.text(pos + 0.15, (elev + top) / 2, f"{pct:.1f}%",
                 fontsize=5, va="center", color=color, zorder=3)
 
-    # Draw beams (horizontal lines at story elevation)
+    # Draw beams (horizontal lines at story elevation) — 6-position rebar %
     for b in grid_beams:
         elev = story_elevations.get(b["story"], 0)
         if grid_direction == "x":
@@ -337,9 +347,15 @@ def plot_elevation_ratios(col_results, beam_results, frames_data,
             p2 = b["x2"]
         color = _ratio_color(b["ratio"], beam_thresholds[0], beam_thresholds[1])
         ax.plot([p1, p2], [elev, elev], color=color, linewidth=2, zorder=1)
-        mx = (p1 + p2) / 2
-        ax.text(mx, elev + 0.2, f"{b['ratio']:.3f}", fontsize=5,
-                ha="center", va="bottom", color=color, zorder=3)
+        # Label at 3 positions along beam
+        for frac, pos in [(0.25, "left"), (0.50, "center"), (0.75, "right")]:
+            px = p1 + (p2 - p1) * frac
+            tp = b.get(f"pct_top_{pos}", 0)
+            bp = b.get(f"pct_bot_{pos}", 0)
+            ax.text(px, elev + 0.15, f"{tp:.1f}", fontsize=4, ha="center",
+                    va="bottom", color=color, zorder=3)
+            ax.text(px, elev - 0.15, f"{bp:.1f}", fontsize=4, ha="center",
+                    va="top", color=color, alpha=0.7, zorder=3)
 
     dir_label = "Y" if grid_direction == "x" else "X"
     ax.set_title(f"Elevation — Grid {grid_label} (direction={grid_direction.upper()}, "
