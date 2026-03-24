@@ -90,7 +90,7 @@ If user provides overrides, add them to `config["iteration"]` before calling run
 ```python
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "golden_scripts"))
-from design.gs_12_iterate import run
+from rc_design.gs_12_iterate import run
 
 run(SapModel, config)
 ```
@@ -110,7 +110,7 @@ After `run()` completes, verify the results:
 ### 5.1 Check Rebar Ratios
 
 ```python
-from design.gs_12_iterate import (
+from rc_design.gs_12_iterate import (
     get_all_frames_data, _classify_frames, classify_floors,
     extract_column_results, extract_beam_results
 )
@@ -135,7 +135,7 @@ print(f"Beams out of range: {len(beam_out_of_range)}/{len(beam_results)}")
 
 ```python
 from constants import build_strength_lookup, parse_frame_section
-from design.gs_12_iterate import _build_column_positions
+from rc_design.gs_12_iterate import _build_column_positions
 
 col_positions = _build_column_positions(col_results)
 story_idx = {s: i for i, s in enumerate(all_stories)}
@@ -166,7 +166,7 @@ For debugging, individual steps can be run separately:
 ### Sway Assignment Only
 
 ```python
-from design.gs_12_iterate import classify_floors, get_all_frames_data, assign_sway_types
+from rc_design.gs_12_iterate import classify_floors, get_all_frames_data, assign_sway_types
 
 super_s, sub_s, _, _ = classify_floors(config)
 frames = get_all_frames_data(SapModel)
@@ -176,14 +176,14 @@ assign_sway_types(SapModel, frames, super_s, sub_s)
 ### Single Analysis + Design Cycle
 
 ```python
-from design.gs_12_iterate import run_analysis_and_design
+from rc_design.gs_12_iterate import run_analysis_and_design
 run_analysis_and_design(SapModel, "ACI 318-19")
 ```
 
 ### Extract Results Without Resizing
 
 ```python
-from design.gs_12_iterate import (
+from rc_design.gs_12_iterate import (
     get_all_frames_data, _classify_frames, classify_floors,
     extract_column_results, extract_beam_results
 )
@@ -203,7 +203,7 @@ for c in sorted(col_results, key=lambda x: -x["ratio"])[:10]:
 ### Enforce Column Constraints Manually
 
 ```python
-from design.gs_12_iterate import _build_column_positions, enforce_column_constraints
+from rc_design.gs_12_iterate import _build_column_positions, enforce_column_constraints
 from constants import build_strength_lookup
 
 strength = build_strength_lookup(config["strength_map"], all_stories)

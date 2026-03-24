@@ -746,7 +746,7 @@ def _iterate_superstructure(SapModel, config, strength_lookup,
             # Generate plots if grid data available
             if grid_lines:
                 try:
-                    from design.rc_plotter import generate_iteration_plots
+                    from rc_design.rc_plotter import generate_iteration_plots
                     plot_info = generate_iteration_plots(
                         col_results, beam_results, frames_data,
                         grid_lines, strength_lookup,
@@ -943,10 +943,21 @@ def build_config_from_etabs(SapModel):
         "iteration": {},  # use all defaults from constants
     }
 
+    # Read grid lines from ETABS for plot generation
+    try:
+        from tools.read_grid import read_grid_from_etabs
+        config["grids"] = read_grid_from_etabs(SapModel)
+        SapModel.SetPresentUnits(UNITS_TON_M)  # restore after read_grid
+    except (Exception, SystemExit):
+        pass  # grid lines optional, needed for plots only
+
     print(f"  Auto-extracted config from ETABS model:", flush=True)
     print(f"    Stories: {num_stories} ({all_story_names[0]} ~ {all_story_names[-1]})", flush=True)
     print(f"    Base elevation: {base_elev}m", flush=True)
     print(f"    Strength zones: {len(strength_map)} stories with fc data", flush=True)
+    if config.get("grids"):
+        print(f"    Grid lines: {len(config['grids'].get('x', []))} X + "
+              f"{len(config['grids'].get('y', []))} Y", flush=True)
 
     return config
 
@@ -1043,8 +1054,7 @@ def run(SapModel, config=None, phase="both", output_dir=None):
     grid_lines = config.get("grids")
     if not grid_lines:
         try:
-            sys.path.insert(0, os.path.join(_dir, "..", "tools"))
-            from read_grid import read_grid_from_etabs
+            from tools.read_grid import read_grid_from_etabs
             grid_lines = read_grid_from_etabs(SapModel)
             SapModel.SetPresentUnits(UNITS_TON_M)  # restore after read_grid
             print(f"  Grid lines read from ETABS: "

@@ -22,7 +22,7 @@ from find_etabs import find_etabs
 etabs, filename = find_etabs(run=False, backup=False)
 SapModel = etabs.SapModel
 
-from design import gs_12_iterate
+from rc_design import gs_12_iterate
 gs_12_iterate.run(SapModel, config=None, phase="both")
 ```
 

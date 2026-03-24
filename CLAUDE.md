@@ -48,7 +48,7 @@ claude-auto-build-etabs-model/
 │   ├── config_schema.json      # JSON Schema for model_config.json
 │   ├── example_config.json     # A21 reference config
 │   ├── modeling/               # gs_01_init → gs_11_diaphragms (11 sequential build steps)
-│   ├── design/                 # gs_12_iterate (analysis-design iteration)
+│   ├── rc_design/              # gs_12_iterate (analysis-design iteration)
 │   ├── tools/                  # Standalone CLI tools (pptx_to_elements, affine_calibrate, beam_validate,
 │   │                           #   sb_validate, slab_generator, config_build, elements_merge, plot_elements, etc.)
 │   └── qc/                     # QC verification scripts
@@ -423,7 +423,7 @@ python -m golden_scripts.tools.gs_merge --base sub.e2k --buildings A=A.e2k B=B.e
 
 The golden scripts are split into three sub-packages under `golden_scripts/`:
 - **`modeling/`** (gs_01–gs_11): Deterministic model construction — reads `model_config.json` and executes ETABS API calls with no AI reasoning.
-- **`design/`** (gs_12+): Analysis-design iteration and optimization.
+- **`rc_design/`** (gs_12+): Analysis-design iteration and optimization.
 - **`tools/`**: E2K split/merge utilities, config tools — e2k parser, writer, unit converter, split, merge, config_build, sb_patch_build, config_merge, config_snap, sb_validate, affine_calibrate, slab_generator.
 
 All structural engineering rules are hardcoded in `golden_scripts/constants.py`.
@@ -446,7 +446,7 @@ All structural engineering rules are hardcoded in `golden_scripts/constants.py`.
 ### Design Steps (12)
 | Step | Script | What it does |
 |------|--------|-------------|
-| 12 | design/gs_12_iterate.py | Analysis-design iteration (ACI 318-19 rebar ratio optimization) |
+| 12 | rc_design/gs_12_iterate.py | Analysis-design iteration (ACI 318-19 rebar ratio optimization) |
 
 ### Key Constants (from `constants.py`)
 ```

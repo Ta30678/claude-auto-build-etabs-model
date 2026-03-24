@@ -20,7 +20,7 @@ etabs, filename = find_etabs(run=False, backup=False)
 SapModel = etabs.SapModel
 
 import json
-from design import gs_12_iterate
+from rc_design import gs_12_iterate
 
 args = "$ARGUMENTS".strip().split()
 config_path = args[0] if args else None

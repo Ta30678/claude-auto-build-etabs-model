@@ -8,7 +8,7 @@ import pytest
 from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "golden_scripts"))
-from design.gs_12_iterate import (
+from rc_design.gs_12_iterate import (
     compute_column_ratio,
     compute_beam_ratio,
     propose_column_resize,
@@ -22,7 +22,7 @@ from design.gs_12_iterate import (
     extract_beam_results,
     _save_iteration_report,
 )
-from design.rc_plotter import (
+from rc_design.rc_plotter import (
     _ratio_color,
     select_key_floors,
     select_top_grids,
@@ -587,14 +587,14 @@ class TestSaveIterationReport:
 class TestPhaseRouting:
     def test_run_signature_accepts_phase(self):
         """run() should accept phase parameter without error at import time."""
-        from design.gs_12_iterate import run
+        from rc_design.gs_12_iterate import run
         import inspect
         sig = inspect.signature(run)
         assert "phase" in sig.parameters
         assert sig.parameters["phase"].default == "both"
 
     def test_run_signature_accepts_output_dir(self):
-        from design.gs_12_iterate import run
+        from rc_design.gs_12_iterate import run
         import inspect
         sig = inspect.signature(run)
         assert "output_dir" in sig.parameters

@@ -29,7 +29,7 @@ from modeling import gs_08_slabs
 from modeling import gs_09_properties
 from modeling import gs_10_loads
 from modeling import gs_11_diaphragms
-from design import gs_12_iterate
+from rc_design import gs_12_iterate
 
 
 MODELING_STEPS = {
